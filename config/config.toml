@@ -1,0 +1,26 @@
+# TSLP v5.3 Configuration
+# All fields are required unless marked optional
+
+[database]
+database_path = "./runtime/tslp.db"
+
+[logging]
+log_path = "./runtime/tslp.log"
+debug = false
+
+[llm]
+# Provider: "openai", "anthropic", "local", etc.
+llm_provider = "openai"
+
+# Full endpoint URL (e.g., "https://api.openai.com/v1" or "http://localhost:11434/v1")
+llm_endpoint = "https://api.openai.com/v1"
+
+# API key for the LLM provider
+llm_api_key = ""
+
+# Model identifier (e.g., "gpt-4", "claude-3-opus", "llama3:7b")
+llm_model = "gpt-4"
+
+[proxy]
+# Port for the local proxy server
+listen_address = "127.0.0.1:8080"
