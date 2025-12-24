@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TSLP v5.3 Configuration Schema",
+  "description": "Strict configuration schema for Transactional State-Ledger Proxy. Per spec: minimal and boring, no tuning knobs.",
+  "type": "object",
+  "required": ["database", "logging", "llm", "proxy"],
+  "additionalProperties": false,
+  "properties": {
+    "database": {
+      "type": "object",
+      "required": ["database_path"],
+      "additionalProperties": false,
+      "properties": {
+        "database_path": {
+          "type": "string",
+          "description": "Path to SQLite database file",
+          "minLength": 1
+        }
+      }
+    },
+    "logging": {
+      "type": "object",
+      "required": ["log_path", "debug"],
+      "additionalProperties": false,
+      "properties": {
+        "log_path": {
+          "type": "string",
+          "description": "Path to log file",
+          "minLength": 1
+        },
+        "debug": {
+          "type": "boolean",
+          "description": "Enable debug logging"
+        }
+      }
+    },
+    "llm": {
+      "type": "object",
+      "required": ["llm_provider", "llm_endpoint", "llm_api_key", "llm_model"],
+      "additionalProperties": false,
+      "properties": {
+        "llm_provider": {
+          "type": "string",
+          "description": "LLM provider identifier (e.g., 'openai', 'anthropic', 'local')",
+          "minLength": 1
+        },
+        "llm_endpoint": {
+          "type": "string",
+          "description": "Full LLM API endpoint URL",
+          "minLength": 1,
+          "pattern": "^https?://"
+        },
+        "llm_api_key": {
+          "type": "string",
+          "description": "API key for LLM provider (can be empty for local models)"
+        },
+        "llm_model": {
+          "type": "string",
+          "description": "Model identifier",
+          "minLength": 1
+        }
+      }
+    },
+    "proxy": {
+      "type": "object",
+      "required": ["listen_address"],
+      "additionalProperties": false,
+      "properties": {
+        "listen_address": {
+          "type": "string",
+          "description": "Address and port for proxy server (e.g., '127.0.0.1:8080')",
+          "minLength": 1,
+          "pattern": "^[0-9.]+:[0-9]+$"
+        }
+      }
+    }
+  }
+}
