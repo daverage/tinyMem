@@ -11,7 +11,7 @@
 
 ## 🎯 Implementation Summary
 
-External Truth Verification (ETV) has been successfully implemented for TSLP, enabling the system to detect when local files diverge from the State Map and block unsafe promotions.
+External Truth Verification (ETV) has been successfully implemented for tinyMem, enabling the system to detect when local files diverge from the State Map and block unsafe promotions.
 
 ### Core Capability Added
 
@@ -137,7 +137,7 @@ if len(staleEntities) > 0 {
 
 ---
 
-### 5. `cmd/tslp/main.go` (Step 4)
+### 5. `cmd/tinyMem/main.go` (Step 4)
 **Changes:**
 - Updated hydration engine initialization (line 132)
 - Now passes consistency checker to Engine
@@ -361,7 +361,7 @@ To resolve:
 
 ### Build Status
 ```bash
-$ go build -o tslp ./cmd/tslp
+$ go build -o tinyMem ./cmd/tinyMem
 ✅ SUCCESS
 ```
 
@@ -416,7 +416,7 @@ $ go test ./internal/state/...
 - `internal/runtime/runtime.go`: +50 lines (ETV gate)
 - `internal/hydration/hydration.go`: +60 lines (STALE filtering)
 - `internal/api/diagnostics.go`: +40 lines (STALE reporting)
-- `cmd/tslp/main.go`: +1 line (wiring)
+- `cmd/tinyMem/main.go`: +1 line (wiring)
 - **Total Modified:** 151 lines
 
 ### Total ETV Implementation: 564 lines
@@ -535,7 +535,7 @@ STALE entities excluded, never feed stale code to LLM
 
 ## 🎉 IMPLEMENTATION STATUS: COMPLETE
 
-External Truth Verification (ETV) has been successfully implemented for TSLP according to **Specification v5.4 (Gold), Section 15**.
+External Truth Verification (ETV) has been successfully implemented for tinyMem according to **Specification v5.4 (Gold), Section 15**.
 
 **All hard rules enforced:**
 ✅ Filesystem access is READ-ONLY

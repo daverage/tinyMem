@@ -3,8 +3,8 @@ package state
 import (
 	"fmt"
 
-	"github.com/andrzejmarczewski/tslp/internal/fs"
-	"github.com/andrzejmarczewski/tslp/internal/vault"
+	"github.com/andrzejmarczewski/tinyMem/internal/fs"
+	"github.com/andrzejmarczewski/tinyMem/internal/vault"
 )
 
 // ========================================================================

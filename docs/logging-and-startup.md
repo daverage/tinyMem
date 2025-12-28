@@ -1,10 +1,10 @@
-# TSLP Logging and Startup Lifecycle
+# tinyMem Logging and Startup Lifecycle
 
 ## Structured Logging
 
 ### Log Levels
 
-TSLP implements four log levels:
+tinyMem implements four log levels:
 
 - **INFO** - Informational messages (always logged)
 - **WARN** - Warning messages (always logged)
@@ -19,7 +19,7 @@ TSLP implements four log levels:
 
 Example:
 ```
-[INFO]  2025/12/24 10:33:35.879356 TSLP v5.3-gold starting
+[INFO]  2025/12/24 10:33:35.879356 tinyMem v5.3-gold starting
 [DEBUG] 2025/12/24 10:34:00.552046 Initializing runtime components
 [ERROR] 2025/12/24 10:35:12.123456 Failed to process artifact: error details
 ```
@@ -42,7 +42,7 @@ Debug mode is controlled **exclusively** by the `logging.debug` configuration fi
 
 ```toml
 [logging]
-log_path = "./runtime/tslp.log"
+log_path = "./runtime/tinyMem.log"
 debug = true  # Enable DEBUG level logs
 ```
 
@@ -50,7 +50,7 @@ There are no runtime controls, environment variables, or command-line flags that
 
 ## Startup Lifecycle
 
-TSLP follows an **explicit, ordered startup sequence**. Each phase must complete successfully before the next begins.
+tinyMem follows an **explicit, ordered startup sequence**. Each phase must complete successfully before the next begins.
 
 ### Startup Phases
 
@@ -102,17 +102,17 @@ Phase 1/5: Loading configuration from config/config.toml
 
 **Output:**
 ```
-Phase 2/5: Initializing logger (log_path=./runtime/tslp.log, debug=false)
+Phase 2/5: Initializing logger (log_path=./runtime/tinyMem.log, debug=false)
 ✓ Logger initialized
 ```
 
 **Log Entries:**
 ```
 [INFO]  STARTUP_PHASE phase=1_config_loaded
-[INFO]  TSLP v5.3-gold starting
+[INFO]  tinyMem v5.3-gold starting
 [INFO]  Configuration loaded from: config/config.toml
-[INFO]    Database: ./runtime/tslp.db
-[INFO]    Log file: ./runtime/tslp.log
+[INFO]    Database: ./runtime/tinyMem.db
+[INFO]    Log file: ./runtime/tinyMem.log
 [INFO]    Debug mode: false
 [INFO]    LLM Provider: openai
 [INFO]    LLM Endpoint: https://api.openai.com/v1
@@ -136,14 +136,14 @@ Phase 2/5: Initializing logger (log_path=./runtime/tslp.log, debug=false)
 
 **Output:**
 ```
-Phase 3/5: Opening database at ./runtime/tslp.db
+Phase 3/5: Opening database at ./runtime/tinyMem.db
 ✓ Database opened
 ```
 
 **Log Entries:**
 ```
 [INFO]  STARTUP_PHASE phase=3_opening_database
-[INFO]  Opening database: ./runtime/tslp.db
+[INFO]  Opening database: ./runtime/tinyMem.db
 [INFO]  Database opened successfully
 ```
 
@@ -191,7 +191,7 @@ Phase 5/5: Starting HTTP server
 ✓ HTTP server started
 
 ========================================
-TSLP Ready
+tinyMem Ready
 ========================================
 ```
 
@@ -213,7 +213,7 @@ When all phases complete successfully:
 
 ```
 ========================================
-TSLP Ready
+tinyMem Ready
 ========================================
 
 Core Principles:
@@ -225,7 +225,7 @@ Core Principles:
   • Truth is materialized, never inferred
 
 Endpoint: http://127.0.0.1:8080/v1/chat/completions
-Log file: ./runtime/tslp.log
+Log file: ./runtime/tinyMem.log
 
 Press Ctrl+C to shutdown
 ```
@@ -328,29 +328,29 @@ If a fatal error occurs during runtime:
 
 Configured via `logging.log_path` in `config.toml`.
 
-Default: `./runtime/tslp.log`
+Default: `./runtime/tinyMem.log`
 
 ### Rotation
 
-TSLP does **not** implement log rotation internally. Use external tools:
+tinyMem does **not** implement log rotation internally. Use external tools:
 
 **logrotate (Linux):**
 ```
-/path/to/tslp.log {
+/path/to/tinyMem.log {
     daily
     rotate 7
     compress
     missingok
     notifempty
     postrotate
-        pkill -HUP tslp
+        pkill -HUP tinyMem
     endscript
 }
 ```
 
 **newsyslog (macOS/BSD):**
 ```
-/path/to/tslp.log    644  7    *    @T00  J
+/path/to/tinyMem.log    644  7    *    @T00  J
 ```
 
 ### File Format
@@ -365,7 +365,7 @@ TSLP does **not** implement log rotation internally. Use external tools:
 
 **"Logs are evidence, not memory."**
 
-TSLP logging follows these principles:
+tinyMem logging follows these principles:
 
 1. **Deterministic** - Same input always produces same log output
 2. **Explicit** - Every significant action is logged

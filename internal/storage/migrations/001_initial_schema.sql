@@ -1,4 +1,4 @@
--- TSLP v5.3 Initial Schema
+-- tinyMem v5.3 Initial Schema
 -- Migration: 001
 -- Description: Create vault, ledger, and state_map tables
 -- Idempotent: Yes (uses IF NOT EXISTS)

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 )
 
-// Logger provides structured logging for TSLP
+// Logger provides structured logging for tinyMem
 // Per spec: simple, deterministic, inspectable
 // Log levels: INFO, WARN, ERROR, DEBUG
 // DEBUG controlled only by config.debug

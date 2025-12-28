@@ -13,7 +13,7 @@ import (
 //go:embed config.schema.json
 var schemaFS embed.FS
 
-// Config represents the complete TSLP configuration
+// Config represents the complete tinyMem configuration
 // Per spec: minimal and boring, no tuning knobs, no feature flags
 type Config struct {
 	Database DatabaseConfig `toml:"database" json:"database"`

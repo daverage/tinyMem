@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andrzejmarczewski/tslp/internal/audit"
-	"github.com/andrzejmarczewski/tslp/internal/hydration"
-	"github.com/andrzejmarczewski/tslp/internal/llm"
-	"github.com/andrzejmarczewski/tslp/internal/logging"
-	"github.com/andrzejmarczewski/tslp/internal/runtime"
-	"github.com/andrzejmarczewski/tslp/internal/vault"
+	"github.com/andrzejmarczewski/tinyMem/internal/audit"
+	"github.com/andrzejmarczewski/tinyMem/internal/hydration"
+	"github.com/andrzejmarczewski/tinyMem/internal/llm"
+	"github.com/andrzejmarczewski/tinyMem/internal/logging"
+	"github.com/andrzejmarczewski/tinyMem/internal/runtime"
+	"github.com/andrzejmarczewski/tinyMem/internal/vault"
 )
 
 // Server implements the OpenAI-compatible proxy API
@@ -105,7 +105,7 @@ func NewServer(rt *runtime.Runtime, llmClient *llm.Client, hydrator *hydration.E
 // Start starts the HTTP server
 func (s *Server) Start() error {
 	s.startTime = time.Now()
-	s.logger.Info("Starting TSLP proxy server on %s", s.httpServer.Addr)
+	s.logger.Info("Starting tinyMem proxy server on %s", s.httpServer.Addr)
 	return s.httpServer.ListenAndServe()
 }
 

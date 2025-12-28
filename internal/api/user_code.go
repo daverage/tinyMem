@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/andrzejmarczewski/tslp/internal/vault"
+	"github.com/andrzejmarczewski/tinyMem/internal/vault"
 )
 
 // UserCodeRequest represents a request to submit user-pasted code

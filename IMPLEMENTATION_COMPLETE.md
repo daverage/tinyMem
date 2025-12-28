@@ -1,4 +1,4 @@
-# TSLP v5.3 Gold Implementation — COMPLETE
+# tinyMem v5.3 Gold Implementation — COMPLETE
 
 **Date:** 2025-12-24
 **Status:** ✅ All 8 Steps Completed
@@ -101,7 +101,7 @@ All 8 steps from the Gold specification implementation plan have been completed 
 **Files Modified:**
 - `internal/hydration/hydration.go` - Added HydrateWithTracking()
 - `internal/runtime/runtime.go` - Added hydrationTracker field, Gate B check
-- `cmd/tslp/main.go` - Wire tracker to hydration engine
+- `cmd/tinyMem/main.go` - Wire tracker to hydration engine
 - `internal/api/server.go` - Use HydrateWithTracking()
 
 **Implementation:**
@@ -121,7 +121,7 @@ All 8 steps from the Gold specification implementation plan have been completed 
 - `internal/api/diagnostics.go` - Added /recent and /debug/last-prompt handlers
 - `internal/api/server.go` - Registered endpoints, added debug mode flag
 - `internal/ledger/ledger.go` - Added GetRecentEpisodes()
-- `cmd/tslp/main.go` - Pass debug mode to server
+- `cmd/tinyMem/main.go` - Pass debug mode to server
 
 **Implementation:**
 - `GET /recent` - Shows last 10 episodes (metadata only, no code content)
@@ -229,8 +229,8 @@ PROPOSED ──────────────────> AUTHORITATIVE
 ## 📂 File Structure
 
 ```
-tslp/
-├── cmd/tslp/main.go                          [Modified - wired hydration tracker]
+tinyMem/
+├── cmd/tinyMem/main.go                          [Modified - wired hydration tracker]
 ├── internal/
 │   ├── api/
 │   │   ├── diagnostics.go                    [Modified - added /recent, /debug/last-prompt]
@@ -321,7 +321,7 @@ tslp/
 
 ### Build & Test Status
 ```bash
-$ go build -o tslp ./cmd/tslp
+$ go build -o tinyMem ./cmd/tinyMem
 ✅ Build successful
 
 $ go test ./internal/entity/... ./internal/state/...

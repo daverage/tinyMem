@@ -9,15 +9,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/andrzejmarczewski/tslp/config"
-	"github.com/andrzejmarczewski/tslp/internal/api"
-	"github.com/andrzejmarczewski/tslp/internal/audit"
-	"github.com/andrzejmarczewski/tslp/internal/entity"
-	"github.com/andrzejmarczewski/tslp/internal/hydration"
-	"github.com/andrzejmarczewski/tslp/internal/llm"
-	"github.com/andrzejmarczewski/tslp/internal/logging"
-	"github.com/andrzejmarczewski/tslp/internal/runtime"
-	"github.com/andrzejmarczewski/tslp/internal/storage"
+	"github.com/andrzejmarczewski/tinyMem/config"
+	"github.com/andrzejmarczewski/tinyMem/internal/api"
+	"github.com/andrzejmarczewski/tinyMem/internal/audit"
+	"github.com/andrzejmarczewski/tinyMem/internal/entity"
+	"github.com/andrzejmarczewski/tinyMem/internal/hydration"
+	"github.com/andrzejmarczewski/tinyMem/internal/llm"
+	"github.com/andrzejmarczewski/tinyMem/internal/logging"
+	"github.com/andrzejmarczewski/tinyMem/internal/runtime"
+	"github.com/andrzejmarczewski/tinyMem/internal/storage"
 )
 
 var (
@@ -29,7 +29,7 @@ func main() {
 	flag.Parse()
 
 	// Startup banner (stdout only, before logger init)
-	fmt.Printf("TSLP (Transactional State-Ledger Proxy) %s\n", version)
+	fmt.Printf("tinyMem (Transactional State-Ledger Proxy) %s\n", version)
 	fmt.Println("Per Specification v5.3 (Gold)")
 	fmt.Println()
 
@@ -69,7 +69,7 @@ func main() {
 
 	// From this point on, all logging goes to log file only (no stdout in production)
 	logger.StartupPhase("1_config_loaded")
-	logger.Info("TSLP %s starting", version)
+	logger.Info("tinyMem %s starting", version)
 	logger.Info("Configuration loaded from: %s", *configPath)
 	logger.Info("  Database: %s", cfg.Database.DatabasePath)
 	logger.Info("  Log file: %s", cfg.Logging.LogPath)
@@ -170,7 +170,7 @@ func main() {
 
 	// Startup complete
 	fmt.Println("========================================")
-	fmt.Println("TSLP Ready")
+	fmt.Println("tinyMem Ready")
 	fmt.Println("========================================")
 	fmt.Println()
 	fmt.Println("Core Principles:")

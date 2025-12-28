@@ -1,4 +1,4 @@
-# TSLP — Transactional State-Ledger Proxy
+# tinyMem — Transactional State-Ledger Proxy
 
 **Version:** 5.3 (Gold) + ETV
 **Status:** Production Ready
@@ -10,8 +10,8 @@
 
 ## 📖 Table of Contents
 
-- [What is TSLP?](#what-is-tslp)
-- [Why TSLP?](#why-tslp)
+- [What is tinyMem?](#what-is-tinyMem)
+- [Why tinyMem?](#why-tinyMem)
 - [Core Principles](#core-principles)
 - [Quick Start](#quick-start)
 - [Architecture](#architecture)
@@ -26,11 +26,11 @@
 
 ---
 
-## What is TSLP?
+## What is tinyMem?
 
-TSLP is a **local HTTP proxy** that sits between your code editor and a small language model (3B–14B parameters), providing **deterministic state management** for agentic coding workflows.
+tinyMem is a **local HTTP proxy** that sits between your code editor and a small language model (3B–14B parameters), providing **deterministic state management** for agentic coding workflows.
 
-Unlike traditional context-window approaches that rely on the model to "remember" what it wrote, TSLP:
+Unlike traditional context-window approaches that rely on the model to "remember" what it wrote, tinyMem:
 
 1. **Stores every code artifact** in an immutable vault (content-addressed storage)
 2. **Tracks which version is authoritative** via a strict state machine
@@ -42,7 +42,7 @@ Unlike traditional context-window approaches that rely on the model to "remember
 
 ---
 
-## Why TSLP?
+## Why tinyMem?
 
 ### The Problem: Small Models Lose Continuity
 
@@ -54,7 +54,7 @@ Small language models (3B–14B) are fast and run locally, but they struggle wit
 - ❌ **Hallucinated State:** Make up functions or variables that don't exist
 - ❌ **Manual Edit Conflicts:** Unaware when you've edited files on disk
 
-### The Solution: TSLP's Approach
+### The Solution: tinyMem's Approach
 
 - ✅ **Externalized Memory:** State Map holds authoritative truth, not the model
 - ✅ **Structural Proof:** AST parsing verifies code before accepting it
@@ -68,7 +68,7 @@ Small language models (3B–14B) are fast and run locally, but they struggle wit
 ## Core Principles
 
 ### 1. The LLM is Stateless
-The model retains no internal history. TSLP provides all necessary context on every request.
+The model retains no internal history. tinyMem provides all necessary context on every request.
 
 ### 2. The Proxy is Authoritative
 The State Map, not the model, is the source of truth.
@@ -102,11 +102,11 @@ Manual file edits are detected and prevent unsafe LLM overwrites.
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/tslp.git
-cd tslp
+git clone https://github.com/yourusername/tinyMem.git
+cd tinyMem
 
 # Build the binary
-go build -o tslp ./cmd/tslp
+go build -o tinyMem ./cmd/tinyMem
 
 # Create runtime directory (for database and logs)
 mkdir -p runtime
@@ -122,10 +122,10 @@ Edit `config/config.toml`:
 
 ```toml
 [database]
-database_path = "./runtime/tslp.db"
+database_path = "./runtime/tinyMem.db"
 
 [logging]
-log_path = "./runtime/tslp.log"
+log_path = "./runtime/tinyMem.log"
 debug = false
 
 [llm]
@@ -135,31 +135,31 @@ llm_api_key = ""                            # Empty for local models
 llm_model = "local-model"                   # Your loaded model name
 
 [proxy]
-listen_address = "127.0.0.1:4321"          # TSLP proxy port
+listen_address = "127.0.0.1:4321"          # tinyMem proxy port
 ```
 
-### Running TSLP
+### Running tinyMem
 
 ```bash
 # Start the proxy
-./tslp --config config/config.toml
+./tinyMem --config config/config.toml
 
 # Or use default config location
-./tslp
+./tinyMem
 ```
 
 **Expected Output:**
 ```
-TSLP (Transactional State-Ledger Proxy) v5.3-gold
+tinyMem (Transactional State-Ledger Proxy) v5.3-gold
 Per Specification v5.3 (Gold)
 
 Phase 1/5: Loading configuration from config/config.toml
 ✓ Configuration validated
 
-Phase 2/5: Initializing logger (log_path=./runtime/tslp.log, debug=false)
+Phase 2/5: Initializing logger (log_path=./runtime/tinyMem.log, debug=false)
 ✓ Logger initialized
 
-Phase 3/5: Opening database at ./runtime/tslp.db
+Phase 3/5: Opening database at ./runtime/tinyMem.db
 ✓ Database opened
 
 Phase 4/5: Running database migrations
@@ -169,7 +169,7 @@ Phase 5/5: Starting HTTP server
 ✓ HTTP server started
 
 ========================================
-TSLP Ready
+tinyMem Ready
 ========================================
 
 Core Principles:
@@ -181,7 +181,7 @@ Core Principles:
   • Truth is materialized, never inferred
 
 Endpoint: http://127.0.0.1:4321/v1/chat/completions
-Log file: ./runtime/tslp.log
+Log file: ./runtime/tinyMem.log
 
 Press Ctrl+C to shutdown
 ```
@@ -208,7 +208,7 @@ curl -X POST http://localhost:4321/v1/chat/completions \
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    TSLP Proxy (Port 4321)                │
+│                    tinyMem Proxy (Port 4321)                │
 │  OpenAI-compatible endpoint: /v1/chat/completions       │
 └─────────────────────────────────────────────────────────┘
                             │
@@ -280,10 +280,10 @@ curl -X POST http://localhost:4321/v1/chat/completions \
 
 ```toml
 [database]
-database_path = "./runtime/tslp.db"
+database_path = "./runtime/tinyMem.db"
 
 [logging]
-log_path = "./runtime/tslp.log"
+log_path = "./runtime/tinyMem.log"
 debug = false
 
 [llm]
@@ -495,8 +495,8 @@ Shows the exact prompt sent to the LLM (including hydration).
 ### Example 1: Basic Coding Session
 
 ```bash
-# Start TSLP
-./tslp
+# Start tinyMem
+./tinyMem
 
 # In another terminal, send request
 curl -X POST http://localhost:4321/v1/chat/completions \
@@ -511,12 +511,12 @@ curl -X POST http://localhost:4321/v1/chat/completions \
 ```
 
 **What happens:**
-1. TSLP receives request
+1. tinyMem receives request
 2. Checks State Map for existing authoritative code
 3. Hydrates context (none on first request)
 4. Forwards to LLM at `http://localhost:1234/v1`
 5. LLM generates code
-6. TSLP parses response via Tree-sitter
+6. tinyMem parses response via Tree-sitter
 7. Detects `func Add(a, b int) int` → CONFIRMED
 8. Promotes to AUTHORITATIVE
 9. Stores in State Map
@@ -544,9 +544,9 @@ curl -X POST http://localhost:4321/v1/user/code \
 ### Example 3: Disk Divergence Detection (ETV)
 
 ```bash
-# Initial state: TSLP has file.go::Func with hash abc123
+# Initial state: tinyMem has file.go::Func with hash abc123
 
-# You manually edit file.go on disk (outside TSLP)
+# You manually edit file.go on disk (outside tinyMem)
 # File now has hash def456
 
 # Next LLM request:
@@ -561,7 +561,7 @@ curl -X POST http://localhost:4321/v1/chat/completions \
 ```
 
 **What happens:**
-1. TSLP detects disk hash (def456) ≠ State Map hash (abc123)
+1. tinyMem detects disk hash (def456) ≠ State Map hash (abc123)
 2. Entity marked as STALE
 3. Excluded from hydration
 4. LLM receives STATE NOTICE:
@@ -581,11 +581,11 @@ curl -X POST http://localhost:4321/v1/chat/completions \
 
 ### What is ETV?
 
-External Truth Verification detects when files on disk have diverged from the State Map, preventing TSLP from operating on stale assumptions.
+External Truth Verification detects when files on disk have diverged from the State Map, preventing tinyMem from operating on stale assumptions.
 
 ### How It Works
 
-1. **Hash Comparison:** TSLP reads file from disk, computes SHA-256 hash
+1. **Hash Comparison:** tinyMem reads file from disk, computes SHA-256 hash
 2. **STALE Detection:** If `diskHash ≠ stateMapHash`, entity is STALE
 3. **Hydration Filtering:** STALE entities excluded from LLM context
 4. **Promotion Blocking:** LLM cannot promote artifacts for STALE entities
@@ -605,7 +605,7 @@ Lowest  → LLM output             (must prove correctness to promote)
 
 ### ETV Safety Guarantees
 
-- ✅ **READ-ONLY:** TSLP never writes to disk
+- ✅ **READ-ONLY:** tinyMem never writes to disk
 - ✅ **Deterministic:** SHA-256 hash comparison (no heuristics)
 - ✅ **Fail-Safe:** Unreadable files treated as STALE
 - ✅ **Explicit:** User action required to resolve divergence
@@ -640,7 +640,7 @@ curl -X POST http://localhost:4321/v1/user/code \
 
 ## Diagnostics
 
-### Monitoring TSLP
+### Monitoring tinyMem
 
 **Check if running:**
 ```bash
@@ -664,7 +664,7 @@ curl http://localhost:4321/recent | jq
 
 ### Log Files
 
-**Location:** `./runtime/tslp.log`
+**Location:** `./runtime/tinyMem.log`
 
 **Debug mode:**
 ```toml
@@ -674,16 +674,16 @@ debug = true
 
 **View logs:**
 ```bash
-tail -f ./runtime/tslp.log
+tail -f ./runtime/tinyMem.log
 ```
 
 ### Database Inspection
 
-**Location:** `./runtime/tslp.db`
+**Location:** `./runtime/tinyMem.db`
 
 **Schema:**
 ```bash
-sqlite3 ./runtime/tslp.db .schema
+sqlite3 ./runtime/tinyMem.db .schema
 ```
 
 **Query vault:**
@@ -709,14 +709,14 @@ WHERE state = 'AUTHORITATIVE';
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/tslp.git
-cd tslp
+git clone https://github.com/yourusername/tinyMem.git
+cd tinyMem
 
 # Install dependencies
 go mod download
 
 # Build
-go build -o tslp ./cmd/tslp
+go build -o tinyMem ./cmd/tinyMem
 
 # Run tests
 go test ./...
@@ -741,9 +741,9 @@ go test -v ./internal/state/...
 ### Project Structure
 
 ```
-tslp/
+tinyMem/
 ├── cmd/
-│   └── tslp/
+│   └── tinyMem/
 │       └── main.go              # Entry point
 ├── config/
 │   ├── config.toml              # Default configuration
@@ -775,8 +775,8 @@ tslp/
 │   ├── storage/                 # SQLite
 │   └── vault/                   # Content-addressed storage
 ├── runtime/                     # Runtime data (gitignored)
-│   ├── tslp.db                 # SQLite database
-│   └── tslp.log                # Log file
+│   ├── tinyMem.db                 # SQLite database
+│   └── tinyMem.log                # Log file
 ├── docs/                        # Documentation
 ├── CONFORMANCE_REVIEW.md        # Spec compliance audit
 ├── ETV_IMPLEMENTATION_COMPLETE.md
@@ -789,7 +789,7 @@ tslp/
 
 ## Troubleshooting
 
-### TSLP Won't Start
+### tinyMem Won't Start
 
 **Error:** `FATAL: Configuration error`
 - Check `config/config.toml` exists
@@ -817,7 +817,7 @@ tslp/
 
 **Artifact stays PROPOSED:**
 - Entity resolution may have failed (INFERRED or UNRESOLVED)
-- Check logs: `tail -f runtime/tslp.log`
+- Check logs: `tail -f runtime/tinyMem.log`
 - Enable debug mode: `debug = true` in config
 
 **"STALE - disk content differs" error:**
@@ -863,35 +863,35 @@ tslp/
 
 ### Q: Why small models (3B–14B)?
 
-Small models run locally, are fast, and have low latency. TSLP makes them viable for complex coding tasks by providing external memory and structural verification.
+Small models run locally, are fast, and have low latency. tinyMem makes them viable for complex coding tasks by providing external memory and structural verification.
 
-### Q: Does TSLP work with GPT-4 or Claude?
+### Q: Does tinyMem work with GPT-4 or Claude?
 
-Yes! TSLP is provider-agnostic. Configure `llm_endpoint` to point to any OpenAI-compatible API. However, TSLP's benefits are most pronounced with smaller models.
+Yes! tinyMem is provider-agnostic. Configure `llm_endpoint` to point to any OpenAI-compatible API. However, tinyMem's benefits are most pronounced with smaller models.
 
-### Q: What happens if I edit files outside TSLP?
+### Q: What happens if I edit files outside tinyMem?
 
 ETV (External Truth Verification) detects manual edits via hash comparison. STALE entities are excluded from hydration and cannot be overwritten by LLM output. You must paste updated content to resolve.
 
-### Q: Can I use TSLP with my existing IDE?
+### Q: Can I use tinyMem with my existing IDE?
 
-Yes, if your IDE can send HTTP requests to `http://localhost:4321/v1/chat/completions`. TSLP is a standard OpenAI-compatible proxy.
+Yes, if your IDE can send HTTP requests to `http://localhost:4321/v1/chat/completions`. tinyMem is a standard OpenAI-compatible proxy.
 
 ### Q: Is the State Map stored in the database?
 
-Yes, all three layers (Vault, State Map, Ledger) are stored in a single SQLite database at `runtime/tslp.db`.
+Yes, all three layers (Vault, State Map, Ledger) are stored in a single SQLite database at `runtime/tinyMem.db`.
 
 ### Q: Can I rebuild the State Map from scratch?
 
 Yes! The State Map is rebuildable from Vault + Ledger. This is a core design principle.
 
-### Q: Does TSLP support languages other than Go?
+### Q: Does tinyMem support languages other than Go?
 
 Currently, Tree-sitter AST parsing supports Go. Regex fallback works for any language with patterns in `symbols.json`. Additional languages can be added by extending `internal/entity/ast.go`.
 
 ### Q: What does "boring, correct, inspectable" mean?
 
-TSLP prioritizes:
+tinyMem prioritizes:
 - **Boring:** No clever abstractions, predictable behavior
 - **Correct:** Strict adherence to specification, no shortcuts
 - **Inspectable:** All state changes are logged and auditable
@@ -911,7 +911,7 @@ This project follows strict implementation guidelines per `CLAUDE.md`.
 **Pull requests must:**
 - Include spec section references
 - Pass all tests: `go test ./...`
-- Build successfully: `go build ./cmd/tslp`
+- Build successfully: `go build ./cmd/tinyMem`
 - Not weaken any safety guarantees
 
 ---
@@ -920,7 +920,7 @@ This project follows strict implementation guidelines per `CLAUDE.md`.
 
 MIT License
 
-Copyright (c) 2024 TSLP Contributors
+Copyright (c) 2024 tinyMem Contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -944,12 +944,12 @@ SOFTWARE.
 
 ## Contact & Support
 
-**Issues:** https://github.com/yourusername/tslp/issues
-**Documentation:** https://github.com/yourusername/tslp/wiki
+**Issues:** https://github.com/yourusername/tinyMem/issues
+**Documentation:** https://github.com/yourusername/tinyMem/wiki
 **Specification:** `specification.md` in this repository
 
 ---
 
-**TSLP** — Making small models reliable for agentic coding through deterministic state management.
+**tinyMem** — Making small models reliable for agentic coding through deterministic state management.
 
 *Built with boring, correct, inspectable code. No magic. No surprises.*

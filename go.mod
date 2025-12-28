@@ -1,4 +1,4 @@
-module github.com/andrzejmarczewski/tslp
+module github.com/andrzejmarczewski/tinyMem
 
 go 1.25.5
 

@@ -2,7 +2,7 @@ Yes, I condensed some of the descriptive phrasing and combined sub-points in **S
 
 If you are using this as a formal requirements document, you likely want the **verbatim** detail. Here is the 1:1 reformat, preserving every specific rule, check-list, and the JSON example from your text:
 
-# Transactional State-Ledger Proxy (TSLP)
+# Transactional State-Ledger Proxy (tinyMem)
 ## Specification v5.4 (Gold)
 
 **Project Status:** Final / Gold Spec / Production Build Target

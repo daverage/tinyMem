@@ -1,8 +1,8 @@
-# TSLP Storage Layer
+# tinyMem Storage Layer
 
 ## Overview
 
-TSLP uses a **single SQLite database** for all persistent storage. The database is structured into three logical layers as defined in the Gold Specification.
+tinyMem uses a **single SQLite database** for all persistent storage. The database is structured into three logical layers as defined in the Gold Specification.
 
 Per requirements:
 - **Single SQLite database** - No distributed storage
@@ -162,9 +162,9 @@ PRAGMA journal_mode=WAL
 - Atomic commits
 
 **Files Created:**
-- `tslp.db` - Main database
-- `tslp.db-wal` - Write-ahead log
-- `tslp.db-shm` - Shared memory index
+- `tinyMem.db` - Main database
+- `tinyMem.db-wal` - Write-ahead log
+- `tinyMem.db-shm` - Shared memory index
 
 ### Foreign Keys
 
@@ -245,7 +245,7 @@ All migrations must be idempotent. This means:
 
 ### Migration Rollback
 
-TSLP does **not** support migration rollback. If a migration fails:
+tinyMem does **not** support migration rollback. If a migration fails:
 
 1. The transaction is rolled back
 2. The error is logged
@@ -254,7 +254,7 @@ TSLP does **not** support migration rollback. If a migration fails:
 
 To recover:
 1. Fix the migration SQL
-2. Restart TSLP
+2. Restart tinyMem
 3. Migration will be re-attempted
 
 ## Usage
@@ -262,7 +262,7 @@ To recover:
 ### Opening Database
 
 ```go
-import "github.com/andrzejmarczewski/tslp/internal/storage"
+import "github.com/andrzejmarczewski/tinyMem/internal/storage"
 
 // Database path comes from config only
 db, err := storage.Open(cfg.Database.DatabasePath)
@@ -338,37 +338,37 @@ if err := db.Ping(); err != nil {
 ### Manual Backup
 
 ```bash
-# Stop TSLP first
-pkill tslp
+# Stop tinyMem first
+pkill tinyMem
 
 # Backup all files
-cp runtime/tslp.db runtime/tslp.db.backup
-cp runtime/tslp.db-wal runtime/tslp.db-wal.backup
-cp runtime/tslp.db-shm runtime/tslp.db-shm.backup
+cp runtime/tinyMem.db runtime/tinyMem.db.backup
+cp runtime/tinyMem.db-wal runtime/tinyMem.db-wal.backup
+cp runtime/tinyMem.db-shm runtime/tinyMem.db-shm.backup
 
 # Or use SQLite backup API
-sqlite3 runtime/tslp.db ".backup runtime/tslp.db.backup"
+sqlite3 runtime/tinyMem.db ".backup runtime/tinyMem.db.backup"
 ```
 
 ### Online Backup
 
 ```bash
 # WAL checkpoint first
-sqlite3 runtime/tslp.db "PRAGMA wal_checkpoint(FULL);"
+sqlite3 runtime/tinyMem.db "PRAGMA wal_checkpoint(FULL);"
 
 # Then backup
-sqlite3 runtime/tslp.db ".backup runtime/tslp.db.backup"
+sqlite3 runtime/tinyMem.db ".backup runtime/tinyMem.db.backup"
 ```
 
 ### Recovery
 
 ```bash
 # Restore from backup
-cp runtime/tslp.db.backup runtime/tslp.db
-rm -f runtime/tslp.db-wal runtime/tslp.db-shm
+cp runtime/tinyMem.db.backup runtime/tinyMem.db
+rm -f runtime/tinyMem.db-wal runtime/tinyMem.db-shm
 
-# Restart TSLP
-./tslp
+# Restart tinyMem
+./tinyMem
 ```
 
 ## Troubleshooting
@@ -376,7 +376,7 @@ rm -f runtime/tslp.db-wal runtime/tslp.db-shm
 ### "database is locked"
 
 **Cause:** Another process has the database open  
-**Solution:** Stop all TSLP instances, check for orphaned connections
+**Solution:** Stop all tinyMem instances, check for orphaned connections
 
 ### "database disk image is malformed"
 

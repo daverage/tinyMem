@@ -1,4 +1,4 @@
--- TSLP v5.3 Database Schema
+-- tinyMem v5.3 Database Schema
 -- Single SQLite database with three logical layers
 
 PRAGMA journal_mode=WAL;

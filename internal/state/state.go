@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/andrzejmarczewski/tslp/internal/ledger"
+	"github.com/andrzejmarczewski/tinyMem/internal/ledger"
 )
 
 // EntityState represents the current state of an entity in the state map

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/andrzejmarczewski/tslp/internal/state"
-	"github.com/andrzejmarczewski/tslp/internal/vault"
+	"github.com/andrzejmarczewski/tinyMem/internal/state"
+	"github.com/andrzejmarczewski/tinyMem/internal/vault"
 )
 
 // Engine handles JIT (Just-In-Time) hydration of state

@@ -1,4 +1,4 @@
-# TSLP v5.3 Configuration System
+# tinyMem v5.3 Configuration System
 
 ## Overview
 
@@ -19,10 +19,10 @@ All fields are **REQUIRED** unless explicitly noted.
 
 ```toml
 [database]
-database_path = "./runtime/tslp.db"  # Required: Path to SQLite database
+database_path = "./runtime/tinyMem.db"  # Required: Path to SQLite database
 
 [logging]
-log_path = "./runtime/tslp.log"      # Required: Path to log file
+log_path = "./runtime/tinyMem.log"      # Required: Path to log file
 debug = false                         # Required: Enable debug logging (boolean)
 
 [llm]
@@ -71,15 +71,15 @@ Per specification, the following are **NOT ALLOWED**:
 
 ```bash
 # Use default location
-./tslp
+./tinyMem
 
 # Specify config file
-./tslp -config /path/to/config.toml
+./tinyMem -config /path/to/config.toml
 ```
 
 ### Validation Failure
 
-If configuration is invalid, TSLP will:
+If configuration is invalid, tinyMem will:
 1. Print error message to stderr
 2. List all required fields
 3. Exit with code 1
@@ -102,7 +102,7 @@ Configuration must include all required fields:
 - `config/config.toml` - Example configuration file
 - `config/config.schema.json` - JSON schema for validation
 - `config/config.go` - Configuration loader and validator
-- `cmd/tslp/main.go` - Loads config at startup
+- `cmd/tinyMem/main.go` - Loads config at startup
 
 ### Immutability
 
@@ -117,12 +117,12 @@ Per specification, there is **NO** `Default()` function. All configuration must 
 ### Valid Config Test
 
 ```bash
-./tslp -config config/config.toml
+./tinyMem -config config/config.toml
 ```
 
 Should output:
 ```
-TSLP (Transactional State-Ledger Proxy) v5.3-gold
+tinyMem (Transactional State-Ledger Proxy) v5.3-gold
 Per Specification v5.3 (Gold)
 
 Loading configuration from: config/config.toml
@@ -138,7 +138,7 @@ Create a test file with missing fields:
 database_path = "./test.db"
 ```
 
-Running `./tslp -config test.toml` should fail with validation error.
+Running `./tinyMem -config test.toml` should fail with validation error.
 
 ## JSON Schema
 

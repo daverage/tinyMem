@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/andrzejmarczewski/tslp/internal/entity"
-	"github.com/andrzejmarczewski/tslp/internal/vault"
+	"github.com/andrzejmarczewski/tinyMem/internal/entity"
+	"github.com/andrzejmarczewski/tinyMem/internal/vault"
 )
 
 // ========================================================================

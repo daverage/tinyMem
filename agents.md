@@ -1,17 +1,17 @@
-# Project: TSLP - Transactional State-Ledger Proxy
+# Project: tinyMem - Transactional State-Ledger Proxy
 
   ## Essential Commands
 
   - **Build:** `go build ./...`
   - **Test:** `go test ./...`
-  - **Run:** `./tslp` (from cmd/tslp/main.go)
+  - **Run:** `./tinyMem` (from cmd/tinyMem/main.go)
   - **Linting:** Not configured in this repository.
 
   ## Code Organization & Structure
 
   The project is organized into internal modules:
 
-  - `cmd/tslp`: Entry point at `main.go`.
+  - `cmd/tinyMem`: Entry point at `main.go`.
   - `internal/`: Core logic split across packages:
     - `api`: HTTP endpoints.
     - `storage`: SQLite storage layer (WAL mode, no ORM).

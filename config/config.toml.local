@@ -1,15 +1,15 @@
-# TSLP v5.3 (Gold) Configuration
+# tinyMem v5.3 (Gold) Configuration
 # Per Specification: minimal and boring, no tuning knobs, no feature flags
 # All fields are REQUIRED unless explicitly noted
 
 [database]
 # Path to SQLite database file
 # The database will be created if it doesn't exist
-database_path = "./runtime/tslp.db"
+database_path = "./runtime/tinyMem.db"
 
 [logging]
 # Path to log file
-log_path = "./runtime/tslp.log"
+log_path = "./runtime/tinyMem.log"
 
 # Enable debug logging (true/false)
 debug = true

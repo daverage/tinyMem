@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/andrzejmarczewski/tslp/internal/entity"
-	"github.com/andrzejmarczewski/tslp/internal/fs"
-	"github.com/andrzejmarczewski/tslp/internal/hydration"
-	"github.com/andrzejmarczewski/tslp/internal/ledger"
-	"github.com/andrzejmarczewski/tslp/internal/state"
-	"github.com/andrzejmarczewski/tslp/internal/vault"
+	"github.com/andrzejmarczewski/tinyMem/internal/entity"
+	"github.com/andrzejmarczewski/tinyMem/internal/fs"
+	"github.com/andrzejmarczewski/tinyMem/internal/hydration"
+	"github.com/andrzejmarczewski/tinyMem/internal/ledger"
+	"github.com/andrzejmarczewski/tinyMem/internal/state"
+	"github.com/andrzejmarczewski/tinyMem/internal/vault"
 )
 
 // Runtime manages the core artifact lifecycle and promotion rules

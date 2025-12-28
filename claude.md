@@ -1,6 +1,6 @@
-# TSLP v5.3 (Gold) — Implementation Contract
+# tinyMem v5.3 (Gold) — Implementation Contract
 
-**Project:** Transactional State-Ledger Proxy (TSLP)  
+**Project:** Transactional State-Ledger Proxy (tinyMem)  
 **Reference:** Specification v5.3 (Gold)  
 **Status:** Operational Mandate
 
@@ -57,9 +57,9 @@ You are an **implementation assistant**, not a designer. Your objective is to tr
 
 ## 📁 Mandatory File Structure
 ```text
-tslp/
+tinyMem/
 ├── cmd/
-│   └── tslp/
+│   └── tinyMem/
 │       └── main.go         # Entry point
 ├── config/
 │   ├── config.toml         # Minimal configuration

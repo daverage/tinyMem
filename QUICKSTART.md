@@ -1,6 +1,6 @@
-# TSLP Quick Start Guide
+# tinyMem Quick Start Guide
 
-Get TSLP running with LM Studio in under 5 minutes.
+Get tinyMem running with LM Studio in under 5 minutes.
 
 ---
 
@@ -37,40 +37,40 @@ Get TSLP running with LM Studio in under 5 minutes.
 
 ---
 
-## Step 2: Build TSLP (1 minute)
+## Step 2: Build tinyMem (1 minute)
 
 ```bash
 # Clone repository (if not already cloned)
-git clone https://github.com/yourusername/tslp.git
-cd tslp
+git clone https://github.com/yourusername/tinyMem.git
+cd tinyMem
 
 # Build binary
-go build -o tslp ./cmd/tslp
+go build -o tinyMem ./cmd/tinyMem
 
 # Create runtime directory
 mkdir -p runtime
 
 # Verify build
-./tslp --version
+./tinyMem --version
 ```
 
 **Expected output:**
 ```
-TSLP (Transactional State-Ledger Proxy) v5.3-gold
+tinyMem (Transactional State-Ledger Proxy) v5.3-gold
 ```
 
 ---
 
-## Step 3: Start TSLP (30 seconds)
+## Step 3: Start tinyMem (30 seconds)
 
 ```bash
-# Start TSLP (uses default config pointing to LM Studio)
-./tslp
+# Start tinyMem (uses default config pointing to LM Studio)
+./tinyMem
 ```
 
 **Expected output:**
 ```
-TSLP (Transactional State-Ledger Proxy) v5.3-gold
+tinyMem (Transactional State-Ledger Proxy) v5.3-gold
 Per Specification v5.3 (Gold)
 
 Phase 1/5: Loading configuration from config/config.toml
@@ -79,7 +79,7 @@ Phase 1/5: Loading configuration from config/config.toml
 Phase 2/5: Initializing logger
 ✓ Logger initialized
 
-Phase 3/5: Opening database at ./runtime/tslp.db
+Phase 3/5: Opening database at ./runtime/tinyMem.db
 ✓ Database opened
 
 Phase 4/5: Running database migrations
@@ -89,11 +89,11 @@ Phase 5/5: Starting HTTP server
 ✓ HTTP server started
 
 ========================================
-TSLP Ready
+tinyMem Ready
 ========================================
 
 Endpoint: http://127.0.0.1:4321/v1/chat/completions
-Log file: ./runtime/tslp.log
+Log file: ./runtime/tinyMem.log
 
 Press Ctrl+C to shutdown
 ```
@@ -102,7 +102,7 @@ Press Ctrl+C to shutdown
 
 ## Step 4: Test It (1 minute)
 
-**Open a new terminal window** (leave TSLP running):
+**Open a new terminal window** (leave tinyMem running):
 
 ```bash
 # Test request
@@ -118,12 +118,12 @@ curl -X POST http://localhost:4321/v1/chat/completions \
 ```
 
 **Expected behavior:**
-1. Request goes to TSLP (port 4321)
-2. TSLP hydrates context (empty on first request)
-3. TSLP forwards to LM Studio (port 1234)
+1. Request goes to tinyMem (port 4321)
+2. tinyMem hydrates context (empty on first request)
+3. tinyMem forwards to LM Studio (port 1234)
 4. LM Studio generates code
-5. TSLP parses response via Tree-sitter
-6. TSLP promotes to AUTHORITATIVE if valid
+5. tinyMem parses response via Tree-sitter
+6. tinyMem promotes to AUTHORITATIVE if valid
 7. Returns response
 
 **Example response:**
@@ -181,10 +181,10 @@ curl -X POST http://localhost:4321/v1/chat/completions \
 ```
 
 **What happens:**
-1. TSLP hydrates the `Add` function into context
+1. tinyMem hydrates the `Add` function into context
 2. LM Studio sees the previous code
 3. LM Studio writes `Subtract` in the same style
-4. TSLP promotes `Subtract` to AUTHORITATIVE
+4. tinyMem promotes `Subtract` to AUTHORITATIVE
 5. Both functions now in State Map
 
 **Verify:**
@@ -199,7 +199,7 @@ curl http://localhost:4321/state | jq '.authoritative_count'
 
 You now have:
 - ✅ LM Studio running a local model (port 1234)
-- ✅ TSLP proxy managing state (port 4321)
+- ✅ tinyMem proxy managing state (port 4321)
 - ✅ AST-based entity resolution working
 - ✅ State Map tracking authoritative code
 - ✅ Continuity across multiple requests
@@ -253,9 +253,9 @@ Edit `config/config.toml`:
 debug = true
 ```
 
-Restart TSLP, then:
+Restart tinyMem, then:
 ```bash
-tail -f runtime/tslp.log
+tail -f runtime/tinyMem.log
 ```
 
 ### 5. Test ETV (Disk Divergence Detection)
@@ -267,7 +267,7 @@ func Test() string {
   return "original"
 }' > test.go
 
-# 2. Paste it to TSLP
+# 2. Paste it to tinyMem
 curl -X POST http://localhost:4321/v1/user/code \
   -H "Content-Type: application/json" \
   -d @- << 'EOF'
@@ -312,7 +312,7 @@ curl http://localhost:1234/v1/models
 # 3. Click "Start Server"
 ```
 
-### TSLP Port Already in Use
+### tinyMem Port Already in Use
 ```bash
 # Check what's using port 4321
 lsof -i :4321
@@ -334,11 +334,11 @@ llm_model = "actual-model-name-from-lmstudio"
 
 ### Database Locked
 ```bash
-# Stop TSLP (Ctrl+C)
+# Stop tinyMem (Ctrl+C)
 # Remove lock
-rm -f runtime/tslp.db-wal runtime/tslp.db-shm
-# Restart TSLP
-./tslp
+rm -f runtime/tinyMem.db-wal runtime/tinyMem.db-shm
+# Restart tinyMem
+./tinyMem
 ```
 
 ---
@@ -347,13 +347,13 @@ rm -f runtime/tslp.db-wal runtime/tslp.db-shm
 
 ```bash
 # Build
-go build -o tslp ./cmd/tslp
+go build -o tinyMem ./cmd/tinyMem
 
 # Run
-./tslp
+./tinyMem
 
 # Run with custom config
-./tslp --config /path/to/config.toml
+./tinyMem --config /path/to/config.toml
 
 # Test connection
 curl http://localhost:4321/health
@@ -362,10 +362,10 @@ curl http://localhost:4321/health
 curl http://localhost:4321/state | jq
 
 # View logs
-tail -f runtime/tslp.log
+tail -f runtime/tinyMem.log
 
-# Stop TSLP
-# Press Ctrl+C in terminal where TSLP is running
+# Stop tinyMem
+# Press Ctrl+C in terminal where tinyMem is running
 ```
 
 ---
@@ -373,14 +373,14 @@ tail -f runtime/tslp.log
 ## File Locations
 
 ```
-tslp/
-├── tslp                    # Binary (after build)
+tinyMem/
+├── tinyMem                    # Binary (after build)
 ├── config/config.toml      # Configuration
 └── runtime/
-    ├── tslp.db            # SQLite database
-    ├── tslp.db-wal        # Write-ahead log
-    ├── tslp.db-shm        # Shared memory
-    └── tslp.log           # Log file
+    ├── tinyMem.db            # SQLite database
+    ├── tinyMem.db-wal        # Write-ahead log
+    ├── tinyMem.db-shm        # Shared memory
+    └── tinyMem.log           # Log file
 ```
 
 ---
@@ -394,6 +394,6 @@ tslp/
 
 ---
 
-**You're ready to use TSLP for agentic coding with small local models!**
+**You're ready to use tinyMem for agentic coding with small local models!**
 
-*Remember: TSLP makes small models reliable by providing external memory and structural verification. The model doesn't need to remember what it wrote—TSLP hydrates that knowledge on every request.*
+*Remember: tinyMem makes small models reliable by providing external memory and structural verification. The model doesn't need to remember what it wrote—tinyMem hydrates that knowledge on every request.*

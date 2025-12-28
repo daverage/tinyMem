@@ -2,10 +2,10 @@
 [INFO]  2025/12/27 19:05:23.366884 Shutting down proxy server
 [INFO]  2025/12/27 19:05:23.367188 SHUTDOWN_COMPLETE
 [INFO]  2025/12/27 19:05:33.112858 STARTUP_PHASE phase=1_config_loaded
-[INFO]  2025/12/27 19:05:33.112971 TSLP v5.3-gold starting
+[INFO]  2025/12/27 19:05:33.112971 tinyMem v5.3-gold starting
 [INFO]  2025/12/27 19:05:33.112977 Configuration loaded from: config/config.toml
-[INFO]  2025/12/27 19:05:33.112983   Database: ./runtime/tslp.db
-[INFO]  2025/12/27 19:05:33.112988   Log file: ./runtime/tslp.log
+[INFO]  2025/12/27 19:05:33.112983   Database: ./runtime/tinyMem.db
+[INFO]  2025/12/27 19:05:33.112988   Log file: ./runtime/tinyMem.log
 [INFO]  2025/12/27 19:05:33.112992   Debug mode: true
 [INFO]  2025/12/27 19:05:33.112996   LLM Provider: lmstudio
 [INFO]  2025/12/27 19:05:33.113001   LLM Endpoint: http://127.0.0.1:1234/v1
@@ -13,7 +13,7 @@
 [INFO]  2025/12/27 19:05:33.113009   Proxy Address: 127.0.0.1:4321
 [INFO]  2025/12/27 19:05:33.113013 STARTUP_PHASE phase=2_logger_initialized
 [INFO]  2025/12/27 19:05:33.113038 STARTUP_PHASE phase=3_opening_database
-[INFO]  2025/12/27 19:05:33.113043 Opening database: ./runtime/tslp.db
+[INFO]  2025/12/27 19:05:33.113043 Opening database: ./runtime/tinyMem.db
 [INFO]  2025/12/27 19:05:33.115408 Database opened successfully
 [INFO]  2025/12/27 19:05:33.115428 STARTUP_PHASE phase=4_running_migrations
 [INFO]  2025/12/27 19:05:33.115435 Database migrations completed (WAL mode enabled)
@@ -26,16 +26,16 @@
 [DEBUG] 2025/12/27 19:05:33.115666 Initializing shadow auditor
 [DEBUG] 2025/12/27 19:05:33.115671 Initializing API server on 127.0.0.1:4321
 [INFO]  2025/12/27 19:05:33.115989 HTTP server listening on 127.0.0.1:4321
-[INFO]  2025/12/27 19:05:33.116113 Starting TSLP proxy server on 127.0.0.1:4321
+[INFO]  2025/12/27 19:05:33.116113 Starting tinyMem proxy server on 127.0.0.1:4321
 [INFO]  2025/12/27 19:05:33.217019 STARTUP_COMPLETE listen_addr=127.0.0.1:4321
 [INFO]  2025/12/27 19:06:34.080736 SHUTDOWN_INITIATED reason="signal=interrupt"
 [INFO]  2025/12/27 19:06:34.080953 Shutting down proxy server
 [INFO]  2025/12/27 19:06:34.081232 SHUTDOWN_COMPLETE
 [INFO]  2025/12/27 19:06:37.844076 STARTUP_PHASE phase=1_config_loaded
-[INFO]  2025/12/27 19:06:37.844213 TSLP v5.3-gold starting
+[INFO]  2025/12/27 19:06:37.844213 tinyMem v5.3-gold starting
 [INFO]  2025/12/27 19:06:37.844223 Configuration loaded from: config/config.toml
-[INFO]  2025/12/27 19:06:37.844230   Database: ./runtime/tslp.db
-[INFO]  2025/12/27 19:06:37.844236   Log file: ./runtime/tslp.log
+[INFO]  2025/12/27 19:06:37.844230   Database: ./runtime/tinyMem.db
+[INFO]  2025/12/27 19:06:37.844236   Log file: ./runtime/tinyMem.log
 [INFO]  2025/12/27 19:06:37.844242   Debug mode: true
 [INFO]  2025/12/27 19:06:37.844248   LLM Provider: lmstudio
 [INFO]  2025/12/27 19:06:37.844254   LLM Endpoint: http://127.0.0.1:1234/v1
@@ -43,7 +43,7 @@
 [INFO]  2025/12/27 19:06:37.844266   Proxy Address: 127.0.0.1:4321
 [INFO]  2025/12/27 19:06:37.844271 STARTUP_PHASE phase=2_logger_initialized
 [INFO]  2025/12/27 19:06:37.844282 STARTUP_PHASE phase=3_opening_database
-[INFO]  2025/12/27 19:06:37.844290 Opening database: ./runtime/tslp.db
+[INFO]  2025/12/27 19:06:37.844290 Opening database: ./runtime/tinyMem.db
 [INFO]  2025/12/27 19:06:37.845522 Database opened successfully
 [INFO]  2025/12/27 19:06:37.845539 STARTUP_PHASE phase=4_running_migrations
 [INFO]  2025/12/27 19:06:37.845546 Database migrations completed (WAL mode enabled)
@@ -56,13 +56,13 @@
 [DEBUG] 2025/12/27 19:06:37.845709 Initializing shadow auditor
 [DEBUG] 2025/12/27 19:06:37.845715 Initializing API server on 127.0.0.1:4321
 [INFO]  2025/12/27 19:06:37.845801 HTTP server listening on 127.0.0.1:4321
-[INFO]  2025/12/27 19:06:37.845827 Starting TSLP proxy server on 127.0.0.1:4321
+[INFO]  2025/12/27 19:06:37.845827 Starting tinyMem proxy server on 127.0.0.1:4321
 [INFO]  2025/12/27 19:06:37.946814 STARTUP_COMPLETE listen_addr=127.0.0.1:4321
 [DEBUG] 2025/12/27 19:06:59.551711 PROXY_REQUEST method=POST path=/v1/chat/completions
 [DEBUG] 2025/12/27 19:06:59.558009 EPISODE_CREATED episode_id=ef6d7709-e25d-4e62-847c-185206680485
 [INFO]  2025/12/27 19:11:16.723413 SHUTDOWN_INITIATED reason="signal=interrupt"
 [INFO]  2025/12/27 19:11:16.723558 Shutting down proxy server
-[DEBUG] 2025/12/27 19:11:43.113549 LLM response content (8730 bytes): I'll help you implement the feature to add an error message when a file or directory is missing from the current working tree in TSLP. Let's follow the steps:
+[DEBUG] 2025/12/27 19:11:43.113549 LLM response content (8730 bytes): I'll help you implement the feature to add an error message when a file or directory is missing from the current working tree in tinyMem. Let's follow the steps:
 
 1. First, let's create a plan for this change:
    - We need to modify the code that handles filesystem operations to check if files/directories exist
@@ -106,10 +106,10 @@ func ReadFile(filepath string) ([]byte, error) {
 [DEBUG] 2025/12/27 19:11:43.124460 AUDIT_STARTED episode=ef6d7709-e25d-4e62-847c-185206680485 artifact=998e79d933d6dee4f9263dc51cb27c8bac8a9038f3e7491c4c3c3210cdeaa24f
 [INFO]  2025/12/27 19:11:43.372845 SHUTDOWN_COMPLETE
 [INFO]  2025/12/27 19:12:05.790004 STARTUP_PHASE phase=1_config_loaded
-[INFO]  2025/12/27 19:12:05.790112 TSLP v5.3-gold starting
+[INFO]  2025/12/27 19:12:05.790112 tinyMem v5.3-gold starting
 [INFO]  2025/12/27 19:12:05.790119 Configuration loaded from: config/config.toml
-[INFO]  2025/12/27 19:12:05.790123   Database: ./runtime/tslp.db
-[INFO]  2025/12/27 19:12:05.790127   Log file: ./runtime/tslp.log
+[INFO]  2025/12/27 19:12:05.790123   Database: ./runtime/tinyMem.db
+[INFO]  2025/12/27 19:12:05.790127   Log file: ./runtime/tinyMem.log
 [INFO]  2025/12/27 19:12:05.790130   Debug mode: true
 [INFO]  2025/12/27 19:12:05.790134   LLM Provider: lmstudio
 [INFO]  2025/12/27 19:12:05.790137   LLM Endpoint: http://127.0.0.1:1234/v1
@@ -117,7 +117,7 @@ func ReadFile(filepath string) ([]byte, error) {
 [INFO]  2025/12/27 19:12:05.790144   Proxy Address: 127.0.0.1:4321
 [INFO]  2025/12/27 19:12:05.790147 STARTUP_PHASE phase=2_logger_initialized
 [INFO]  2025/12/27 19:12:05.790153 STARTUP_PHASE phase=3_opening_database
-[INFO]  2025/12/27 19:12:05.790158 Opening database: ./runtime/tslp.db
+[INFO]  2025/12/27 19:12:05.790158 Opening database: ./runtime/tinyMem.db
 [INFO]  2025/12/27 19:12:05.791664 Database opened successfully
 [INFO]  2025/12/27 19:12:05.791677 STARTUP_PHASE phase=4_running_migrations
 [INFO]  2025/12/27 19:12:05.791681 Database migrations completed (WAL mode enabled)
@@ -130,16 +130,16 @@ func ReadFile(filepath string) ([]byte, error) {
 [DEBUG] 2025/12/27 19:12:05.791779 Initializing shadow auditor
 [DEBUG] 2025/12/27 19:12:05.791783 Initializing API server on 127.0.0.1:4321
 [INFO]  2025/12/27 19:12:05.791836 HTTP server listening on 127.0.0.1:4321
-[INFO]  2025/12/27 19:12:05.791852 Starting TSLP proxy server on 127.0.0.1:4321
+[INFO]  2025/12/27 19:12:05.791852 Starting tinyMem proxy server on 127.0.0.1:4321
 [INFO]  2025/12/27 19:12:05.892859 STARTUP_COMPLETE listen_addr=127.0.0.1:4321
 [INFO]  2025/12/27 19:12:29.000062 SHUTDOWN_INITIATED reason="signal=interrupt"
 [INFO]  2025/12/27 19:12:29.000206 Shutting down proxy server
 [INFO]  2025/12/27 19:12:29.000463 SHUTDOWN_COMPLETE
 [INFO]  2025/12/27 19:13:16.194701 STARTUP_PHASE phase=1_config_loaded
-[INFO]  2025/12/27 19:13:16.194993 TSLP v5.3-gold starting
+[INFO]  2025/12/27 19:13:16.194993 tinyMem v5.3-gold starting
 [INFO]  2025/12/27 19:13:16.195008 Configuration loaded from: config/config.toml
-[INFO]  2025/12/27 19:13:16.195015   Database: ./runtime/tslp.db
-[INFO]  2025/12/27 19:13:16.195020   Log file: ./runtime/tslp.log
+[INFO]  2025/12/27 19:13:16.195015   Database: ./runtime/tinyMem.db
+[INFO]  2025/12/27 19:13:16.195020   Log file: ./runtime/tinyMem.log
 [INFO]  2025/12/27 19:13:16.195026   Debug mode: true
 [INFO]  2025/12/27 19:13:16.195031   LLM Provider: lmstudio
 [INFO]  2025/12/27 19:13:16.195036   LLM Endpoint: http://127.0.0.1:1234/v1
@@ -147,7 +147,7 @@ func ReadFile(filepath string) ([]byte, error) {
 [INFO]  2025/12/27 19:13:16.195045   Proxy Address: 127.0.0.1:4321
 [INFO]  2025/12/27 19:13:16.195050 STARTUP_PHASE phase=2_logger_initialized
 [INFO]  2025/12/27 19:13:16.195074 STARTUP_PHASE phase=3_opening_database
-[INFO]  2025/12/27 19:13:16.195199 Opening database: ./runtime/tslp.db
+[INFO]  2025/12/27 19:13:16.195199 Opening database: ./runtime/tinyMem.db
 [INFO]  2025/12/27 19:13:16.197401 Database opened successfully
 [INFO]  2025/12/27 19:13:16.197424 STARTUP_PHASE phase=4_running_migrations
 [INFO]  2025/12/27 19:13:16.197430 Database migrations completed (WAL mode enabled)
@@ -160,7 +160,7 @@ func ReadFile(filepath string) ([]byte, error) {
 [DEBUG] 2025/12/27 19:13:16.197610 Initializing shadow auditor
 [DEBUG] 2025/12/27 19:13:16.197615 Initializing API server on 127.0.0.1:4321
 [INFO]  2025/12/27 19:13:16.197947 HTTP server listening on 127.0.0.1:4321
-[INFO]  2025/12/27 19:13:16.198029 Starting TSLP proxy server on 127.0.0.1:4321
+[INFO]  2025/12/27 19:13:16.198029 Starting tinyMem proxy server on 127.0.0.1:4321
 [INFO]  2025/12/27 19:13:16.298983 STARTUP_COMPLETE listen_addr=127.0.0.1:4321
 [DEBUG] 2025/12/27 19:13:48.375114 PROXY_REQUEST method=POST path=/v1/chat/completions
 [DEBUG] 2025/12/27 19:13:48.382709 EPISODE_CREATED episode_id=5db0c58f-5744-4aaa-98f9-5b1dd2138770
@@ -191,10 +191,10 @@ Now I'll provide a summary of what we've accomplished...(truncated)
 [INFO]  2025/12/27 19:19:34.763447 Shutting down proxy server
 [INFO]  2025/12/27 19:19:34.763601 SHUTDOWN_COMPLETE
 [INFO]  2025/12/27 19:19:52.873446 STARTUP_PHASE phase=1_config_loaded
-[INFO]  2025/12/27 19:19:52.873503 TSLP v5.3-gold starting
+[INFO]  2025/12/27 19:19:52.873503 tinyMem v5.3-gold starting
 [INFO]  2025/12/27 19:19:52.873506 Configuration loaded from: config/config.toml
-[INFO]  2025/12/27 19:19:52.873509   Database: ./runtime/tslp.db
-[INFO]  2025/12/27 19:19:52.873511   Log file: ./runtime/tslp.log
+[INFO]  2025/12/27 19:19:52.873509   Database: ./runtime/tinyMem.db
+[INFO]  2025/12/27 19:19:52.873511   Log file: ./runtime/tinyMem.log
 [INFO]  2025/12/27 19:19:52.873513   Debug mode: true
 [INFO]  2025/12/27 19:19:52.873515   LLM Provider: lmstudio
 [INFO]  2025/12/27 19:19:52.873518   LLM Endpoint: http://127.0.0.1:1234/v1
@@ -202,7 +202,7 @@ Now I'll provide a summary of what we've accomplished...(truncated)
 [INFO]  2025/12/27 19:19:52.873522   Proxy Address: 127.0.0.1:4321
 [INFO]  2025/12/27 19:19:52.873525 STARTUP_PHASE phase=2_logger_initialized
 [INFO]  2025/12/27 19:19:52.873529 STARTUP_PHASE phase=3_opening_database
-[INFO]  2025/12/27 19:19:52.873531 Opening database: ./runtime/tslp.db
+[INFO]  2025/12/27 19:19:52.873531 Opening database: ./runtime/tinyMem.db
 [INFO]  2025/12/27 19:19:52.874408 Database opened successfully
 [INFO]  2025/12/27 19:19:52.874423 STARTUP_PHASE phase=4_running_migrations
 [INFO]  2025/12/27 19:19:52.874429 Database migrations completed (WAL mode enabled)
@@ -215,7 +215,7 @@ Now I'll provide a summary of what we've accomplished...(truncated)
 [DEBUG] 2025/12/27 19:19:52.874564 Initializing shadow auditor
 [DEBUG] 2025/12/27 19:19:52.874569 Initializing API server on 127.0.0.1:4321
 [INFO]  2025/12/27 19:19:52.874636 HTTP server listening on 127.0.0.1:4321
-[INFO]  2025/12/27 19:19:52.874658 Starting TSLP proxy server on 127.0.0.1:4321
+[INFO]  2025/12/27 19:19:52.874658 Starting tinyMem proxy server on 127.0.0.1:4321
 [INFO]  2025/12/27 19:19:52.974972 STARTUP_COMPLETE listen_addr=127.0.0.1:4321
 [DEBUG] 2025/12/27 19:20:17.121911 PROXY_REQUEST method=POST path=/v1/chat/completions
 [DEBUG] 2025/12/27 19:20:17.126570 EPISODE_CREATED episode_id=b95f2834-3a29-4f92-8325-9a14405bb47c
@@ -230,7 +230,7 @@ cat << 'EOF' > hello.html
 </head>
 <body>
     <h1>Hello World!</h1>
-    <p>This is a simple HTML page created by the TSLP implementation.</p>
+    <p>This is a simple HTML page created by the tinyMem implementation.</p>
 </body>
 </html>
 EOF
@@ -269,7 +269,7 @@ cat << 'EOF' > hello.html
 </head>
 <body>
     <h1>Hello World!</h1>
-    <p>This is a simple HTML page created by the TSLP implementation.</p>
+    <p>This is a simple HTML page created by the tinyMem implementation.</p>
     <p>And now we say: Hello monkeys!</p>
 </body>
 </html>
@@ -313,10 +313,10 @@ The hello.html file is located in the current working directory. To see its exac
 [INFO]  2025/12/27 19:37:30.054868 Shutting down proxy server
 [INFO]  2025/12/27 19:37:30.055000 SHUTDOWN_COMPLETE
 [INFO]  2025/12/27 19:37:54.213462 STARTUP_PHASE phase=1_config_loaded
-[INFO]  2025/12/27 19:37:54.213578 TSLP v5.3-gold starting
+[INFO]  2025/12/27 19:37:54.213578 tinyMem v5.3-gold starting
 [INFO]  2025/12/27 19:37:54.213584 Configuration loaded from: config/config.toml
-[INFO]  2025/12/27 19:37:54.213589   Database: ./runtime/tslp.db
-[INFO]  2025/12/27 19:37:54.213594   Log file: ./runtime/tslp.log
+[INFO]  2025/12/27 19:37:54.213589   Database: ./runtime/tinyMem.db
+[INFO]  2025/12/27 19:37:54.213594   Log file: ./runtime/tinyMem.log
 [INFO]  2025/12/27 19:37:54.213599   Debug mode: true
 [INFO]  2025/12/27 19:37:54.213603   LLM Provider: lmstudio
 [INFO]  2025/12/27 19:37:54.213608   LLM Endpoint: http://127.0.0.1:1234/v1
@@ -324,7 +324,7 @@ The hello.html file is located in the current working directory. To see its exac
 [INFO]  2025/12/27 19:37:54.213616   Proxy Address: 127.0.0.1:4321
 [INFO]  2025/12/27 19:37:54.213621 STARTUP_PHASE phase=2_logger_initialized
 [INFO]  2025/12/27 19:37:54.213627 STARTUP_PHASE phase=3_opening_database
-[INFO]  2025/12/27 19:37:54.213632 Opening database: ./runtime/tslp.db
+[INFO]  2025/12/27 19:37:54.213632 Opening database: ./runtime/tinyMem.db
 [INFO]  2025/12/27 19:37:54.215532 Database opened successfully
 [INFO]  2025/12/27 19:37:54.215544 STARTUP_PHASE phase=4_running_migrations
 [INFO]  2025/12/27 19:37:54.215548 Database migrations completed (WAL mode enabled)
@@ -337,7 +337,7 @@ The hello.html file is located in the current working directory. To see its exac
 [DEBUG] 2025/12/27 19:37:54.215696 Initializing shadow auditor
 [DEBUG] 2025/12/27 19:37:54.215699 Initializing API server on 127.0.0.1:4321
 [INFO]  2025/12/27 19:37:54.215902 HTTP server listening on 127.0.0.1:4321
-[INFO]  2025/12/27 19:37:54.215988 Starting TSLP proxy server on 127.0.0.1:4321
+[INFO]  2025/12/27 19:37:54.215988 Starting tinyMem proxy server on 127.0.0.1:4321
 [INFO]  2025/12/27 19:37:54.316931 STARTUP_COMPLETE listen_addr=127.0.0.1:4321
 [DEBUG] 2025/12/27 19:38:10.791519 PROXY_REQUEST method=POST path=/v1/chat/completions
 [DEBUG] 2025/12/27 19:38:10.797247 EPISODE_CREATED episode_id=fa8fe37f-26a1-4dab-9bbc-70611e9eea44
@@ -362,10 +362,10 @@ I can see that we have several Go-related directories and the hello.html file. T
 [INFO]  2025/12/27 19:45:18.386027 Shutting down proxy server
 [INFO]  2025/12/27 19:45:18.386145 SHUTDOWN_COMPLETE
 [INFO]  2025/12/27 19:46:21.546831 STARTUP_PHASE phase=1_config_loaded
-[INFO]  2025/12/27 19:46:21.546962 TSLP v5.3-gold starting
+[INFO]  2025/12/27 19:46:21.546962 tinyMem v5.3-gold starting
 [INFO]  2025/12/27 19:46:21.546970 Configuration loaded from: config/config.toml
-[INFO]  2025/12/27 19:46:21.546975   Database: ./runtime/tslp.db
-[INFO]  2025/12/27 19:46:21.546980   Log file: ./runtime/tslp.log
+[INFO]  2025/12/27 19:46:21.546975   Database: ./runtime/tinyMem.db
+[INFO]  2025/12/27 19:46:21.546980   Log file: ./runtime/tinyMem.log
 [INFO]  2025/12/27 19:46:21.546984   Debug mode: true
 [INFO]  2025/12/27 19:46:21.546989   LLM Provider: lmstudio
 [INFO]  2025/12/27 19:46:21.546993   LLM Endpoint: http://127.0.0.1:1234/v1
@@ -373,7 +373,7 @@ I can see that we have several Go-related directories and the hello.html file. T
 [INFO]  2025/12/27 19:46:21.547002   Proxy Address: 127.0.0.1:4321
 [INFO]  2025/12/27 19:46:21.547006 STARTUP_PHASE phase=2_logger_initialized
 [INFO]  2025/12/27 19:46:21.547030 STARTUP_PHASE phase=3_opening_database
-[INFO]  2025/12/27 19:46:21.547036 Opening database: ./runtime/tslp.db
+[INFO]  2025/12/27 19:46:21.547036 Opening database: ./runtime/tinyMem.db
 [INFO]  2025/12/27 19:46:21.548899 Database opened successfully
 [INFO]  2025/12/27 19:46:21.548915 STARTUP_PHASE phase=4_running_migrations
 [INFO]  2025/12/27 19:46:21.548920 Database migrations completed (WAL mode enabled)
@@ -386,7 +386,7 @@ I can see that we have several Go-related directories and the hello.html file. T
 [DEBUG] 2025/12/27 19:46:21.549075 Initializing shadow auditor
 [DEBUG] 2025/12/27 19:46:21.549079 Initializing API server on 127.0.0.1:4321
 [INFO]  2025/12/27 19:46:21.549324 HTTP server listening on 127.0.0.1:4321
-[INFO]  2025/12/27 19:46:21.549427 Starting TSLP proxy server on 127.0.0.1:4321
+[INFO]  2025/12/27 19:46:21.549427 Starting tinyMem proxy server on 127.0.0.1:4321
 [INFO]  2025/12/27 19:46:21.650348 STARTUP_COMPLETE listen_addr=127.0.0.1:4321
 [DEBUG] 2025/12/27 19:46:32.490549 PROXY_REQUEST method=POST path=/v1/chat/completions
 [DEBUG] 2025/12/27 19:46:32.491116 EPISODE_CREATED episode_id=a843679d-39b6-4f9e-958f-575a39e620c3
@@ -432,10 +432,10 @@ Let me know if you need any other information or assistance!
 [INFO]  2025/12/27 19:55:29.888523 Shutting down proxy server
 [INFO]  2025/12/27 19:55:29.888945 SHUTDOWN_COMPLETE
 [INFO]  2025/12/27 19:55:47.986377 STARTUP_PHASE phase=1_config_loaded
-[INFO]  2025/12/27 19:55:47.986530 TSLP v5.3-gold starting
+[INFO]  2025/12/27 19:55:47.986530 tinyMem v5.3-gold starting
 [INFO]  2025/12/27 19:55:47.986538 Configuration loaded from: config/config.toml
-[INFO]  2025/12/27 19:55:47.986543   Database: ./runtime/tslp.db
-[INFO]  2025/12/27 19:55:47.986548   Log file: ./runtime/tslp.log
+[INFO]  2025/12/27 19:55:47.986543   Database: ./runtime/tinyMem.db
+[INFO]  2025/12/27 19:55:47.986548   Log file: ./runtime/tinyMem.log
 [INFO]  2025/12/27 19:55:47.986552   Debug mode: true
 [INFO]  2025/12/27 19:55:47.986557   LLM Provider: lmstudio
 [INFO]  2025/12/27 19:55:47.986561   LLM Endpoint: http://127.0.0.1:1234/v1
@@ -443,7 +443,7 @@ Let me know if you need any other information or assistance!
 [INFO]  2025/12/27 19:55:47.986570   Proxy Address: 127.0.0.1:4321
 [INFO]  2025/12/27 19:55:47.986574 STARTUP_PHASE phase=2_logger_initialized
 [INFO]  2025/12/27 19:55:47.986598 STARTUP_PHASE phase=3_opening_database
-[INFO]  2025/12/27 19:55:47.986604 Opening database: ./runtime/tslp.db
+[INFO]  2025/12/27 19:55:47.986604 Opening database: ./runtime/tinyMem.db
 [INFO]  2025/12/27 19:55:47.989001 Database opened successfully
 [INFO]  2025/12/27 19:55:47.989019 STARTUP_PHASE phase=4_running_migrations
 [INFO]  2025/12/27 19:55:47.989025 Database migrations completed (WAL mode enabled)
@@ -456,7 +456,7 @@ Let me know if you need any other information or assistance!
 [DEBUG] 2025/12/27 19:55:47.989155 Initializing shadow auditor
 [DEBUG] 2025/12/27 19:55:47.989159 Initializing API server on 127.0.0.1:4321
 [INFO]  2025/12/27 19:55:47.989375 HTTP server listening on 127.0.0.1:4321
-[INFO]  2025/12/27 19:55:47.989495 Starting TSLP proxy server on 127.0.0.1:4321
+[INFO]  2025/12/27 19:55:47.989495 Starting tinyMem proxy server on 127.0.0.1:4321
 [INFO]  2025/12/27 19:55:48.090404 STARTUP_COMPLETE listen_addr=127.0.0.1:4321
 [DEBUG] 2025/12/27 19:56:12.189904 PROXY_REQUEST method=POST path=/v1/chat/completions
 [DEBUG] 2025/12/27 19:56:12.193489 EPISODE_CREATED episode_id=a85166b1-faf1-4314-a519-370b76b989d1
@@ -476,7 +476,7 @@ Let me know if you need any other information or assistance!
 </head>
 <body>
     <h1>Hello World!</h1>
-    <p>This is a simple HTML page created by the TSLP implementation.</p>
+    <p>This is a simple HTML page created by the tinyMem implementation.</p>
     <p>And now we say: Hello monkeys!</p>
 
     <!-- Adding JavaScript to pop an alert -->
@@ -497,10 +497,10 @@ This file should now display a JavaScript alert with the message "yo yo yo" when
 [INFO]  2025/12/27 20:23:03.457601 Shutting down proxy server
 [INFO]  2025/12/27 20:23:03.457723 SHUTDOWN_COMPLETE
 [INFO]  2025/12/27 20:23:20.394442 STARTUP_PHASE phase=1_config_loaded
-[INFO]  2025/12/27 20:23:20.394567 TSLP v5.3-gold starting
+[INFO]  2025/12/27 20:23:20.394567 tinyMem v5.3-gold starting
 [INFO]  2025/12/27 20:23:20.394575 Configuration loaded from: config/config.toml
-[INFO]  2025/12/27 20:23:20.394581   Database: ./runtime/tslp.db
-[INFO]  2025/12/27 20:23:20.394586   Log file: ./runtime/tslp.log
+[INFO]  2025/12/27 20:23:20.394581   Database: ./runtime/tinyMem.db
+[INFO]  2025/12/27 20:23:20.394586   Log file: ./runtime/tinyMem.log
 [INFO]  2025/12/27 20:23:20.394590   Debug mode: true
 [INFO]  2025/12/27 20:23:20.394595   LLM Provider: lmstudio
 [INFO]  2025/12/27 20:23:20.394599   LLM Endpoint: http://127.0.0.1:1234/v1
@@ -508,7 +508,7 @@ This file should now display a JavaScript alert with the message "yo yo yo" when
 [INFO]  2025/12/27 20:23:20.394608   Proxy Address: 127.0.0.1:4321
 [INFO]  2025/12/27 20:23:20.394612 STARTUP_PHASE phase=2_logger_initialized
 [INFO]  2025/12/27 20:23:20.394637 STARTUP_PHASE phase=3_opening_database
-[INFO]  2025/12/27 20:23:20.394642 Opening database: ./runtime/tslp.db
+[INFO]  2025/12/27 20:23:20.394642 Opening database: ./runtime/tinyMem.db
 [INFO]  2025/12/27 20:23:20.396592 Database opened successfully
 [INFO]  2025/12/27 20:23:20.396610 STARTUP_PHASE phase=4_running_migrations
 [INFO]  2025/12/27 20:23:20.396615 Database migrations completed (WAL mode enabled)
@@ -521,14 +521,14 @@ This file should now display a JavaScript alert with the message "yo yo yo" when
 [DEBUG] 2025/12/27 20:23:20.396764 Initializing shadow auditor
 [DEBUG] 2025/12/27 20:23:20.396768 Initializing API server on 127.0.0.1:4321
 [INFO]  2025/12/27 20:23:20.397007 HTTP server listening on 127.0.0.1:4321
-[INFO]  2025/12/27 20:23:20.397141 Starting TSLP proxy server on 127.0.0.1:4321
+[INFO]  2025/12/27 20:23:20.397141 Starting tinyMem proxy server on 127.0.0.1:4321
 [INFO]  2025/12/27 20:23:20.497996 STARTUP_COMPLETE listen_addr=127.0.0.1:4321
 [DEBUG] 2025/12/27 20:24:42.134670 PROXY_REQUEST method=POST path=/v1/chat/completions
 [DEBUG] 2025/12/27 20:24:42.140100 EPISODE_CREATED episode_id=269060bb-aa0d-4678-8abb-59631c7299f5
 [DEBUG] 2025/12/27 20:27:40.022328 LLM response content (8013 bytes): Let's conduct a comprehensive code review to ensure the implementation aligns with the requirements specified in `specification.md`.
 
 ### 1. **Core Purpose & Constraint**
-The core purpose of TSLP is to provide deterministic continuity for agentic coding with small models by externalizing working memory into a strictly typed Transactional State Map.
+The core purpose of tinyMem is to provide deterministic continuity for agentic coding with small models by externalizing working memory into a strictly typed Transactional State Map.
 
 - **Non-Negotiable Constraint**: The system must have zero access to IDE internals, filesystem state (Mutation/Write), and Git metadata. It operates exclusively on data that crosses the proxy boundary.
   - **Implementation Check**: Ensure all read operations are done through the proxy, and write operations require explicit user confirmation.
@@ -550,7 +550,7 @@ The LLM is stateless, the Proxy is authoritative, and state advances only by str
 [DEBUG] 2025/12/27 20:36:12.538832 EPISODE_CREATED episode_id=cd902f17-e4fa-41be-b038-2320a7da6a35
 [DEBUG] 2025/12/27 20:37:52.198704 LLM response content (2483 bytes): <think>Ok, let's figure this out:
 
-Alright, we have a TSLP (Transactional State Language Proxy) implementation that's been reviewed and confirmed to meet the specification. We're now looking at what it takes to make this a full release. Let me break down the steps beyond just code completion:
+Alright, we have a tinyMem (Transactional State Language Proxy) implementation that's been reviewed and confirmed to meet the specification. We're now looking at what it takes to make this a full release. Let me break down the steps beyond just code completion:
 
 1. Testing
    - Unit tests for core components
@@ -577,7 +577,7 @@ Alright, we have a TSLP (Transactional State Language Proxy) implementation that
 [DEBUG] 2025/12/27 20:38:40.366641 EPISODE_CREATED episode_id=c33bccd1-837c-4cfa-bf53-90de6b33efab
 [DEBUG] 2025/12/27 20:40:46.281403 LLM response content (2013 bytes): <think>Ok, let's figure this out:
 
-We're looking at creating an executable for the TSLP implementation on macOS. Let me outline what that would involve:
+We're looking at creating an executable for the tinyMem implementation on macOS. Let me outline what that would involve:
 
 1. Build Process Setup
    - We need a build system configured to produce a macOS application bundle
@@ -602,7 +602,7 @@ We're looking at creating an executable for the TSLP implementation on macOS. Le
 [DEBUG] 2025/12/27 20:41:49.332939 EPISODE_CREATED episode_id=5c0b7e46-aa9a-4521-9fd3-fd0331cd4a35
 [DEBUG] 2025/12/27 20:43:06.470356 LLM response content (1677 bytes): <think>Ok, let's figure this out:
 
-You're suggesting compiling the TSLP implementation into a low-resource CLI instead of a full macOS application bundle. This is an interesting approach with several advantages:
+You're suggesting compiling the tinyMem implementation into a low-resource CLI instead of a full macOS application bundle. This is an interesting approach with several advantages:
 
 1. Smaller Footprint: CLIs generally have much smaller distribution sizes than GUI applications
 2. Less Overhead: No need to include UI frameworks or other graphical components
@@ -611,7 +611,7 @@ You're suggesting compiling the TSLP implementation into a low-resource CLI inst
 
 Let me outline how we could approach this:
 
-For the TSLP implementation, compiling into a CLI would involve these steps:
+For the tinyMem implementation, compiling into a CLI would involve these steps:
 
 1. Build Configuration: Configure the build system to produce a command-line executable instead of an application bundle
 2. Dependency Management: Ensure all required dependencies (SQLite, Tree-sitter libraries) are either statically linked or included in the distribution
@@ -627,10 +627,10 @@ For the TSLP implementation, compiling into a CLI would involve these steps:
 [INFO]  2025/12/27 20:57:49.358177 Shutting down proxy server
 [INFO]  2025/12/27 20:57:49.361290 SHUTDOWN_COMPLETE
 [INFO]  2025/12/27 21:01:30.877071 STARTUP_PHASE phase=1_config_loaded
-[INFO]  2025/12/27 21:01:30.877215 TSLP v5.3-gold starting
+[INFO]  2025/12/27 21:01:30.877215 tinyMem v5.3-gold starting
 [INFO]  2025/12/27 21:01:30.877223 Configuration loaded from: config/config.toml
-[INFO]  2025/12/27 21:01:30.877228   Database: ./runtime/tslp.db
-[INFO]  2025/12/27 21:01:30.877233   Log file: ./runtime/tslp.log
+[INFO]  2025/12/27 21:01:30.877228   Database: ./runtime/tinyMem.db
+[INFO]  2025/12/27 21:01:30.877233   Log file: ./runtime/tinyMem.log
 [INFO]  2025/12/27 21:01:30.877237   Debug mode: true
 [INFO]  2025/12/27 21:01:30.877242   LLM Provider: lmstudio
 [INFO]  2025/12/27 21:01:30.877246   LLM Endpoint: http://127.0.0.1:1234/v1
@@ -638,7 +638,7 @@ For the TSLP implementation, compiling into a CLI would involve these steps:
 [INFO]  2025/12/27 21:01:30.877254   Proxy Address: 127.0.0.1:4321
 [INFO]  2025/12/27 21:01:30.877259 STARTUP_PHASE phase=2_logger_initialized
 [INFO]  2025/12/27 21:01:30.877266 STARTUP_PHASE phase=3_opening_database
-[INFO]  2025/12/27 21:01:30.877271 Opening database: ./runtime/tslp.db
+[INFO]  2025/12/27 21:01:30.877271 Opening database: ./runtime/tinyMem.db
 [INFO]  2025/12/27 21:01:30.880028 Database opened successfully
 [INFO]  2025/12/27 21:01:30.880047 STARTUP_PHASE phase=4_running_migrations
 [INFO]  2025/12/27 21:01:30.880053 Database migrations completed (WAL mode enabled)
@@ -651,7 +651,7 @@ For the TSLP implementation, compiling into a CLI would involve these steps:
 [DEBUG] 2025/12/27 21:01:30.880199 Initializing shadow auditor
 [DEBUG] 2025/12/27 21:01:30.880203 Initializing API server on 127.0.0.1:4321
 [INFO]  2025/12/27 21:01:30.880425 HTTP server listening on 127.0.0.1:4321
-[INFO]  2025/12/27 21:01:30.880521 Starting TSLP proxy server on 127.0.0.1:4321
+[INFO]  2025/12/27 21:01:30.880521 Starting tinyMem proxy server on 127.0.0.1:4321
 [INFO]  2025/12/27 21:01:30.981454 STARTUP_COMPLETE listen_addr=127.0.0.1:4321
 [DEBUG] 2025/12/27 21:04:25.240033 PROXY_REQUEST method=GET path=/v1/chat/completions
 [DEBUG] 2025/12/27 21:04:25.244158 PROXY_REQUEST method=GET path=/v1/chat/completions
@@ -665,20 +665,20 @@ For the TSLP implementation, compiling into a CLI would involve these steps:
 [DEBUG] 2025/12/27 21:05:03.223549 EPISODE_CREATED episode_id=822af28f-ae3d-4255-bbfb-88ed6a52c5d1
 [DEBUG] 2025/12/27 21:07:28.303085 LLM response content (3906 bytes): <think>Ok, let's figure this out:
 
-Let me update the `readme.md` file to include instructions on compiling the TSLP implementation into a standalone CLI executable. I'll provide comprehensive steps for different languages that might be used in the project (Go, Rust, C++), as well as general guidance for packaging and distribution.
+Let me update the `readme.md` file to include instructions on compiling the tinyMem implementation into a standalone CLI executable. I'll provide comprehensive steps for different languages that might be used in the project (Go, Rust, C++), as well as general guidance for packaging and distribution.
 
 Here's what I'll add to `readme.md`:
 
 ## Compiling to Standalone Executable
 
-The TSLP can be compiled into a standalone CLI executable for easier deployment and use in environments without graphical interfaces. Here are instructions for common languages:
+The tinyMem can be compiled into a standalone CLI executable for easier deployment and use in environments without graphical interfaces. Here are instructions for common languages:
 
 ### Using Go
 1. Ensure you have Go installed (version 1.18 or higher)
 2. Run `go mod tidy` to download dependencies
-3. Compile with: `go build -ldflags="-s -w" -o tslp .`
+3. Compile with: `go build -ldflags="-s -w" -o tinyMem .`
    - `-ldflags="-s -w"` removes debug information and symbol table, reducing the executable size
-   - `-o tslp` specifies the output file name as "tslp"
+   - `-o tinyMem` specifies the output file name as "tinyMem"
 
 ### Using Rust
 1. Ensure you have Rust installed (with Cargo)
@@ -688,3 +688,6 @@ The TSLP can be compiled into a standalone CLI executable for easier deployment 
 [DEBUG] 2025/12/27 21:07:28.305306 AUDIT_STARTED episode=822af28f-ae3d-4255-bbfb-88ed6a52c5d1 artifact=5eda25b729404f92ebca0be7d76c381820e49e664ec7afe0407146d87d474ebf
 [DEBUG] 2025/12/27 21:16:36.910417 Extracted JSON from audit response (truncated): {"entity": "readme.md", "status": "completed"}
 [INFO]  2025/12/27 21:16:36.918641 AUDIT_COMPLETED episode=822af28f-ae3d-4255-bbfb-88ed6a52c5d1 artifact=5eda25b729404f92ebca0be7d76c381820e49e664ec7afe0407146d87d474ebf status=completed
+[INFO]  2025/12/28 11:22:13.731738 SHUTDOWN_INITIATED reason="signal=interrupt"
+[INFO]  2025/12/28 11:22:13.732722 Shutting down proxy server
+[INFO]  2025/12/28 11:22:13.734569 SHUTDOWN_COMPLETE

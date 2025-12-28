@@ -1,4 +1,4 @@
-# TSLP v5.3 Gold — Specification Conformance Review
+# tinyMem v5.3 Gold — Specification Conformance Review
 
 **Date:** 2025-12-24
 **Implementation Status:** Steps 1-7 Complete
@@ -255,4 +255,4 @@ None - all implemented features conform to spec. Gaps are omissions, not violati
 
 ---
 
-**Conclusion:** Implementation completes Steps 1-7 as specified. Core TSLP functionality is Gold-compliant. ETV (Section 15) is the primary gap preventing full v5.3 Gold conformance.
+**Conclusion:** Implementation completes Steps 1-7 as specified. Core tinyMem functionality is Gold-compliant. ETV (Section 15) is the primary gap preventing full v5.3 Gold conformance.

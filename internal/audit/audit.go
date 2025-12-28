@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/andrzejmarczewski/tslp/internal/ledger"
-	"github.com/andrzejmarczewski/tslp/internal/llm"
-	"github.com/andrzejmarczewski/tslp/internal/logging"
-	"github.com/andrzejmarczewski/tslp/internal/vault"
+	"github.com/andrzejmarczewski/tinyMem/internal/ledger"
+	"github.com/andrzejmarczewski/tinyMem/internal/llm"
+	"github.com/andrzejmarczewski/tinyMem/internal/logging"
+	"github.com/andrzejmarczewski/tinyMem/internal/vault"
 )
 
 // AuditStatus represents the result of an audit

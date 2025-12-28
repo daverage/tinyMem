@@ -55,7 +55,7 @@ func TestComputeHash(t *testing.T) {
 		{
 			name: "code block",
 			content: `func main() {
-	fmt.Println("Hello, TSLP!")
+	fmt.Println("Hello, tinyMem!")
 }`,
 			expected: "f8c3e8b8c8a7e3f8c3e8b8c8a7e3f8c3e8b8c8a7e3f8c3e8b8c8a7e3f8c3e8b8", // Will be different, this is just a placeholder
 		},

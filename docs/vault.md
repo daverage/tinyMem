@@ -1,8 +1,8 @@
-# TSLP Artifact Vault
+# tinyMem Artifact Vault
 
 ## Overview
 
-The Vault is TSLP's **immutable, content-addressed storage layer** for all artifacts. It implements a write-once, read-many pattern where every piece of content is stored exactly once and never modified.
+The Vault is tinyMem's **immutable, content-addressed storage layer** for all artifacts. It implements a write-once, read-many pattern where every piece of content is stored exactly once and never modified.
 
 Per requirements:
 - **Content-addressed storage** using SHA-256 cryptographic hash
@@ -373,7 +373,7 @@ go test -bench=. ./internal/vault/
 ### Basic Usage
 
 ```go
-import "github.com/andrzejmarczewski/tslp/internal/vault"
+import "github.com/andrzejmarczewski/tinyMem/internal/vault"
 
 // Create vault (requires database connection)
 v := vault.New(db.Conn())

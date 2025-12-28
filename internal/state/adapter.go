@@ -3,7 +3,7 @@ package state
 import (
 	"encoding/json"
 
-	"github.com/andrzejmarczewski/tslp/internal/entity"
+	"github.com/andrzejmarczewski/tinyMem/internal/entity"
 )
 
 // StateMapAdapter adapts the state.Manager to implement entity.StateMapProvider

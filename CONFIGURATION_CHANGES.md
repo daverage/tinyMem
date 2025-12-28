@@ -14,7 +14,7 @@
 **Reason:** Port 4321 is less commonly used, reducing conflicts with other local services.
 
 **Impact:**
-- TSLP proxy now listens on port 4321 by default
+- tinyMem proxy now listens on port 4321 by default
 - Update any client configurations to use: `http://localhost:4321/v1/chat/completions`
 
 ---
@@ -39,7 +39,7 @@ llm_model = "local-model"
 **Reason:** LM Studio is a popular local LLM server that runs on port 1234 by default. This provides an out-of-the-box experience for users running small models locally.
 
 **Impact:**
-- TSLP now works with LM Studio without configuration changes
+- tinyMem now works with LM Studio without configuration changes
 - No API key required (local models)
 - Users must have LM Studio running on port 1234 with a model loaded
 
@@ -48,18 +48,18 @@ llm_model = "local-model"
 ## Default Configuration (config/config.toml)
 
 ```toml
-# TSLP v5.3 (Gold) Configuration
+# tinyMem v5.3 (Gold) Configuration
 # Per Specification: minimal and boring, no tuning knobs, no feature flags
 # All fields are REQUIRED unless explicitly noted
 
 [database]
 # Path to SQLite database file
 # The database will be created if it doesn't exist
-database_path = "./runtime/tslp.db"
+database_path = "./runtime/tinyMem.db"
 
 [logging]
 # Path to log file
-log_path = "./runtime/tslp.log"
+log_path = "./runtime/tinyMem.log"
 
 # Enable debug logging (true/false)
 debug = false
@@ -114,16 +114,16 @@ listen_address = "127.0.0.1:4321"
 # Start local server (port 1234)
 ```
 
-### 2. Run TSLP
+### 2. Run tinyMem
 ```bash
-# Build TSLP
-go build -o tslp ./cmd/tslp
+# Build tinyMem
+go build -o tinyMem ./cmd/tinyMem
 
 # Create runtime directory
 mkdir -p runtime
 
-# Start TSLP (uses default config)
-./tslp
+# Start tinyMem (uses default config)
+./tinyMem
 ```
 
 ### 3. Test the Connection
@@ -184,9 +184,9 @@ llm_model = "claude-3-opus-20240229"
 - Enable "Local Server" in LM Studio
 
 ### "Connection refused" to port 4321
-- TSLP is not running
-- Start TSLP: `./tslp`
-- Check logs: `tail -f runtime/tslp.log`
+- tinyMem is not running
+- Start tinyMem: `./tinyMem`
+- Check logs: `tail -f runtime/tinyMem.log`
 
 ### Wrong model name
 - Check LM Studio UI for exact model name
@@ -203,4 +203,4 @@ llm_model = "claude-3-opus-20240229"
 ✅ **API Key:** Empty (local models don't need keys)
 ✅ **Model:** "local-model" (use your loaded model name)
 
-**Result:** TSLP works out-of-the-box with LM Studio for local, privacy-preserving agentic coding with small models.
+**Result:** tinyMem works out-of-the-box with LM Studio for local, privacy-preserving agentic coding with small models.

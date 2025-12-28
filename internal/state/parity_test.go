@@ -4,9 +4,9 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/andrzejmarczewski/tslp/internal/entity"
-	"github.com/andrzejmarczewski/tslp/internal/ledger"
-	"github.com/andrzejmarczewski/tslp/internal/vault"
+	"github.com/andrzejmarczewski/tinyMem/internal/entity"
+	"github.com/andrzejmarczewski/tinyMem/internal/ledger"
+	"github.com/andrzejmarczewski/tinyMem/internal/vault"
 	_ "github.com/mattn/go-sqlite3"
 )
 
