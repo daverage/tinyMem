@@ -1,8 +1,7 @@
--- TSLP v5.3 Database Schema
--- Single SQLite database with three logical layers
-
-PRAGMA journal_mode=WAL;
-PRAGMA foreign_keys=ON;
+-- TSLP v5.3 Initial Schema
+-- Migration: 001
+-- Description: Create vault, ledger, and state_map tables
+-- Idempotent: Yes (uses IF NOT EXISTS)
 
 -- ============================================================================
 -- VAULT: Immutable Content Store (Content-Addressed Storage)
@@ -17,8 +16,8 @@ CREATE TABLE IF NOT EXISTS vault_artifacts (
     token_count INTEGER               -- Optional: token count estimate
 );
 
-CREATE INDEX idx_vault_created ON vault_artifacts(created_at);
-CREATE INDEX idx_vault_type ON vault_artifacts(content_type);
+CREATE INDEX IF NOT EXISTS idx_vault_created ON vault_artifacts(created_at);
+CREATE INDEX IF NOT EXISTS idx_vault_type ON vault_artifacts(content_type);
 
 -- ============================================================================
 -- LEDGER: Chronological Evidence (Append-Only)
@@ -35,8 +34,8 @@ CREATE TABLE IF NOT EXISTS ledger_episodes (
     FOREIGN KEY(assistant_response_hash) REFERENCES vault_artifacts(hash)
 );
 
-CREATE INDEX idx_ledger_timestamp ON ledger_episodes(timestamp);
-CREATE INDEX idx_ledger_episode ON ledger_episodes(episode_id);
+CREATE INDEX IF NOT EXISTS idx_ledger_timestamp ON ledger_episodes(timestamp);
+CREATE INDEX IF NOT EXISTS idx_ledger_episode ON ledger_episodes(episode_id);
 
 -- State transition records
 CREATE TABLE IF NOT EXISTS ledger_state_transitions (
@@ -52,8 +51,8 @@ CREATE TABLE IF NOT EXISTS ledger_state_transitions (
     FOREIGN KEY(artifact_hash) REFERENCES vault_artifacts(hash)
 );
 
-CREATE INDEX idx_transitions_entity ON ledger_state_transitions(entity_key);
-CREATE INDEX idx_transitions_episode ON ledger_state_transitions(episode_id);
+CREATE INDEX IF NOT EXISTS idx_transitions_entity ON ledger_state_transitions(entity_key);
+CREATE INDEX IF NOT EXISTS idx_transitions_episode ON ledger_state_transitions(episode_id);
 
 -- Shadow audit results
 CREATE TABLE IF NOT EXISTS ledger_audit_results (
@@ -68,7 +67,7 @@ CREATE TABLE IF NOT EXISTS ledger_audit_results (
     FOREIGN KEY(artifact_hash) REFERENCES vault_artifacts(hash)
 );
 
-CREATE INDEX idx_audit_episode ON ledger_audit_results(episode_id);
+CREATE INDEX IF NOT EXISTS idx_audit_episode ON ledger_audit_results(episode_id);
 
 -- ============================================================================
 -- STATE MAP: Single Source of Truth
@@ -86,10 +85,10 @@ CREATE TABLE IF NOT EXISTS state_map (
     FOREIGN KEY(artifact_hash) REFERENCES vault_artifacts(hash)
 );
 
-CREATE INDEX idx_state_filepath ON state_map(filepath);
-CREATE INDEX idx_state_symbol ON state_map(symbol);
-CREATE INDEX idx_state_state ON state_map(state);
-CREATE INDEX idx_state_updated ON state_map(last_updated);
+CREATE INDEX IF NOT EXISTS idx_state_filepath ON state_map(filepath);
+CREATE INDEX IF NOT EXISTS idx_state_symbol ON state_map(symbol);
+CREATE INDEX IF NOT EXISTS idx_state_state ON state_map(state);
+CREATE INDEX IF NOT EXISTS idx_state_updated ON state_map(last_updated);
 
 -- ============================================================================
 -- ENTITY RESOLUTION TRACKING
@@ -107,8 +106,8 @@ CREATE TABLE IF NOT EXISTS entity_resolution_cache (
     FOREIGN KEY(artifact_hash) REFERENCES vault_artifacts(hash)
 );
 
-CREATE INDEX idx_resolution_entity ON entity_resolution_cache(entity_key);
-CREATE INDEX idx_resolution_method ON entity_resolution_cache(resolution_method);
+CREATE INDEX IF NOT EXISTS idx_resolution_entity ON entity_resolution_cache(entity_key);
+CREATE INDEX IF NOT EXISTS idx_resolution_method ON entity_resolution_cache(resolution_method);
 
 -- ============================================================================
 -- TOMBSTONE TRACKING (for recovery)
@@ -125,5 +124,5 @@ CREATE TABLE IF NOT EXISTS tombstones (
     FOREIGN KEY(episode_id) REFERENCES ledger_episodes(episode_id)
 );
 
-CREATE INDEX idx_tombstones_entity ON tombstones(entity_key);
-CREATE INDEX idx_tombstones_episode ON tombstones(episode_id);
+CREATE INDEX IF NOT EXISTS idx_tombstones_entity ON tombstones(entity_key);
+CREATE INDEX IF NOT EXISTS idx_tombstones_episode ON tombstones(episode_id);

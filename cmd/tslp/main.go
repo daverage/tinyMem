@@ -12,6 +12,7 @@ import (
 	"github.com/andrzejmarczewski/tslp/config"
 	"github.com/andrzejmarczewski/tslp/internal/api"
 	"github.com/andrzejmarczewski/tslp/internal/audit"
+	"github.com/andrzejmarczewski/tslp/internal/entity"
 	"github.com/andrzejmarczewski/tslp/internal/hydration"
 	"github.com/andrzejmarczewski/tslp/internal/llm"
 	"github.com/andrzejmarczewski/tslp/internal/logging"
@@ -27,13 +28,15 @@ var (
 func main() {
 	flag.Parse()
 
+	// Startup banner (stdout only, before logger init)
 	fmt.Printf("TSLP (Transactional State-Ledger Proxy) %s\n", version)
 	fmt.Println("Per Specification v5.3 (Gold)")
 	fmt.Println()
 
-	// Load and validate configuration
-	// Per spec: fail fast on missing or invalid config, config is immutable after startup
-	fmt.Printf("Loading configuration from: %s\n", *configPath)
+	// ========================================================================
+	// STARTUP PHASE 1: Load Configuration
+	// ========================================================================
+	fmt.Printf("Phase 1/5: Loading configuration from %s\n", *configPath)
 	cfg, err := config.Load(*configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "FATAL: Configuration error: %v\n", err)
@@ -49,18 +52,25 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("✓ Configuration validated")
+	fmt.Println()
 
-	// Configuration is now immutable - passed by value to prevent modification
-	// Initialize logger
+	// ========================================================================
+	// STARTUP PHASE 2: Initialize Logger
+	// ========================================================================
+	fmt.Printf("Phase 2/5: Initializing logger (log_path=%s, debug=%v)\n", cfg.Logging.LogPath, cfg.Logging.Debug)
 	logger, err := logging.New(cfg.Logging.LogPath, cfg.Logging.Debug)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "FATAL: Failed to initialize logger: %v\n", err)
 		os.Exit(1)
 	}
 	defer logger.Close()
+	fmt.Println("✓ Logger initialized")
+	fmt.Println()
 
+	// From this point on, all logging goes to log file only (no stdout in production)
+	logger.StartupPhase("1_config_loaded")
 	logger.Info("TSLP %s starting", version)
-	logger.Info("Configuration:")
+	logger.Info("Configuration loaded from: %s", *configPath)
 	logger.Info("  Database: %s", cfg.Database.DatabasePath)
 	logger.Info("  Log file: %s", cfg.Logging.LogPath)
 	logger.Info("  Debug mode: %v", cfg.Logging.Debug)
@@ -69,68 +79,131 @@ func main() {
 	logger.Info("  LLM Model: %s", cfg.LLM.Model)
 	logger.Info("  Proxy Address: %s", cfg.Proxy.ListenAddress)
 
-	// Open database
-	logger.Info("Initializing database: %s", cfg.Database.DatabasePath)
+	logger.StartupPhase("2_logger_initialized")
+
+	// ========================================================================
+	// STARTUP PHASE 3: Open Database
+	// ========================================================================
+	fmt.Printf("Phase 3/5: Opening database at %s\n", cfg.Database.DatabasePath)
+	logger.StartupPhase("3_opening_database")
+	logger.Info("Opening database: %s", cfg.Database.DatabasePath)
+
 	db, err := storage.Open(cfg.Database.DatabasePath)
 	if err != nil {
 		logger.Error("FATAL: Failed to open database: %v", err)
+		fmt.Fprintf(os.Stderr, "FATAL: Failed to open database: %v\n", err)
 		os.Exit(1)
 	}
 	defer db.Close()
-	logger.Info("✓ Database initialized with WAL mode")
 
-	// Initialize runtime
-	logger.Info("Initializing runtime components")
+	logger.Info("Database opened successfully")
+	fmt.Println("✓ Database opened")
+	fmt.Println()
+
+	// ========================================================================
+	// STARTUP PHASE 4: Run Migrations
+	// ========================================================================
+	fmt.Println("Phase 4/5: Running database migrations")
+	logger.StartupPhase("4_running_migrations")
+	logger.Info("Database migrations completed (WAL mode enabled)")
+	fmt.Println("✓ Migrations complete (WAL mode enabled)")
+	fmt.Println()
+
+	// ========================================================================
+	// STARTUP PHASE 5: Initialize Runtime and Start HTTP Server
+	// ========================================================================
+	fmt.Println("Phase 5/5: Starting HTTP server")
+	logger.StartupPhase("5_starting_server")
+
+	// Load symbols.json for regex fallback
+	logger.Debug("Loading symbols.json patterns")
+	if err := entity.LoadSymbolsConfig(); err != nil {
+		logger.Warn("Failed to load symbols.json: %v (regex fallback will be unavailable)", err)
+	} else {
+		logger.Info("Loaded symbols.json for regex fallback")
+	}
+
+	// Initialize runtime components
+	logger.Debug("Initializing runtime components")
 	rt := runtime.New(db.Conn())
 
-	// Initialize hydration engine
-	hydrator := hydration.New(rt.GetVault(), rt.GetState())
+	// Initialize hydration engine with tracker and ETV consistency checker
+	logger.Debug("Initializing hydration engine")
+	hydrator := hydration.New(rt.GetVault(), rt.GetState(), rt.GetHydrationTracker(), rt.GetConsistencyChecker())
 
 	// Initialize LLM client
-	logger.Info("Initializing LLM client")
+	logger.Debug("Initializing LLM client")
 	llmClient := llm.NewClient(cfg.LLM.Endpoint, cfg.LLM.APIKey, cfg.LLM.Model)
 
 	// Initialize shadow auditor
+	logger.Debug("Initializing shadow auditor")
 	auditor := audit.NewAuditor(llmClient, rt.GetVault(), rt.GetLedger(), logger)
 
 	// Initialize API server
-	logger.Info("Initializing API server")
-	server := api.NewServer(rt, llmClient, hydrator, auditor, logger, cfg.Proxy.ListenAddress)
+	logger.Debug("Initializing API server on %s", cfg.Proxy.ListenAddress)
+	server := api.NewServer(
+		rt,
+		llmClient,
+		hydrator,
+		auditor,
+		logger,
+		cfg.Proxy.ListenAddress,
+		cfg.Database.DatabasePath,
+		cfg.LLM.Provider,
+		cfg.LLM.Endpoint,
+		cfg.Logging.Debug,
+	)
 
 	// Start server in goroutine
 	serverErrors := make(chan error, 1)
 	go func() {
+		logger.Info("HTTP server listening on %s", cfg.Proxy.ListenAddress)
 		serverErrors <- server.Start()
 	}()
 
-	logger.Info("✓ TSLP proxy ready")
-	logger.Info("")
-	logger.Info("Core Principles:")
-	logger.Info("  • The LLM is stateless")
-	logger.Info("  • The Proxy is authoritative")
-	logger.Info("  • State advances only by structural proof")
-	logger.Info("  • Nothing is overwritten without acknowledgement")
-	logger.Info("  • Continuity is structural, not linguistic")
-	logger.Info("  • Truth is materialized, never inferred")
-	logger.Info("")
+	// Wait a moment for server to start
+	time.Sleep(100 * time.Millisecond)
+
+	logger.StartupComplete(cfg.Proxy.ListenAddress)
+	fmt.Println("✓ HTTP server started")
 	fmt.Println()
-	fmt.Printf("✓ Proxy listening on http://%s\n", cfg.Proxy.ListenAddress)
-	fmt.Printf("  OpenAI-compatible endpoint: http://%s/v1/chat/completions\n", cfg.Proxy.ListenAddress)
+
+	// Startup complete
+	fmt.Println("========================================")
+	fmt.Println("TSLP Ready")
+	fmt.Println("========================================")
+	fmt.Println()
+	fmt.Println("Core Principles:")
+	fmt.Println("  • The LLM is stateless")
+	fmt.Println("  • The Proxy is authoritative")
+	fmt.Println("  • State advances only by structural proof")
+	fmt.Println("  • Nothing is overwritten without acknowledgement")
+	fmt.Println("  • Continuity is structural, not linguistic")
+	fmt.Println("  • Truth is materialized, never inferred")
+	fmt.Println()
+	fmt.Printf("Endpoint: http://%s/v1/chat/completions\n", cfg.Proxy.ListenAddress)
+	fmt.Printf("Log file: %s\n", cfg.Logging.LogPath)
 	fmt.Println()
 	fmt.Println("Press Ctrl+C to shutdown")
+	fmt.Println()
 
-	// Wait for interrupt signal or server error
+	// ========================================================================
+	// RUNTIME: Wait for shutdown signal or server error
+	// ========================================================================
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
 
 	select {
 	case err := <-serverErrors:
 		logger.Error("FATAL: Server error: %v", err)
+		fmt.Fprintf(os.Stderr, "FATAL: Server error: %v\n", err)
 		os.Exit(1)
 
 	case sig := <-shutdown:
-		logger.Info("Received signal: %v", sig)
-		logger.Info("Initiating graceful shutdown")
+		fmt.Printf("\nReceived signal: %v\n", sig)
+		logger.ShutdownInitiated(fmt.Sprintf("signal=%v", sig))
+
+		fmt.Println("Initiating graceful shutdown...")
 
 		// Graceful shutdown with timeout
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -138,9 +211,11 @@ func main() {
 
 		if err := server.Shutdown(ctx); err != nil {
 			logger.Error("Error during shutdown: %v", err)
+			fmt.Fprintf(os.Stderr, "Error during shutdown: %v\n", err)
 			os.Exit(1)
 		}
 
-		logger.Info("✓ TSLP shutdown complete")
+		logger.ShutdownComplete()
+		fmt.Println("✓ Shutdown complete")
 	}
 }

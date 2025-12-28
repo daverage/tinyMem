@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/andrzejmarczewski/tslp/internal/entity"
 	"github.com/andrzejmarczewski/tslp/internal/ledger"
 )
 
@@ -17,7 +16,7 @@ type EntityState struct {
 	Filepath     string
 	Symbol       string
 	ArtifactHash string
-	Confidence   entity.Confidence
+	Confidence   string // "CONFIRMED", "INFERRED", or "UNRESOLVED"
 	State        ledger.State
 	LastUpdated  time.Time
 	Metadata     map[string]interface{}
@@ -67,7 +66,7 @@ func (m *Manager) Get(entityKey string) (*EntityState, error) {
 
 // Set creates or updates an entity in the state map
 // Per spec: explicit state transitions only
-func (m *Manager) Set(entityKey, filepath, symbol, artifactHash string, confidence entity.Confidence, state ledger.State, metadata map[string]interface{}) error {
+func (m *Manager) Set(entityKey, filepath, symbol, artifactHash string, confidence string, state ledger.State, metadata map[string]interface{}) error {
 	now := time.Now().Unix()
 
 	var metadataJSON []byte
@@ -143,6 +142,16 @@ func (m *Manager) GetAuthoritative() ([]*EntityState, error) {
 	return entities, nil
 }
 
+// Count returns the number of entries in the state map
+func (m *Manager) Count() (int, error) {
+	var count int
+	err := m.db.QueryRow("SELECT COUNT(*) FROM state_map").Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count state map entries: %w", err)
+	}
+	return count, nil
+}
+
 // GetByFilepath retrieves all entities for a given filepath
 func (m *Manager) GetByFilepath(filepath string) ([]*EntityState, error) {
 	rows, err := m.db.Query(`
@@ -203,5 +212,48 @@ func (es *EntityState) IsAuthoritative() bool {
 
 // IsConfirmed checks if an entity has CONFIRMED confidence
 func (es *EntityState) IsConfirmed() bool {
-	return es.Confidence == entity.ConfidenceConfirmed
+	return string(es.Confidence) == "CONFIRMED"
+}
+
+// GetAllEntities retrieves all entities from the state map
+// Used by entity resolution correlation fallback
+func (m *Manager) GetAllEntities() ([]EntityState, error) {
+	rows, err := m.db.Query(`
+		SELECT entity_key, filepath, symbol, artifact_hash, confidence, state, last_updated, metadata
+		FROM state_map
+		ORDER BY entity_key
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query all entities: %w", err)
+	}
+	defer rows.Close()
+
+	var entities []EntityState
+	for rows.Next() {
+		var es EntityState
+		var lastUpdated int64
+		var metadataJSON []byte
+
+		err := rows.Scan(&es.EntityKey, &es.Filepath, &es.Symbol, &es.ArtifactHash,
+			&es.Confidence, &es.State, &lastUpdated, &metadataJSON)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan entity: %w", err)
+		}
+
+		es.LastUpdated = time.Unix(lastUpdated, 0)
+
+		if len(metadataJSON) > 0 {
+			if err := json.Unmarshal(metadataJSON, &es.Metadata); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+			}
+		}
+
+		entities = append(entities, es)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating entities: %w", err)
+	}
+
+	return entities, nil
 }

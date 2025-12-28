@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/andrzejmarczewski/tslp/internal/entity"
+	"github.com/andrzejmarczewski/tslp/internal/fs"
+	"github.com/andrzejmarczewski/tslp/internal/hydration"
 	"github.com/andrzejmarczewski/tslp/internal/ledger"
 	"github.com/andrzejmarczewski/tslp/internal/state"
 	"github.com/andrzejmarczewski/tslp/internal/vault"
@@ -13,31 +15,102 @@ import (
 
 // Runtime manages the core artifact lifecycle and promotion rules
 // Per spec sections 5, 6, 7: state machine, promotion gates, structural parity
+// Per spec section 15: External Truth Verification (ETV)
 type Runtime struct {
-	db      *sql.DB
-	vault   *vault.Vault
-	ledger  *ledger.Ledger
-	state   *state.Manager
-	resolver *entity.Resolver
+	db                 *sql.DB
+	vault              *vault.Vault
+	ledger             *ledger.Ledger
+	state              *state.Manager
+	resolver           *entity.Resolver
+	hydrationTracker   *hydration.Tracker
+	consistencyChecker *state.ConsistencyChecker
 }
 
 // New creates a new Runtime instance
 func New(db *sql.DB) *Runtime {
+	stateManager := state.NewManager(db)
+	resolver := entity.NewResolver(db)
+	vaultInstance := vault.New(db)
+
+	// Wire up state map adapter for correlation fallback
+	// This must be done after both are created to avoid circular dependency
+	stateAdapter := state.NewStateMapAdapter(stateManager)
+	resolver.SetStateMap(stateAdapter)
+
+	// Create hydration tracker for Gate B (User Verification)
+	tracker := hydration.NewTracker(db)
+
+	// Create ETV consistency checker for detecting disk divergence
+	// Per spec section 15: External Truth Verification
+	fsReader := fs.NewReader()
+	consistencyChecker := state.NewConsistencyChecker(fsReader, vaultInstance)
+
 	return &Runtime{
-		db:       db,
-		vault:    vault.New(db),
-		ledger:   ledger.New(db),
-		state:    state.NewManager(db),
-		resolver: entity.NewResolver(db),
+		db:                 db,
+		vault:              vaultInstance,
+		ledger:             ledger.New(db),
+		state:              stateManager,
+		resolver:           resolver,
+		hydrationTracker:   tracker,
+		consistencyChecker: consistencyChecker,
 	}
+}
+
+// ResetAll truncates all persisted state (vault, ledger, state map).
+// Debug-only operation invoked by diagnostics.
+func (r *Runtime) ResetAll() error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin reset transaction: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	_, err = tx.Exec("PRAGMA foreign_keys = OFF")
+	if err != nil {
+		return fmt.Errorf("failed to disable foreign keys: %w", err)
+	}
+
+	tables := []string{
+		"ledger_state_transitions",
+		"ledger_audit_results",
+		"ledger_episodes",
+		"state_map",
+		"entity_resolution_cache",
+		"tombstones",
+		"vault_artifacts",
+	}
+
+	for _, table := range tables {
+		if _, err = tx.Exec(fmt.Sprintf("DELETE FROM %s", table)); err != nil {
+			return fmt.Errorf("failed to truncate %s: %w", table, err)
+		}
+	}
+
+	_, err = tx.Exec("PRAGMA foreign_keys = ON")
+	if err != nil {
+		return fmt.Errorf("failed to re-enable foreign keys: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit reset transaction: %w", err)
+	}
+
+	return nil
 }
 
 // PromotionResult indicates the outcome of attempting to promote an artifact
 type PromotionResult struct {
-	Promoted       bool
-	State          ledger.State
-	Reason         string
+	Promoted                 bool
+	State                    ledger.State
+	Reason                   string
 	RequiresUserConfirmation bool
+	ArtifactHash             string
+	EntityKey                *string
+	Confidence               string
 }
 
 // ProcessArtifact handles the complete lifecycle of a new artifact
@@ -50,7 +123,8 @@ func (r *Runtime) ProcessArtifact(content string, contentType vault.ContentType,
 	}
 
 	// Step 2: Resolve entity
-	resolution, err := r.resolver.Resolve(artifactHash, content)
+	// Note: filepath is nil here - will be enhanced in later steps
+	resolution, err := r.resolver.Resolve(artifactHash, content, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve entity: %w", err)
 	}
@@ -68,6 +142,11 @@ func (r *Runtime) ProcessArtifact(content string, contentType vault.ContentType,
 		}
 	}
 
+	// Populate result with artifact and entity information
+	result.ArtifactHash = artifactHash
+	result.EntityKey = resolution.EntityKey
+	result.Confidence = string(resolution.Confidence)
+
 	return result, nil
 }
 
@@ -77,9 +156,9 @@ func (r *Runtime) evaluatePromotion(artifactHash string, resolution *entity.Reso
 	// If entity is UNRESOLVED, artifact stays PROPOSED
 	if !resolution.IsResolved() {
 		return &PromotionResult{
-			Promoted: false,
-			State:    ledger.StateProposed,
-			Reason:   "entity resolution failed - no provable entity mapping",
+			Promoted:                 false,
+			State:                    ledger.StateProposed,
+			Reason:                   "entity resolution failed - no provable entity mapping",
 			RequiresUserConfirmation: false,
 		}, nil
 	}
@@ -88,15 +167,15 @@ func (r *Runtime) evaluatePromotion(artifactHash string, resolution *entity.Reso
 	// Per spec: Entity resolution must be CONFIRMED, full definition present
 	if !resolution.IsConfirmed() {
 		return &PromotionResult{
-			Promoted: false,
-			State:    ledger.StateProposed,
-			Reason:   "entity confidence is not CONFIRMED - only INFERRED or UNRESOLVED",
+			Promoted:                 false,
+			State:                    ledger.StateProposed,
+			Reason:                   "entity confidence is not CONFIRMED - only INFERRED or UNRESOLVED",
 			RequiresUserConfirmation: false,
 		}, nil
 	}
 
-	// TODO: Check "full definition present" - requires AST analysis
-	// TODO: Check structural parity (AST node count, token count)
+	// Note: "Full definition present" validation deferred to future enhancement
+	// AST parsing confirms structure; completeness checking requires additional analysis
 
 	// Gate B: Authority Grant
 	// Per spec section 6: User Write-Head Rule takes precedence
@@ -108,9 +187,9 @@ func (r *Runtime) evaluatePromotion(artifactHash string, resolution *entity.Reso
 		}
 
 		return &PromotionResult{
-			Promoted: true,
-			State:    ledger.StateAuthoritative,
-			Reason:   "user write-head rule - user-pasted code wins",
+			Promoted:                 true,
+			State:                    ledger.StateAuthoritative,
+			Reason:                   "user write-head rule - user-pasted code wins",
 			RequiresUserConfirmation: false,
 		}, nil
 	}
@@ -121,35 +200,99 @@ func (r *Runtime) evaluatePromotion(artifactHash string, resolution *entity.Reso
 		return nil, fmt.Errorf("failed to get current state: %w", err)
 	}
 
-	// If no current state, check structural parity against empty
+	// ETV Gate: External Truth Verification (Spec Section 15)
+	// Per spec: Check disk consistency BEFORE allowing any promotion
+	// If entity is STALE (disk diverges from State Map), block LLM-originated promotions
+	if currentState != nil && r.consistencyChecker != nil {
+		isStale, fileExists, checkErr := r.consistencyChecker.IsEntityStale(currentState)
+
+		if checkErr != nil {
+			// File read error - treat conservatively
+			// Cannot verify consistency, so block promotion
+			return &PromotionResult{
+				Promoted:                 false,
+				State:                    ledger.StateProposed,
+				Reason:                   fmt.Sprintf("ETV check failed - cannot verify disk consistency: %v", checkErr),
+				RequiresUserConfirmation: true,
+			}, nil
+		}
+
+		if isStale {
+			// CRITICAL SAFETY BLOCK
+			// Per spec section 15.4: STALE entities MUST NOT be used as promotion base
+			// Per spec section 15.5: Block LLM-originated promotions
+			// Per spec section 15.6: Require explicit user action to resolve
+			if fileExists {
+				return &PromotionResult{
+					Promoted:                 false,
+					State:                    ledger.StateProposed,
+					Reason:                   fmt.Sprintf("STALE - disk content differs from State Map for %s - user confirmation required", currentState.Filepath),
+					RequiresUserConfirmation: true,
+				}, nil
+			} else {
+				return &PromotionResult{
+					Promoted:                 false,
+					State:                    ledger.StateProposed,
+					Reason:                   fmt.Sprintf("STALE - file no longer exists on disk: %s - user confirmation required", currentState.Filepath),
+					RequiresUserConfirmation: true,
+				}, nil
+			}
+		}
+	}
+
+	// If no current state, allow promotion for new entities
+	// Structural parity is N/A for new entities (no prior state to compare against)
 	if currentState == nil {
-		// TODO: Implement structural parity checks
-		// For now, allow promotion for new entities with CONFIRMED resolution
 		return &PromotionResult{
-			Promoted: true,
-			State:    ledger.StateAuthoritative,
-			Reason:   "new entity with CONFIRMED resolution",
+			Promoted:                 true,
+			State:                    ledger.StateAuthoritative,
+			Reason:                   "new entity with CONFIRMED resolution",
 			RequiresUserConfirmation: false,
 		}, nil
 	}
 
-	// Check if mutation base is acknowledged
-	// Per spec: "User Verification (Revised, Structural)"
-	// The entity was hydrated in the previous turn and the user initiates
+	// Gate B: User Verification (Revised, Structural)
+	// Per spec: The entity was hydrated in the previous turn and the user initiates
 	// a subsequent mutation without providing replacement content
-	// TODO: Implement hydration tracking to detect this scenario
+	if r.hydrationTracker != nil && episodeID != "" {
+		wasHydrated, err := r.hydrationTracker.WasHydratedInPreviousTurn(episodeID, *resolution.EntityKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check hydration tracking: %w", err)
+		}
 
-	// For now, require structural parity
-	parityOK, err := r.checkStructuralParity(currentState, resolution)
-	if err != nil {
-		return nil, err
+		if wasHydrated {
+			// User saw the entity and initiated a mutation
+			// This satisfies Gate B - allow promotion
+			if err := r.supersedePriorArtifacts(*resolution.EntityKey, episodeID); err != nil {
+				return nil, err
+			}
+
+			return &PromotionResult{
+				Promoted:                 true,
+				State:                    ledger.StateAuthoritative,
+				Reason:                   "user verification - entity was hydrated and user initiated mutation",
+				RequiresUserConfirmation: false,
+			}, nil
+		}
 	}
 
-	if !parityOK {
+	// Check structural parity
+	parityResult, err := state.CheckStructuralParity(currentState, resolution, r.vault)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check structural parity: %w", err)
+	}
+
+	if !parityResult.OK {
+		// Parity check failed - artifact remains PROPOSED
+		reason := fmt.Sprintf("structural parity check failed: %s", parityResult.Reason)
+		if len(parityResult.MissingSymbols) > 0 {
+			reason = fmt.Sprintf("%s (missing symbols: %v)", reason, parityResult.MissingSymbols)
+		}
+
 		return &PromotionResult{
-			Promoted: false,
-			State:    ledger.StateProposed,
-			Reason:   "structural parity check failed - potential symbol loss or collapse",
+			Promoted:                 false,
+			State:                    ledger.StateProposed,
+			Reason:                   reason,
 			RequiresUserConfirmation: true,
 		}, nil
 	}
@@ -160,39 +303,11 @@ func (r *Runtime) evaluatePromotion(artifactHash string, resolution *entity.Reso
 	}
 
 	return &PromotionResult{
-		Promoted: true,
-		State:    ledger.StateAuthoritative,
-		Reason:   "structural parity satisfied",
+		Promoted:                 true,
+		State:                    ledger.StateAuthoritative,
+		Reason:                   "structural parity satisfied",
 		RequiresUserConfirmation: false,
 	}, nil
-}
-
-// checkStructuralParity verifies no loss of top-level symbols
-// Per spec section 7: mechanical, not semantic
-func (r *Runtime) checkStructuralParity(currentState *state.EntityState, newResolution *entity.Resolution) (bool, error) {
-	// TODO: Implement actual structural parity checks:
-	// - No loss of existing top-level symbols
-	// - AST node count may not collapse beyond threshold
-	// - Token count collapse triggers downgrade
-
-	// For now, assume parity is OK if we have symbol information
-	if len(newResolution.Symbols) == 0 {
-		return false, nil
-	}
-
-	// Retrieve current artifact to compare
-	currentArtifact, err := r.vault.Get(currentState.ArtifactHash)
-	if err != nil {
-		return false, fmt.Errorf("failed to get current artifact: %w", err)
-	}
-	if currentArtifact == nil {
-		return false, fmt.Errorf("current artifact not found in vault")
-	}
-
-	// TODO: Compare symbol sets, AST node counts, token counts
-	// This requires full AST parsing implementation
-
-	return true, nil
 }
 
 // supersedePriorArtifacts marks previous AUTHORITATIVE artifacts as SUPERSEDED
@@ -250,7 +365,7 @@ func (r *Runtime) applyStateChange(entityKey, artifactHash string, resolution *e
 	metadata["resolution_method"] = resolution.Method
 
 	// Update state map
-	if err := r.state.Set(entityKey, filepath, symbol, artifactHash, resolution.Confidence, newState, metadata); err != nil {
+	if err := r.state.Set(entityKey, filepath, symbol, artifactHash, string(resolution.Confidence), newState, metadata); err != nil {
 		return fmt.Errorf("failed to update state map: %w", err)
 	}
 
@@ -322,4 +437,14 @@ func (r *Runtime) GetState() *state.Manager {
 // GetResolver returns the entity resolver instance
 func (r *Runtime) GetResolver() *entity.Resolver {
 	return r.resolver
+}
+
+// GetHydrationTracker returns the hydration tracker instance
+func (r *Runtime) GetHydrationTracker() *hydration.Tracker {
+	return r.hydrationTracker
+}
+
+// GetConsistencyChecker returns the ETV consistency checker instance
+func (r *Runtime) GetConsistencyChecker() *state.ConsistencyChecker {
+	return r.consistencyChecker
 }

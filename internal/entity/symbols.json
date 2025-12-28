@@ -1,0 +1,154 @@
+{
+  "comment": "Symbol extraction patterns for entity resolution fallback",
+  "version": "1.0",
+  "languages": {
+    "go": {
+      "patterns": [
+        {
+          "name": "function",
+          "regex": "func\\s+(\\([^)]+\\)\\s+)?(\\w+)\\s*\\(",
+          "capture_group": 2,
+          "confidence": "CONFIRMED"
+        },
+        {
+          "name": "type",
+          "regex": "type\\s+(\\w+)\\s+(struct|interface)",
+          "capture_group": 1,
+          "confidence": "CONFIRMED"
+        },
+        {
+          "name": "const",
+          "regex": "const\\s+(\\w+)\\s*=",
+          "capture_group": 1,
+          "confidence": "CONFIRMED"
+        },
+        {
+          "name": "var",
+          "regex": "var\\s+(\\w+)\\s+",
+          "capture_group": 1,
+          "confidence": "INFERRED"
+        }
+      ]
+    },
+    "python": {
+      "patterns": [
+        {
+          "name": "function",
+          "regex": "def\\s+(\\w+)\\s*\\(",
+          "capture_group": 1,
+          "confidence": "CONFIRMED"
+        },
+        {
+          "name": "class",
+          "regex": "class\\s+(\\w+)\\s*[:(]",
+          "capture_group": 1,
+          "confidence": "CONFIRMED"
+        }
+      ]
+    },
+    "javascript": {
+      "patterns": [
+        {
+          "name": "function",
+          "regex": "function\\s+(\\w+)\\s*\\(",
+          "capture_group": 1,
+          "confidence": "CONFIRMED"
+        },
+        {
+          "name": "const_function",
+          "regex": "const\\s+(\\w+)\\s*=\\s*\\(",
+          "capture_group": 1,
+          "confidence": "CONFIRMED"
+        },
+        {
+          "name": "class",
+          "regex": "class\\s+(\\w+)\\s*[{]",
+          "capture_group": 1,
+          "confidence": "CONFIRMED"
+        }
+      ]
+    },
+    "typescript": {
+      "patterns": [
+        {
+          "name": "function",
+          "regex": "function\\s+(\\w+)\\s*[<(]",
+          "capture_group": 1,
+          "confidence": "CONFIRMED"
+        },
+        {
+          "name": "interface",
+          "regex": "interface\\s+(\\w+)\\s*[{<]",
+          "capture_group": 1,
+          "confidence": "CONFIRMED"
+        },
+        {
+          "name": "type",
+          "regex": "type\\s+(\\w+)\\s*=",
+          "capture_group": 1,
+          "confidence": "CONFIRMED"
+        },
+        {
+          "name": "class",
+          "regex": "class\\s+(\\w+)\\s*[{<]",
+          "capture_group": 1,
+          "confidence": "CONFIRMED"
+        }
+      ]
+    },
+    "rust": {
+      "patterns": [
+        {
+          "name": "function",
+          "regex": "fn\\s+(\\w+)\\s*[<(]",
+          "capture_group": 1,
+          "confidence": "CONFIRMED"
+        },
+        {
+          "name": "struct",
+          "regex": "struct\\s+(\\w+)\\s*[{<]",
+          "capture_group": 1,
+          "confidence": "CONFIRMED"
+        },
+        {
+          "name": "enum",
+          "regex": "enum\\s+(\\w+)\\s*[{<]",
+          "capture_group": 1,
+          "confidence": "CONFIRMED"
+        },
+        {
+          "name": "trait",
+          "regex": "trait\\s+(\\w+)\\s*[{<]",
+          "capture_group": 1,
+          "confidence": "CONFIRMED"
+        }
+      ]
+    },
+    "html": {
+      "patterns": [
+        {
+          "name": "title",
+          "regex": "(?i)<title>\\s*([^<]+?)\\s*</title>",
+          "capture_group": 1,
+          "confidence": "CONFIRMED"
+        }
+      ]
+    },
+    "json": {
+      "patterns": [
+        {
+          "name": "name_field",
+          "regex": "\"name\"\\s*:\\s*\"([^\"]+)\"",
+          "capture_group": 1,
+          "confidence": "CONFIRMED"
+        },
+        {
+          "name": "id_field",
+          "regex": "\"id\"\\s*:\\s*\"?([^\",\\s]+)\"?",
+          "capture_group": 1,
+          "confidence": "CONFIRMED"
+        }
+      ]
+    }
+  }
+}

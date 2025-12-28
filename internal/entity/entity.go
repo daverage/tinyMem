@@ -12,16 +12,16 @@ import (
 type Confidence string
 
 const (
-	ConfidenceConfirmed   Confidence = "CONFIRMED"   // AST or exact structural match
-	ConfidenceInferred    Confidence = "INFERRED"    // Regex or similarity match
-	ConfidenceUnresolved  Confidence = "UNRESOLVED"  // No provable mapping
+	ConfidenceConfirmed  Confidence = "CONFIRMED"  // AST or exact structural match
+	ConfidenceInferred   Confidence = "INFERRED"   // Regex or similarity match
+	ConfidenceUnresolved Confidence = "UNRESOLVED" // No provable mapping
 )
 
 // ResolutionMethod indicates how the entity was resolved
 type ResolutionMethod string
 
 const (
-	MethodAST         ResolutionMethod = "ast"         // Tree-sitter parsing
+	MethodAST         ResolutionMethod = "ast"         // Tree-sitter parsing (NOT YET IMPLEMENTED)
 	MethodRegex       ResolutionMethod = "regex"       // Deterministic regex from symbols.json
 	MethodCorrelation ResolutionMethod = "correlation" // State map correlation
 	MethodUnresolved  ResolutionMethod = "unresolved"  // Failed to resolve
@@ -30,14 +30,14 @@ const (
 // Resolution represents the result of entity resolution
 // Per spec section 4.1: ordered pipeline with strict confidence levels
 type Resolution struct {
-	ArtifactHash     string
-	EntityKey        *string           // nil if UNRESOLVED
-	Confidence       Confidence
-	Method           ResolutionMethod
-	Filepath         *string
-	Symbols          []string
-	ASTNodeCount     *int
-	CreatedAt        time.Time
+	ArtifactHash string
+	EntityKey    *string          // nil if UNRESOLVED
+	Confidence   Confidence
+	Method       ResolutionMethod
+	Filepath     *string
+	Symbols      []string
+	ASTNodeCount *int
+	CreatedAt    time.Time
 }
 
 // Entity represents a filepath::symbol mapping
@@ -68,18 +68,25 @@ func ParseEntityKey(key string) (filepath, symbol string, err error) {
 // Resolver handles entity resolution
 // Per spec section 4: gatekeeper for state advancement
 type Resolver struct {
-	db *sql.DB
+	db       *sql.DB
+	stateMap StateMapProvider
 }
 
 // NewResolver creates a new entity resolver
 func NewResolver(db *sql.DB) *Resolver {
-	return &Resolver{db: db}
+	return &Resolver{db: db, stateMap: nil}
+}
+
+// SetStateMap sets the state map provider for correlation fallback
+// Called after state manager is initialized to avoid circular dependency
+func (r *Resolver) SetStateMap(stateMap StateMapProvider) {
+	r.stateMap = stateMap
 }
 
 // Resolve performs entity resolution on an artifact
-// This is a placeholder - actual implementation requires Tree-sitter integration
 // Per spec section 4.1: AST → Regex → Correlation → Failure
-func (r *Resolver) Resolve(artifactHash, content string) (*Resolution, error) {
+// Per requirements: No embeddings, no fuzzy search beyond defined similarity rule
+func (r *Resolver) Resolve(artifactHash, content string, filepath *string) (*Resolution, error) {
 	// Check cache first
 	cached, err := r.GetCached(artifactHash)
 	if err != nil {
@@ -89,14 +96,50 @@ func (r *Resolver) Resolve(artifactHash, content string) (*Resolution, error) {
 		return cached, nil
 	}
 
-	// TODO: Implement actual resolution pipeline
-	// For now, return UNRESOLVED as a safe default
-	// Real implementation must:
-	// 1. Try AST extraction via Tree-sitter
-	// 2. Fall back to regex patterns from symbols.json
-	// 3. Fall back to state map correlation
-	// 4. Mark as UNRESOLVED if all fail
+	// Resolution Pipeline (ordered per spec):
+	// 1. AST Extraction (Primary) - Tree-sitter parsing
+	//    Per spec: Returns CONFIRMED confidence when successful
+	language := DetectLanguage(content, filepath)
+	if language != "unknown" {
+		resolution, err := r.resolveViaAST(artifactHash, content, language, filepath)
+		if err == nil && resolution.IsResolved() {
+			if err := r.Cache(resolution); err != nil {
+				return nil, err
+			}
+			return resolution, nil
+		}
+		// If AST fails, fall through to regex (don't return error)
+	}
 
+	// 2. Language Regex Map (Fallback)
+	//    Deterministic patterns from symbols.json
+	//    Unique, exact match → CONFIRMED
+	//    Partial match → INFERRED
+	if language != "unknown" {
+		resolution := r.resolveViaRegexPatterns(artifactHash, content, language)
+		if resolution.IsResolved() {
+			if err := r.Cache(resolution); err != nil {
+				return nil, err
+			}
+			return resolution, nil
+		}
+	}
+
+	// 3. State Map Correlation (Fallback)
+	//    High overlap with single existing entity → INFERRED
+	//    Per spec: Can only align with existing entities, never introduces new ones
+	if r.stateMap != nil {
+		resolution := r.resolveViaCorrelation(artifactHash, content, r.stateMap)
+		if resolution.IsResolved() {
+			if err := r.Cache(resolution); err != nil {
+				return nil, err
+			}
+			return resolution, nil
+		}
+	}
+
+	// 4. Failure
+	//    No match → UNRESOLVED
 	resolution := &Resolution{
 		ArtifactHash: artifactHash,
 		EntityKey:    nil,
@@ -114,6 +157,64 @@ func (r *Resolver) Resolve(artifactHash, content string) (*Resolution, error) {
 	}
 
 	return resolution, nil
+}
+
+// resolveViaAST attempts to resolve entities using Tree-sitter AST parsing
+// Per spec section 4.1: Primary resolution method, returns CONFIRMED confidence
+func (r *Resolver) resolveViaAST(artifactHash, content, language string, filepath *string) (*Resolution, error) {
+	// Parse AST using Tree-sitter
+	astResult, err := ParseAST(content, language)
+	if err != nil {
+		// AST parsing failed - this is a hard failure, do not guess
+		return nil, err
+	}
+
+	// If no symbols found, this is unresolved
+	if len(astResult.Symbols) == 0 {
+		return &Resolution{
+			ArtifactHash: artifactHash,
+			EntityKey:    nil,
+			Confidence:   ConfidenceUnresolved,
+			Method:       MethodAST,
+			Filepath:     filepath,
+			Symbols:      []string{},
+			ASTNodeCount: &astResult.ASTNodeCount,
+			CreatedAt:    time.Now(),
+		}, nil
+	}
+
+	// Extract symbol names
+	symbolNames := make([]string, len(astResult.Symbols))
+	for i, sym := range astResult.Symbols {
+		symbolNames[i] = sym.Name
+	}
+
+	// For single-symbol artifacts, we can create an entity key
+	// For multi-symbol artifacts, we need a filepath to disambiguate
+	var entityKey *string
+	if filepath != nil && len(astResult.Symbols) > 0 {
+		// Use the first top-level symbol as the primary entity
+		// This follows the convention that a file typically defines one main entity
+		key := MakeEntityKey(*filepath, astResult.Symbols[0].Name)
+		entityKey = &key
+	} else if len(astResult.Symbols) == 1 {
+		// Single symbol without filepath - create a synthetic key
+		// Note: This is less ideal but allows progression
+		key := MakeEntityKey("unknown", astResult.Symbols[0].Name)
+		entityKey = &key
+	}
+
+	// AST parsing succeeded - return CONFIRMED confidence
+	return &Resolution{
+		ArtifactHash: artifactHash,
+		EntityKey:    entityKey,
+		Confidence:   ConfidenceConfirmed,
+		Method:       MethodAST,
+		Filepath:     filepath,
+		Symbols:      symbolNames,
+		ASTNodeCount: &astResult.ASTNodeCount,
+		CreatedAt:    time.Now(),
+	}, nil
 }
 
 // Cache stores a resolution result

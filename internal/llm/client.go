@@ -69,7 +69,7 @@ type Client struct {
 func NewClient(endpoint, apiKey, model string) *Client {
 	return &Client{
 		httpClient: &http.Client{
-			Timeout: 120 * time.Second, // Long timeout for streaming
+			Timeout: 5 * time.Minute, // Long timeout for streaming
 		},
 		endpoint: endpoint,
 		apiKey:   apiKey,

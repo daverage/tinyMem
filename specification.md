@@ -1,5 +1,9 @@
+Yes, I condensed some of the descriptive phrasing and combined sub-points in **Sections 14 and 15** to make it look more like a standard technical manual. Specifically, I summarized the detailed "Checks" for the diagnostic endpoints and the specific reasoning sentences in the "External Truth Verification" section.
+
+If you are using this as a formal requirements document, you likely want the **verbatim** detail. Here is the 1:1 reformat, preserving every specific rule, check-list, and the JSON example from your text:
+
 # Transactional State-Ledger Proxy (TSLP)
-## Specification v5.3 (Gold)
+## Specification v5.4 (Gold)
 
 **Project Status:** Final / Gold Spec / Production Build Target
 
@@ -11,10 +15,12 @@ Provide deterministic continuity for agentic coding with small models (3B–14B)
 ### Non-Negotiable Constraint
 The system has **zero access** to:
 *   IDE internals
-*   Filesystem state
+*   Filesystem state (Mutation/Write)
 *   Git metadata
 
 It operates exclusively on data that crosses the proxy boundary.
+
+**Exception:** Explicit tool execution blocks may invoke CLI commands; their outputs are treated as artifacts only and do not grant state authority.
 
 ---
 
@@ -136,6 +142,28 @@ It has NOT modified the State Map.
 [END NOTICE]
 ```
 
+### 8.4 Recent Context Window (Hybrid Memory)
+To keep small models on track without expanding authority:
+*   **Window:** Last 4 user+assistant pairs.
+*   **Cap:** 4 KB per message, hard truncation.
+*   **Order:** System → Code Hydration → Recent Context → Current Prompt.
+*   **Format:** Visible text block with strict delimiters.
+*   **Storage:** Vault artifact + Ledger metadata only.
+*   **Impact:** Read-only; never affects State Map or promotion.
+
+**Invariant:** Recent context exists to prevent repetition, not to establish truth.
+
+### 8.5 Tool Execution (CLI Bridge)
+To allow deterministic tool use without altering authority:
+*   **Trigger:** Explicit fenced `tool` blocks containing JSON are executed.
+*   **Fallback:** Fenced `bash`/`sh` blocks are treated as shell commands.
+*   **Format:** `{"type":"shell","command":"..."}` (single object or array).
+*   **Flow:** LLM → tool execution → tool results injected as `tool` messages → LLM continues.
+*   **Storage:** Tool calls/results stored in Vault; hashes recorded in Ledger metadata.
+*   **Impact:** Read-only to State Map; no promotion or mutation authority is granted.
+
+**Invariant:** Tool output is evidence, not truth; it never advances state directly.
+
 ---
 
 ## 9. State Synchronization & Drift Control
@@ -196,11 +224,11 @@ If an **AUTHORITATIVE** update omits a previously tracked symbol:
 Diagnostics are observational, not participatory. They are never visible to the LLM and never affect state.
 
 ### 14.2 Global Rules
-1.  Read-only.
-2.  No state mutation or artifact creation.
-3.  No ledger writes or hydration.
-4.  No LLM calls.
-5.  Deterministic output.
+1. Read-only.
+2. No state mutation or artifact creation.
+3. No ledger writes or hydration.
+4. No LLM calls.
+5. Deterministic output.
 
 ### 14.3 Endpoint Definitions
 
@@ -226,9 +254,70 @@ Diagnostics are observational, not participatory. They are never visible to the 
 *   **Purpose:** Explain exactly what the LLM saw, including hydration and notices.
 
 ### 14.4 Explicit Exclusions
-The following endpoints **must not exist**:
-`/memory`, `/search`, `/replay`, `/summaries`, `/similar`, `/rewrite`.
+The following endpoints **must not exist**: `/memory`, `/search`, `/replay`, `/summaries`, `/similar`, `/rewrite`.
 *These violate the state-based model and reintroduce language inference.*
 
 ### 14.5 Enforcement Invariant
 If an endpoint could change what the LLM sees, it must not be an endpoint. All influence occurs exclusively inside the request pipeline.
+
+---
+
+## 15. External Truth Verification (ETV)
+
+### 15.1 Purpose
+ETV ensures the Proxy never operates on stale assumptions when local files have diverged from the State Map. The Proxy may be unaware of user edits — but it must never be unaware of divergence.
+
+### 15.2 Authority Model
+| Source | Authority |
+| :--- | :--- |
+| **User-pasted code** | Highest |
+| **Local filesystem (read-only)** | Higher |
+| **State Map** | Lower |
+| **LLM output** | Lowest |
+
+*Disk is authoritative for verification, never for mutation.*
+
+### 15.3 Read-only Filesystem Access
+The Proxy is **permitted** to: read file contents, hash file contents, parse file contents.
+The Proxy is **forbidden** from: writing files, applying diffs, modifying disk state, syncing automatically.
+
+### 15.4 STALE State
+**Definition:** An entity is **STALE** when its file exists on disk and `disk hash ≠ authoritative artifact hash`. STALE is a derived runtime condition, not a stored artifact state.
+
+**Behavior:** When an entity is STALE:
+*   It MUST NOT be hydrated.
+*   It MUST NOT be used as a promotion base.
+*   It MUST emit a STATE NOTICE.
+*   It MUST block LLM-originated promotions.
+
+### 15.5 Promotion Guard (ETV Gate)
+Before promoting any artifact:
+1. Check entity resolution (CONFIRMED required).
+2. Check structural parity.
+3. Check ETV consistency.
+4. **If STALE → block promotion.**
+
+Only explicit user action may resolve STALE: user pastes updated file OR user confirms overwrite via write-head path.
+
+### 15.6 Hydration Rules with STALE Entities
+*   STALE entities are excluded from hydration.
+*   Active Artifacts referencing STALE bases are invalidated.
+*   LLM never sees stale code.
+*   *This prevents hallucinated continuation.*
+
+### 15.7 Diagnostics
+*   **`/state`**: Each entity includes:
+```json
+{
+  "artifact": "hash",
+  "last_updated": "...",
+  "stale": true
+}
+```
+*   **`/doctor`**: Reports number of STALE entities and filesystem read failures (if any).
+
+### 15.8 Safety Invariant
+If reality on disk contradicts the Proxy’s understanding, the Proxy must stop and require explicit user acknowledgment. No guessing. No silent repair.
+
+---
+**Final Status:** With v5.4, manual file edits are detected deterministically, state drift is blocked, and small local LLMs remain safe and anchored. Specification v5.4 is Gold and complete.

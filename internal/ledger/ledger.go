@@ -94,6 +94,73 @@ func (l *Ledger) CreateEpisode(userPromptHash, assistantResponseHash *string, me
 	return episodeID, nil
 }
 
+// CountEpisodes returns the number of episodes in the ledger
+func (l *Ledger) CountEpisodes() (int, error) {
+	var count int
+	err := l.db.QueryRow("SELECT COUNT(*) FROM ledger_episodes").Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count ledger episodes: %w", err)
+	}
+	return count, nil
+}
+
+// UpdateEpisodeMetadata merges metadata into the existing episode metadata.
+func (l *Ledger) UpdateEpisodeMetadata(episodeID string, updates map[string]interface{}) error {
+	if len(updates) == 0 {
+		return nil
+	}
+
+	var metadataJSON []byte
+	err := l.db.QueryRow(`
+		SELECT metadata FROM ledger_episodes WHERE episode_id = ?
+	`, episodeID).Scan(&metadataJSON)
+	if err != nil {
+		return fmt.Errorf("failed to read episode metadata: %w", err)
+	}
+
+	metadata := make(map[string]interface{})
+	if len(metadataJSON) > 0 {
+		if err := json.Unmarshal(metadataJSON, &metadata); err != nil {
+			return fmt.Errorf("failed to unmarshal episode metadata: %w", err)
+		}
+	}
+
+	for key, value := range updates {
+		metadata[key] = value
+	}
+
+	mergedJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal episode metadata: %w", err)
+	}
+
+	_, err = l.db.Exec(`
+		UPDATE ledger_episodes
+		SET metadata = ?
+		WHERE episode_id = ?
+	`, string(mergedJSON), episodeID)
+	if err != nil {
+		return fmt.Errorf("failed to update episode metadata: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateEpisodeAssistantResponse stores the assistant response hash for the episode
+func (l *Ledger) UpdateEpisodeAssistantResponse(episodeID, assistantResponseHash string) error {
+	_, err := l.db.Exec(`
+		UPDATE ledger_episodes
+		SET assistant_response_hash = ?
+		WHERE episode_id = ?
+	`, assistantResponseHash, episodeID)
+
+	if err != nil {
+		return fmt.Errorf("failed to update episode response hash: %w", err)
+	}
+
+	return nil
+}
+
 // RecordStateTransition logs a state change for an entity
 // Per spec: explicit state transitions only
 func (l *Ledger) RecordStateTransition(episodeID, entityKey string, fromState *State, toState State, artifactHash, reason string) error {
@@ -252,4 +319,112 @@ func (l *Ledger) GetAuditResults(episodeID string) ([]*AuditResult, error) {
 	}
 
 	return results, nil
+}
+
+// GetRecentEpisodes retrieves the N most recent episodes
+// Per spec Step 7: diagnostic endpoint, read-only, no code content
+func (l *Ledger) GetRecentEpisodes(limit int) ([]*Episode, error) {
+	if limit <= 0 {
+		limit = 10 // Default limit
+	}
+
+	rows, err := l.db.Query(`
+		SELECT episode_id, timestamp, user_prompt_hash, assistant_response_hash, metadata
+		FROM ledger_episodes
+		ORDER BY timestamp DESC
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query recent episodes: %w", err)
+	}
+	defer rows.Close()
+
+	var episodes []*Episode
+	for rows.Next() {
+		var e Episode
+		var timestamp int64
+		var userPromptHash, assistantResponseHash sql.NullString
+		var metadataJSON []byte
+
+		err := rows.Scan(&e.EpisodeID, &timestamp, &userPromptHash, &assistantResponseHash, &metadataJSON)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan episode: %w", err)
+		}
+
+		e.Timestamp = time.Unix(timestamp, 0)
+		if userPromptHash.Valid {
+			e.UserPromptHash = &userPromptHash.String
+		}
+		if assistantResponseHash.Valid {
+			e.AssistantResponseHash = &assistantResponseHash.String
+		}
+
+		if len(metadataJSON) > 0 {
+			if err := json.Unmarshal(metadataJSON, &e.Metadata); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+			}
+		}
+
+		episodes = append(episodes, &e)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating episodes: %w", err)
+	}
+
+	return episodes, nil
+}
+
+// GetRecentEpisodesBefore retrieves the N most recent episodes before a timestamp.
+func (l *Ledger) GetRecentEpisodesBefore(timestamp int64, limit int) ([]*Episode, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+
+	rows, err := l.db.Query(`
+		SELECT episode_id, timestamp, user_prompt_hash, assistant_response_hash, metadata
+		FROM ledger_episodes
+		WHERE timestamp < ?
+		ORDER BY timestamp DESC
+		LIMIT ?
+	`, timestamp, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query recent episodes: %w", err)
+	}
+	defer rows.Close()
+
+	var episodes []*Episode
+	for rows.Next() {
+		var e Episode
+		var ts int64
+		var userPromptHash, assistantResponseHash sql.NullString
+		var metadataJSON []byte
+
+		err := rows.Scan(&e.EpisodeID, &ts, &userPromptHash, &assistantResponseHash, &metadataJSON)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan episode: %w", err)
+		}
+
+		e.Timestamp = time.Unix(ts, 0)
+		if userPromptHash.Valid {
+			e.UserPromptHash = &userPromptHash.String
+		}
+		if assistantResponseHash.Valid {
+			e.AssistantResponseHash = &assistantResponseHash.String
+		}
+
+		if len(metadataJSON) > 0 {
+			if err := json.Unmarshal(metadataJSON, &e.Metadata); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+			}
+		}
+
+		episodes = append(episodes, &e)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating episodes: %w", err)
+	}
+
+	return episodes, nil
 }

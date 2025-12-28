@@ -1,0 +1,53 @@
+# TSLP v5.3 (Gold) Configuration
+# Per Specification: minimal and boring, no tuning knobs, no feature flags
+# All fields are REQUIRED unless explicitly noted
+
+[database]
+# Path to SQLite database file
+# The database will be created if it doesn't exist
+database_path = "./runtime/tslp.db"
+
+[logging]
+# Path to log file
+log_path = "./runtime/tslp.log"
+
+# Enable debug logging (true/false)
+debug = true
+
+[llm]
+# LLM provider identifier
+# Examples: "lmstudio", "openai", "anthropic", "ollama"
+llm_provider = "lmstudio"
+
+# Full LLM API endpoint URL
+# Must start with http:// or https://
+# Default: LM Studio local server
+# Examples:
+#   - "http://localhost:1234/v1" (LM Studio - default)
+#   - "https://api.openai.com/v1" (OpenAI)
+#   - "https://api.anthropic.com" (Anthropic)
+#   - "http://localhost:11434/v1" (Ollama)
+llm_endpoint = "http://127.0.0.1:1234/v1"
+
+# API key for the LLM provider
+# Can be empty string for local models that don't require authentication
+# LM Studio does not require an API key
+llm_api_key = ""
+
+# Model identifier
+# For LM Studio: Use the model name as shown in LM Studio UI
+# Examples:
+#   - "local-model" (LM Studio - use whatever model you have loaded)
+#   - "gpt-4" (OpenAI)
+#   - "gpt-3.5-turbo" (OpenAI)
+#   - "claude-3-opus-20240229" (Anthropic)
+#   - "llama3:7b" (Ollama)
+llm_model = "local-model"
+
+[proxy]
+# Address and port for the local proxy server
+# Format: "host:port"
+# The proxy will listen on this address for OpenAI-compatible requests
+# Default: Port 4321
+# Endpoint: http://{listen_address}/v1/chat/completions
+listen_address = "127.0.0.1:4321"

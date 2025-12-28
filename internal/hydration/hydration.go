@@ -10,16 +10,21 @@ import (
 
 // Engine handles JIT (Just-In-Time) hydration of state
 // Per spec section 8: small models cannot dereference pointers, so we materialize truth
+// Per spec section 15: ETV - STALE entities must not be hydrated
 type Engine struct {
-	vault *vault.Vault
-	state *state.Manager
+	vault              *vault.Vault
+	state              *state.Manager
+	tracker            *Tracker
+	consistencyChecker *state.ConsistencyChecker
 }
 
 // New creates a new hydration engine
-func New(v *vault.Vault, s *state.Manager) *Engine {
+func New(v *vault.Vault, s *state.Manager, tracker *Tracker, consistencyChecker *state.ConsistencyChecker) *Engine {
 	return &Engine{
-		vault: v,
-		state: s,
+		vault:              v,
+		state:              s,
+		tracker:            tracker,
+		consistencyChecker: consistencyChecker,
 	}
 }
 
@@ -35,26 +40,51 @@ type HydrationBlock struct {
 
 // Hydrate retrieves all AUTHORITATIVE entities and formats them for injection
 // Per spec section 8.1: scan state map, retrieve artifacts, inject using strict template
-func (h *Engine) Hydrate() (string, error) {
+// Per spec section 15.6: STALE entities are excluded from hydration
+// Returns the hydration content and the list of hydrated entity keys
+func (h *Engine) HydrateWithTracking(episodeID string) (string, []string, error) {
 	// Get all authoritative entities
 	entities, err := h.state.GetAuthoritative()
 	if err != nil {
-		return "", fmt.Errorf("failed to get authoritative entities: %w", err)
+		return "", nil, fmt.Errorf("failed to get authoritative entities: %w", err)
 	}
 
 	if len(entities) == 0 {
-		return "", nil // No hydration needed
+		return "", nil, nil // No hydration needed
 	}
 
-	// Retrieve artifacts and build hydration blocks
+	// ETV: Filter out STALE entities
+	// Per spec section 15.6: STALE entities must NOT be hydrated
+	// Per spec section 15.6: Never feed stale code to the LLM
+	var staleEntities []*state.EntityState
+	var freshEntities []*state.EntityState
+
+	if h.consistencyChecker != nil {
+		for _, entity := range entities {
+			isStale, _, checkErr := h.consistencyChecker.IsEntityStale(entity)
+			if checkErr != nil {
+				// If we can't verify, treat conservatively - exclude from hydration
+				staleEntities = append(staleEntities, entity)
+			} else if isStale {
+				staleEntities = append(staleEntities, entity)
+			} else {
+				freshEntities = append(freshEntities, entity)
+			}
+		}
+	} else {
+		// No consistency checker - hydrate all (backward compatibility)
+		freshEntities = entities
+	}
+
+	// Retrieve artifacts and build hydration blocks for fresh entities only
 	var blocks []HydrationBlock
-	for _, entity := range entities {
+	for _, entity := range freshEntities {
 		artifact, err := h.vault.Get(entity.ArtifactHash)
 		if err != nil {
-			return "", fmt.Errorf("failed to get artifact %s: %w", entity.ArtifactHash, err)
+			return "", nil, fmt.Errorf("failed to get artifact %s: %w", entity.ArtifactHash, err)
 		}
 		if artifact == nil {
-			return "", fmt.Errorf("artifact %s not found in vault", entity.ArtifactHash)
+			return "", nil, fmt.Errorf("artifact %s not found in vault", entity.ArtifactHash)
 		}
 
 		// Extract resolution method from metadata if available
@@ -75,8 +105,42 @@ func (h *Engine) Hydrate() (string, error) {
 		})
 	}
 
-	// Format using strict template
-	return h.formatHydration(blocks), nil
+	// Collect entity keys for tracking (only fresh entities were hydrated)
+	entityKeys := make([]string, len(blocks))
+	for i, block := range blocks {
+		entityKeys[i] = block.EntityKey
+	}
+
+	// Record hydration tracking
+	if h.tracker != nil && episodeID != "" {
+		if err := h.tracker.RecordHydration(episodeID, entityKeys); err != nil {
+			// Log error but don't fail - tracking is non-critical
+			// Would need logger here, for now just continue
+		}
+	}
+
+	// Build final hydration content
+	var sb strings.Builder
+
+	// Emit STATE NOTICE for STALE entities
+	// Per spec section 15.6: Inform LLM about divergence
+	if len(staleEntities) > 0 {
+		sb.WriteString(GenerateStaleNotice(staleEntities))
+		sb.WriteString("\n")
+	}
+
+	// Format fresh entities using strict template
+	if len(blocks) > 0 {
+		sb.WriteString(h.formatHydration(blocks))
+	}
+
+	return sb.String(), entityKeys, nil
+}
+
+// Hydrate is a backward-compatible wrapper that doesn't require episodeID
+func (h *Engine) Hydrate() (string, error) {
+	content, _, err := h.HydrateWithTracking("")
+	return content, err
 }
 
 // formatHydration applies the strict injection template
@@ -115,6 +179,32 @@ It has NOT modified the State Map.
 [END NOTICE]
 
 `
+}
+
+// GenerateStaleNotice creates a STATE NOTICE for STALE entities
+// Per spec section 15.6: Inform LLM about disk divergence
+func GenerateStaleNotice(staleEntities []*state.EntityState) string {
+	var sb strings.Builder
+
+	sb.WriteString("[STATE NOTICE: DISK DIVERGENCE DETECTED]\n")
+	sb.WriteString("The following entities in the State Map have diverged from disk:\n\n")
+
+	for _, entity := range staleEntities {
+		sb.WriteString(fmt.Sprintf("  Entity: %s\n", entity.EntityKey))
+		sb.WriteString(fmt.Sprintf("  File:   %s\n", entity.Filepath))
+		sb.WriteString("  Reason: File has been modified on disk since last State Map update\n")
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("These entities have been EXCLUDED from hydration to prevent stale code injection.\n")
+	sb.WriteString("The LLM must NOT assume knowledge of their current content.\n")
+	sb.WriteString("\n")
+	sb.WriteString("To resolve:\n")
+	sb.WriteString("  - User must paste updated file content via /v1/user/code endpoint, or\n")
+	sb.WriteString("  - User must explicitly acknowledge overwrite\n")
+	sb.WriteString("[END NOTICE]\n\n")
+
+	return sb.String()
 }
 
 // HydrateForEntities retrieves specific entities and formats them for injection

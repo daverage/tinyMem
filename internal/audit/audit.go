@@ -71,14 +71,15 @@ func (a *Auditor) performAudit(episodeID, artifactHash string) error {
 
 	// Construct audit prompt
 	// Per spec: 1-turn JSON audit
+	// Strict prompt to force JSON output from small models
 	messages := []llm.Message{
 		{
 			Role:    "system",
-			Content: "You are a code auditor. Analyze the following code artifact and return a JSON response with fields: entity (string, the primary entity name), status (one of: completed, partial, discussion).",
+			Content: "You are a code auditor. You MUST respond with ONLY valid JSON. No other text is allowed.\n\nAnalyze the code artifact and return this exact JSON format:\n{\"entity\": \"<primary entity name>\", \"status\": \"<completed|partial|discussion>\"}\n\nRules:\n- entity: the main function/class/type name in the code\n- status: completed (full implementation), partial (incomplete), discussion (no code/planning)\n- Return ONLY the JSON object, nothing else",
 		},
 		{
 			Role:    "user",
-			Content: artifact.Content,
+			Content: fmt.Sprintf("Analyze this code and return JSON only:\n\n%s", artifact.Content),
 		},
 	}
 
@@ -97,13 +98,26 @@ func (a *Auditor) performAudit(episodeID, artifactHash string) error {
 
 	// Parse JSON response
 	var auditResp AuditResponse
-	if err := json.Unmarshal([]byte(response.Choices[0].Message.Content), &auditResp); err != nil {
-		// If JSON parsing fails, record as discussion
-		auditResp = AuditResponse{
-			Entity: "unknown",
-			Status: StatusDiscussion,
+	raw := response.Choices[0].Message.Content
+	if err := json.Unmarshal([]byte(raw), &auditResp); err != nil {
+		truncated := truncateAuditLog(raw)
+		if extracted, ok := extractJSONObject(raw); ok {
+			if err2 := json.Unmarshal([]byte(extracted), &auditResp); err2 == nil {
+				a.logger.Debug("Extracted JSON from audit response (truncated): %s", truncateAuditLog(extracted))
+			} else {
+				auditResp = AuditResponse{
+					Entity: "unknown",
+					Status: StatusDiscussion,
+				}
+				a.logger.Debug("Failed to parse extracted JSON (raw=%s, extracted=%s): %v", truncated, truncateAuditLog(extracted), err2)
+			}
+		} else {
+			auditResp = AuditResponse{
+				Entity: "unknown",
+				Status: StatusDiscussion,
+			}
+			a.logger.Debug("Failed to parse audit response as JSON (raw=%s): %v", truncated, err)
 		}
-		a.logger.Debug("Failed to parse audit response as JSON, marking as discussion")
 	}
 
 	// Store audit result in ledger
@@ -125,4 +139,36 @@ func (a *Auditor) performAudit(episodeID, artifactHash string) error {
 // GetAuditResults retrieves audit results for an episode
 func (a *Auditor) GetAuditResults(episodeID string) ([]*ledger.AuditResult, error) {
 	return a.ledger.GetAuditResults(episodeID)
+}
+
+const maxAuditResponseLogBytes = 512
+
+func truncateAuditLog(content string) string {
+	if len(content) <= maxAuditResponseLogBytes {
+		return content
+	}
+
+	return content[:maxAuditResponseLogBytes] + "...(truncated)"
+}
+
+func extractJSONObject(content string) (string, bool) {
+	start := -1
+	depth := 0
+	for idx, ch := range content {
+		switch ch {
+		case '{':
+			if depth == 0 {
+				start = idx
+			}
+			depth++
+		case '}':
+			if depth > 0 {
+				depth--
+				if depth == 0 && start >= 0 {
+					return content[start : idx+1], true
+				}
+			}
+		}
+	}
+	return "", false
 }
