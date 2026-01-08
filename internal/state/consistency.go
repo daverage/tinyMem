@@ -2,6 +2,7 @@ package state
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/andrzejmarczewski/tinyMem/internal/fs"
 	"github.com/andrzejmarczewski/tinyMem/internal/vault"
@@ -24,16 +25,29 @@ import (
 
 // ConsistencyChecker verifies that State Map entities match disk state
 // Per spec section 15.4: STALE detection
+// Includes optional caching to improve performance
 type ConsistencyChecker struct {
 	fsReader *fs.Reader
 	vault    *vault.Vault
+	cache    *ETVCache
 }
 
 // NewConsistencyChecker creates a new consistency checker
+// Cache is enabled by default with 5-second TTL for performance
 func NewConsistencyChecker(fsReader *fs.Reader, vaultInstance *vault.Vault) *ConsistencyChecker {
 	return &ConsistencyChecker{
 		fsReader: fsReader,
 		vault:    vaultInstance,
+		cache:    NewETVCache(5 * time.Second), // 5-second cache for performance
+	}
+}
+
+// NewConsistencyCheckerWithCache creates a checker with custom cache settings
+func NewConsistencyCheckerWithCache(fsReader *fs.Reader, vaultInstance *vault.Vault, cache *ETVCache) *ConsistencyChecker {
+	return &ConsistencyChecker{
+		fsReader: fsReader,
+		vault:    vaultInstance,
+		cache:    cache,
 	}
 }
 
@@ -55,6 +69,8 @@ type ConsistencyResult struct {
 //
 // STALE is a DERIVED runtime condition, not a stored artifact state.
 // This function NEVER modifies the State Map or any stored state.
+//
+// Uses cache to avoid repeated file I/O for performance
 //
 // Returns:
 //   - IsStale=true if disk content differs from authoritative artifact
@@ -84,7 +100,28 @@ func (c *ConsistencyChecker) CheckEntity(entity *EntityState) ConsistencyResult 
 
 	result.HasFilepath = true
 
-	// READ-ONLY: Read file from disk and compute hash
+	// Check cache first for performance
+	if c.cache != nil && c.cache.IsEnabled() {
+		if cached := c.cache.Get(entity.Filepath); cached != nil {
+			result.DiskHash = cached.diskHash
+			result.FileExists = cached.exists
+
+			// If file doesn't exist, it's stale
+			if !cached.exists {
+				result.IsStale = true
+				return result
+			}
+
+			// Compare cached hash with state map hash
+			if cached.diskHash != entity.ArtifactHash {
+				result.IsStale = true
+			}
+
+			return result
+		}
+	}
+
+	// Cache miss - READ-ONLY: Read file from disk and compute hash
 	// Per spec section 15.3: The proxy may read file contents for verification
 	diskResult := c.fsReader.ReadFile(entity.Filepath)
 
@@ -104,6 +141,12 @@ func (c *ConsistencyChecker) CheckEntity(entity *EntityState) ConsistencyResult 
 		// Per spec: This is a form of divergence
 		// The State Map claims to have authoritative state for a file that doesn't exist
 		// Mark as STALE to prevent hydration of non-existent files
+
+		// Update cache
+		if c.cache != nil && c.cache.IsEnabled() {
+			c.cache.Set(entity.Filepath, true, "", false)
+		}
+
 		result.IsStale = true
 		result.DiskHash = "" // No hash for non-existent file
 		return result
@@ -113,7 +156,14 @@ func (c *ConsistencyChecker) CheckEntity(entity *EntityState) ConsistencyResult 
 
 	// Compare disk hash with State Map hash
 	// Per spec section 15.4: STALE when disk hash ≠ authoritative artifact hash
-	if diskResult.Hash != entity.ArtifactHash {
+	isStale := diskResult.Hash != entity.ArtifactHash
+
+	// Update cache for next time
+	if c.cache != nil && c.cache.IsEnabled() {
+		c.cache.Set(entity.Filepath, isStale, diskResult.Hash, true)
+	}
+
+	if isStale {
 		// DIVERGENCE DETECTED
 		// Disk content differs from what the State Map believes is authoritative
 		// This means the user (or another process) has edited the file manually

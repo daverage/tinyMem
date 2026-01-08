@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -140,6 +141,7 @@ func (v *Vault) Exists(hash string) (bool, error) {
 // Returns artifacts in the same order as the input hashes
 // Missing artifacts are returned as nil in their position
 // Read-only operation
+// Optimized to use a single batch query instead of N individual queries
 func (v *Vault) GetMultiple(hashes []string) ([]*Artifact, error) {
 	if len(hashes) == 0 {
 		return []*Artifact{}, nil
@@ -148,13 +150,50 @@ func (v *Vault) GetMultiple(hashes []string) ([]*Artifact, error) {
 	// Build a map for efficient lookup
 	artifactMap := make(map[string]*Artifact)
 
-	// Query all hashes
-	for _, hash := range hashes {
-		artifact, err := v.Get(hash)
+	// Build placeholders for IN clause
+	placeholders := make([]string, len(hashes))
+	args := make([]interface{}, len(hashes))
+	for i, hash := range hashes {
+		placeholders[i] = "?"
+		args[i] = hash
+	}
+	placeholdersStr := strings.Join(placeholders, ",")
+
+	// Single batch query with IN clause
+	query := fmt.Sprintf(`
+		SELECT hash, content, content_type, created_at, byte_size, token_count
+		FROM vault_artifacts
+		WHERE hash IN (%s)
+	`, placeholdersStr)
+
+	rows, err := v.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query multiple artifacts: %w", err)
+	}
+	defer rows.Close()
+
+	// Scan results into map
+	for rows.Next() {
+		var a Artifact
+		var createdAt int64
+		var tokenCount sql.NullInt64
+
+		err := rows.Scan(&a.Hash, &a.Content, &a.ContentType, &createdAt, &a.ByteSize, &tokenCount)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to scan artifact: %w", err)
 		}
-		artifactMap[hash] = artifact
+
+		a.CreatedAt = time.Unix(createdAt, 0)
+		if tokenCount.Valid {
+			tc := int(tokenCount.Int64)
+			a.TokenCount = &tc
+		}
+
+		artifactMap[a.Hash] = &a
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating artifacts: %w", err)
 	}
 
 	// Build result in same order as input

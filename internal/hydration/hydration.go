@@ -145,26 +145,42 @@ func (h *Engine) Hydrate() (string, error) {
 
 // formatHydration applies the strict injection template
 // Per spec section 8.2: fixed template format
+// Optimized to pre-allocate capacity and avoid fmt.Sprintf where possible
 func (h *Engine) formatHydration(blocks []HydrationBlock) string {
+	if len(blocks) == 0 {
+		return ""
+	}
+
+	// Pre-calculate approximate capacity to reduce allocations
+	// Rough estimate: 150 bytes of template + average content size
+	estimatedSize := len(blocks) * 150
+	for _, block := range blocks {
+		estimatedSize += len(block.Content)
+	}
+
 	var sb strings.Builder
+	sb.Grow(estimatedSize)
 
 	for _, block := range blocks {
-		sb.WriteString("[CURRENT STATE: AUTHORITATIVE]\n")
-		sb.WriteString(fmt.Sprintf("Entity: %s\n", block.EntityKey))
-		sb.WriteString(fmt.Sprintf("Artifact: %s\n", block.ArtifactHash))
+		sb.WriteString("[CURRENT STATE: AUTHORITATIVE]\nEntity: ")
+		sb.WriteString(block.EntityKey)
+		sb.WriteString("\nArtifact: ")
+		sb.WriteString(block.ArtifactHash)
+		sb.WriteString("\nSource: ")
 
 		// Determine source description based on method
-		source := "Confirmed via AST"
-		if block.Method == "regex" {
-			source = "Confirmed via regex"
-		} else if block.Method == "correlation" {
-			source = "Inferred via correlation"
+		switch block.Method {
+		case "regex":
+			sb.WriteString("Confirmed via regex")
+		case "correlation":
+			sb.WriteString("Inferred via correlation")
+		default:
+			sb.WriteString("Confirmed via AST")
 		}
-		sb.WriteString(fmt.Sprintf("Source: %s\n", source))
-		sb.WriteString("\n")
+
+		sb.WriteString("\n\n")
 		sb.WriteString(block.Content)
-		sb.WriteString("\n")
-		sb.WriteString("[END CURRENT STATE]\n\n")
+		sb.WriteString("\n[END CURRENT STATE]\n\n")
 	}
 
 	return sb.String()
