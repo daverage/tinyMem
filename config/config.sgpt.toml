@@ -1,0 +1,19 @@
+# tinyMem Configuration for Shell GPT (sgpt)
+# This config uses sgpt CLI tool instead of HTTP endpoint
+# Install: pip install shell-gpt
+
+[database]
+database_path = "./runtime/tinyMem.db"
+
+[logging]
+log_path = "./runtime/tinyMem.log"
+debug = false
+
+[llm]
+llm_provider = "sgpt"                            # Use Shell GPT CLI
+llm_endpoint = "cli"                             # CLI mode (endpoint not used)
+llm_api_key = ""                                 # API key via OPENAI_API_KEY env var
+llm_model = "gpt-4"                              # OpenAI model
+
+[proxy]
+listen_address = "127.0.0.1:4321"

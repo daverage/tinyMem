@@ -41,6 +41,19 @@ type LLMConfig struct {
 	Model    string `toml:"llm_model" json:"llm_model"`
 }
 
+// IsCLIProvider checks if the provider is a CLI-based provider
+func (c *LLMConfig) IsCLIProvider() bool {
+	// Known CLI providers
+	cliProviders := []string{"claude", "gemini", "sgpt", "aichat"}
+	for _, cli := range cliProviders {
+		if c.Provider == cli {
+			return true
+		}
+	}
+	// Check if provider starts with "cli:"
+	return len(c.Provider) > 4 && c.Provider[:4] == "cli:"
+}
+
 // ProxyConfig holds proxy server settings
 type ProxyConfig struct {
 	ListenAddress string `toml:"listen_address" json:"listen_address"`
@@ -89,17 +102,30 @@ func (c *Config) Validate() error {
 	if c.LLM.Provider == "" {
 		return fmt.Errorf("llm.llm_provider is required")
 	}
-	if c.LLM.Endpoint == "" {
-		return fmt.Errorf("llm.llm_endpoint is required")
-	}
-	if c.LLM.Model == "" {
-		return fmt.Errorf("llm.llm_model is required")
-	}
 
-	// Validate endpoint format
-	endpointPattern := regexp.MustCompile(`^https?://`)
-	if !endpointPattern.MatchString(c.LLM.Endpoint) {
-		return fmt.Errorf("llm.llm_endpoint must start with http:// or https://")
+	// Check if it's a CLI provider
+	isCLI := c.LLM.IsCLIProvider()
+
+	if isCLI {
+		// CLI providers don't need an endpoint
+		// Endpoint can be empty or "cli" or "local"
+		if c.LLM.Model == "" {
+			return fmt.Errorf("llm.llm_model is required")
+		}
+	} else {
+		// HTTP providers need an endpoint
+		if c.LLM.Endpoint == "" {
+			return fmt.Errorf("llm.llm_endpoint is required for HTTP providers")
+		}
+		if c.LLM.Model == "" {
+			return fmt.Errorf("llm.llm_model is required")
+		}
+
+		// Validate endpoint format
+		endpointPattern := regexp.MustCompile(`^https?://`)
+		if !endpointPattern.MatchString(c.LLM.Endpoint) {
+			return fmt.Errorf("llm.llm_endpoint must start with http:// or https://")
+		}
 	}
 
 	// Proxy validation
