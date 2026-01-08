@@ -36,6 +36,153 @@ type HydrationBlock struct {
 	Filepath     string
 	Symbol       string
 	Method       string
+	TokenCount   int // Estimated token count for this block
+}
+
+// HydrationBudget defines limits for hydration
+type HydrationBudget struct {
+	MaxTokens   int // Maximum tokens to hydrate (0 = unlimited)
+	MaxEntities int // Maximum entities to hydrate (0 = unlimited)
+	UsedTokens  int // Tokens used so far
+	UsedEntities int // Entities included so far
+}
+
+// EstimateTokens estimates the number of tokens in a text string
+// Uses a simple heuristic: ~1.3 tokens per word, plus overhead for code
+// This is a rough approximation - real tokenization varies by model
+func EstimateTokens(content string) int {
+	if content == "" {
+		return 0
+	}
+
+	// Count characters and words
+	charCount := len(content)
+	wordCount := len(strings.Fields(content))
+
+	// Heuristic: code has more tokens per word than natural language
+	// Use character count / 4 as baseline (roughly 4 chars per token)
+	// Add word count * 0.3 to account for word boundaries
+	estimate := (charCount / 4) + int(float64(wordCount)*0.3)
+
+	// Minimum of 1 token for non-empty content
+	if estimate < 1 {
+		estimate = 1
+	}
+
+	return estimate
+}
+
+// EstimateBlockTokens estimates tokens for a complete hydration block
+// Includes the template overhead (entity key, artifact hash, etc.)
+func EstimateBlockTokens(block HydrationBlock) int {
+	templateOverhead := 50 // Estimated tokens for [CURRENT STATE: AUTHORITATIVE] template
+	contentTokens := EstimateTokens(block.Content)
+	entityKeyTokens := len(block.EntityKey) / 4
+	return templateOverhead + contentTokens + entityKeyTokens
+}
+
+// HydrateWithBudget retrieves AUTHORITATIVE entities with budget constraints
+// Returns hydration content, hydrated entity keys, and final budget state
+func (h *Engine) HydrateWithBudget(episodeID string, budget HydrationBudget) (string, []string, HydrationBudget, error) {
+	// Get all authoritative entities
+	entities, err := h.state.GetAuthoritative()
+	if err != nil {
+		return "", nil, budget, fmt.Errorf("failed to get authoritative entities: %w", err)
+	}
+
+	if len(entities) == 0 {
+		return "", nil, budget, nil // No hydration needed
+	}
+
+	// ETV: Filter out STALE entities
+	var staleEntities []*state.EntityState
+	var freshEntities []*state.EntityState
+
+	if h.consistencyChecker != nil {
+		for _, entity := range entities {
+			isStale, _, checkErr := h.consistencyChecker.IsEntityStale(entity)
+			if checkErr != nil {
+				staleEntities = append(staleEntities, entity)
+			} else if isStale {
+				staleEntities = append(staleEntities, entity)
+			} else {
+				freshEntities = append(freshEntities, entity)
+			}
+		}
+	} else {
+		freshEntities = entities
+	}
+
+	// Build hydration blocks with budget enforcement
+	var blocks []HydrationBlock
+	var entityKeys []string
+
+	for _, entity := range freshEntities {
+		// Check entity limit
+		if budget.MaxEntities > 0 && budget.UsedEntities >= budget.MaxEntities {
+			break // Entity limit reached
+		}
+
+		artifact, err := h.vault.Get(entity.ArtifactHash)
+		if err != nil || artifact == nil {
+			continue
+		}
+
+		// Extract resolution method
+		method := "unknown"
+		if entity.Metadata != nil {
+			if m, ok := entity.Metadata["resolution_method"].(string); ok {
+				method = m
+			}
+		}
+
+		// Create block and estimate tokens
+		block := HydrationBlock{
+			EntityKey:    entity.EntityKey,
+			ArtifactHash: entity.ArtifactHash,
+			Content:      artifact.Content,
+			Filepath:     entity.Filepath,
+			Symbol:       entity.Symbol,
+			Method:       method,
+		}
+		block.TokenCount = EstimateBlockTokens(block)
+
+		// Check token budget
+		if budget.MaxTokens > 0 && budget.UsedTokens+block.TokenCount > budget.MaxTokens {
+			break // Token budget exhausted
+		}
+
+		// Add block and update budget
+		blocks = append(blocks, block)
+		entityKeys = append(entityKeys, block.EntityKey)
+		budget.UsedTokens += block.TokenCount
+		budget.UsedEntities++
+	}
+
+	// Record hydration tracking
+	if h.tracker != nil && episodeID != "" {
+		if err := h.tracker.RecordHydration(episodeID, entityKeys); err != nil {
+			// Log error but don't fail - tracking is non-critical
+		}
+	}
+
+	// Build final hydration content
+	var sb strings.Builder
+
+	// Emit STATE NOTICE for STALE entities
+	if len(staleEntities) > 0 {
+		staleNotice := GenerateStaleNotice(staleEntities)
+		sb.WriteString(staleNotice)
+		sb.WriteString("\n")
+		budget.UsedTokens += EstimateTokens(staleNotice)
+	}
+
+	// Format fresh entities
+	if len(blocks) > 0 {
+		sb.WriteString(h.formatHydration(blocks))
+	}
+
+	return sb.String(), entityKeys, budget, nil
 }
 
 // Hydrate retrieves all AUTHORITATIVE entities and formats them for injection

@@ -16,10 +16,11 @@ var schemaFS embed.FS
 // Config represents the complete tinyMem configuration
 // Per spec: minimal and boring, no tuning knobs, no feature flags
 type Config struct {
-	Database DatabaseConfig `toml:"database" json:"database"`
-	Logging  LoggingConfig  `toml:"logging" json:"logging"`
-	LLM      LLMConfig      `toml:"llm" json:"llm"`
-	Proxy    ProxyConfig    `toml:"proxy" json:"proxy"`
+	Database  DatabaseConfig  `toml:"database" json:"database"`
+	Logging   LoggingConfig   `toml:"logging" json:"logging"`
+	LLM       LLMConfig       `toml:"llm" json:"llm"`
+	Proxy     ProxyConfig     `toml:"proxy" json:"proxy"`
+	Hydration HydrationConfig `toml:"hydration" json:"hydration"`
 }
 
 // DatabaseConfig holds database settings
@@ -57,6 +58,29 @@ func (c *LLMConfig) IsCLIProvider() bool {
 // ProxyConfig holds proxy server settings
 type ProxyConfig struct {
 	ListenAddress string `toml:"listen_address" json:"listen_address"`
+}
+
+// HydrationConfig holds hydration budget and retrieval settings
+type HydrationConfig struct {
+	// Budget settings
+	MaxTokens   int `toml:"max_tokens" json:"max_tokens"`     // 0 = unlimited
+	MaxEntities int `toml:"max_entities" json:"max_entities"` // 0 = unlimited
+
+	// Structural anchors (always enabled for determinism)
+	EnableFileMentionAnchors     bool `toml:"enable_file_mention_anchors" json:"enable_file_mention_anchors"`
+	EnableSymbolMentionAnchors   bool `toml:"enable_symbol_mention_anchors" json:"enable_symbol_mention_anchors"`
+	EnablePreviousHydrationAnchors bool `toml:"enable_previous_hydration_anchors" json:"enable_previous_hydration_anchors"`
+
+	// Semantic ranking (optional)
+	EnableSemanticRanking bool    `toml:"enable_semantic_ranking" json:"enable_semantic_ranking"`
+	SemanticThreshold     float64 `toml:"semantic_threshold" json:"semantic_threshold"`           // Cosine similarity cutoff (e.g., 0.7)
+	SemanticBudgetTokens  int     `toml:"semantic_budget_tokens" json:"semantic_budget_tokens"`   // Max tokens for semantic expansion
+	SemanticBudgetEntities int     `toml:"semantic_budget_entities" json:"semantic_budget_entities"` // Max entities from semantic ranking
+
+	// Embedding provider
+	EmbeddingProvider string `toml:"embedding_provider" json:"embedding_provider"` // "openai", "local", "none"
+	EmbeddingModel    string `toml:"embedding_model" json:"embedding_model"`
+	EmbeddingCacheTTL int    `toml:"embedding_cache_ttl" json:"embedding_cache_ttl"` // Seconds
 }
 
 // Load reads and parses the configuration file

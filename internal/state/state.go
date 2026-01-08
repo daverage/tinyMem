@@ -195,6 +195,49 @@ func (m *Manager) GetByFilepath(filepath string) ([]*EntityState, error) {
 	return entities, nil
 }
 
+// GetBySymbol retrieves all entities with a specific symbol
+func (m *Manager) GetBySymbol(symbol string) ([]*EntityState, error) {
+	rows, err := m.db.Query(`
+		SELECT entity_key, filepath, symbol, artifact_hash, confidence, state, last_updated, metadata
+		FROM state_map
+		WHERE symbol = ?
+		ORDER BY filepath
+	`, symbol)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query entities by symbol: %w", err)
+	}
+	defer rows.Close()
+
+	var entities []*EntityState
+	for rows.Next() {
+		var es EntityState
+		var lastUpdated int64
+		var metadataJSON []byte
+
+		err := rows.Scan(&es.EntityKey, &es.Filepath, &es.Symbol, &es.ArtifactHash,
+			&es.Confidence, &es.State, &lastUpdated, &metadataJSON)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan entity: %w", err)
+		}
+
+		es.LastUpdated = time.Unix(lastUpdated, 0)
+
+		if len(metadataJSON) > 0 {
+			if err := json.Unmarshal(metadataJSON, &es.Metadata); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+			}
+		}
+
+		entities = append(entities, &es)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating entities: %w", err)
+	}
+
+	return entities, nil
+}
+
 // Delete removes an entity from the state map
 // Per spec section 9.2: used for tombstoning
 func (m *Manager) Delete(entityKey string) error {

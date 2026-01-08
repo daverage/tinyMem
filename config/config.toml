@@ -51,3 +51,28 @@ llm_model = "local-model"
 # Default: Port 4321
 # Endpoint: http://{listen_address}/v1/chat/completions
 listen_address = "127.0.0.1:4321"
+
+[hydration]
+# Hydration Budget Limits
+# Set to 0 for unlimited
+max_tokens = 32000      # Maximum tokens to hydrate (prevents context overflow)
+max_entities = 50       # Maximum entities to hydrate
+
+# Structural Anchors (Deterministic Retrieval)
+# These should always be enabled for trustworthy retrieval
+enable_file_mention_anchors = true      # Include entities from explicitly mentioned files
+enable_symbol_mention_anchors = true     # Include entities matching mentioned symbols
+enable_previous_hydration_anchors = true # Include previously hydrated entities
+
+# Semantic Ranking (Optional)
+# Uses embeddings to find semantically similar code
+enable_semantic_ranking = false          # Set to true to enable semantic search
+semantic_threshold = 0.7                 # Cosine similarity cutoff (0.0 to 1.0)
+semantic_budget_tokens = 8000            # Max tokens for semantic expansion
+semantic_budget_entities = 10            # Max entities from semantic ranking
+
+# Embedding Provider
+# Options: "simple" (hash-based, for testing), "openai" (requires API key), "none"
+embedding_provider = "simple"
+embedding_model = "simple-384"           # Model identifier
+embedding_cache_ttl = 86400              # Cache TTL in seconds (24 hours)
