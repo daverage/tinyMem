@@ -282,6 +282,50 @@ func (l *Ledger) GetStateTransitions(entityKey string) ([]*StateTransition, erro
 	return transitions, nil
 }
 
+// GetTransitionsForEpisode retrieves all state transitions for a given episode
+func (l *Ledger) GetTransitionsForEpisode(episodeID string) ([]*StateTransition, error) {
+	rows, err := l.db.Query(`
+		SELECT id, episode_id, entity_key, from_state, to_state, artifact_hash, timestamp, reason
+		FROM ledger_state_transitions
+		WHERE episode_id = ?
+		ORDER BY timestamp ASC
+	`, episodeID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query state transitions for episode: %w", err)
+	}
+	defer rows.Close()
+
+	var transitions []*StateTransition
+	for rows.Next() {
+		var t StateTransition
+		var timestamp int64
+		var fromState sql.NullString
+		var reason sql.NullString
+
+		err := rows.Scan(&t.ID, &t.EpisodeID, &t.EntityKey, &fromState, &t.ToState, &t.ArtifactHash, &timestamp, &reason)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan transition: %w", err)
+		}
+
+		t.Timestamp = time.Unix(timestamp, 0)
+		if fromState.Valid {
+			s := State(fromState.String)
+			t.FromState = &s
+		}
+		if reason.Valid {
+			t.Reason = reason.String
+		}
+
+		transitions = append(transitions, &t)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating transitions: %w", err)
+	}
+
+	return transitions, nil
+}
+
 // GetAuditResults retrieves audit results for an episode
 func (l *Ledger) GetAuditResults(episodeID string) ([]*AuditResult, error) {
 	rows, err := l.db.Query(`

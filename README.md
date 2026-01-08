@@ -489,6 +489,127 @@ Shows the exact prompt sent to the LLM (including hydration).
 
 **Note:** Only available when `debug = true` in config.
 
+### Introspection Endpoints
+
+#### `GET /introspect/hydration?episode_id=xxx`
+Explains why each entity was hydrated for a specific episode.
+
+**Response:**
+```json
+{
+  "episode_id": "01JQTK8H...",
+  "query": "Fix the authentication bug in auth.go",
+  "hydration_blocks": [
+    {
+      "entity_key": "/auth.go::ValidateToken",
+      "artifact_hash": "7f8a9b...",
+      "reason": "ast_resolved",
+      "method": "ast",
+      "triggered_by": "query mention: 'auth.go'",
+      "token_count": 245,
+      "hydrated_at": "2025-01-08T12:34:56Z"
+    },
+    {
+      "entity_key": "/auth.go::CheckPermissions",
+      "artifact_hash": "3c5d2e...",
+      "reason": "previously_hydrated",
+      "method": "tracking",
+      "triggered_by": "hydrated in episode 01JQTK7A...",
+      "token_count": 189,
+      "hydrated_at": "2025-01-08T12:34:56Z"
+    }
+  ],
+  "total_tokens": 434,
+  "budget_used": "434 / unlimited"
+}
+```
+
+**Use Case:** Debugging retrieval decisions, understanding why certain code was included in context.
+
+#### `GET /introspect/entity?entity_key=/file.go::Function`
+Shows the complete history of an entity: state transitions, ETV results, and hydration events.
+
+**Response:**
+```json
+{
+  "entity_key": "/auth.go::ValidateToken",
+  "current_state": "AUTHORITATIVE",
+  "current_artifact": "7f8a9b...",
+  "filepath": "/auth.go",
+  "etv_status": {
+    "last_check": "2025-01-08T12:35:01Z",
+    "is_stale": false,
+    "disk_exists": true,
+    "disk_hash": "7f8a9b...",
+    "cache_hit": true
+  },
+  "state_history": [
+    {
+      "from_state": "null",
+      "to_state": "PROPOSED",
+      "artifact_hash": "7f8a9b...",
+      "timestamp": "2025-01-08T12:30:00Z",
+      "episode_id": "01JQTK7A..."
+    },
+    {
+      "from_state": "PROPOSED",
+      "to_state": "AUTHORITATIVE",
+      "artifact_hash": "7f8a9b...",
+      "timestamp": "2025-01-08T12:31:00Z",
+      "episode_id": "01JQTK7B...",
+      "promotion_reason": "Gate A: AST confirmed, Gate B: User approved, Gate C: ETV passed"
+    }
+  ],
+  "hydration_history": [
+    {
+      "episode_id": "01JQTK7A...",
+      "hydrated_at": "2025-01-08T12:30:05Z"
+    },
+    {
+      "episode_id": "01JQTK8H...",
+      "hydrated_at": "2025-01-08T12:34:56Z"
+    }
+  ]
+}
+```
+
+**Use Case:** Tracking entity lifecycle, verifying gate evaluation, debugging ETV issues.
+
+#### `GET /introspect/gates?episode_id=xxx`
+Shows gate evaluation results for all entities in an episode.
+
+**Response:**
+```json
+{
+  "episode_id": "01JQTK8H...",
+  "entities_evaluated": [
+    {
+      "entity_key": "/auth.go::ValidateToken",
+      "gate_a": {
+        "passed": true,
+        "reason": "AST resolved successfully",
+        "method": "ast"
+      },
+      "gate_b": {
+        "passed": true,
+        "reason": "User implicit approval (no rejection)"
+      },
+      "gate_c": {
+        "passed": true,
+        "reason": "ETV: disk hash matches vault hash (7f8a9b...)",
+        "disk_exists": true,
+        "is_stale": false
+      },
+      "final_decision": "PROMOTED to AUTHORITATIVE"
+    }
+  ]
+}
+```
+
+**Use Case:** Understanding why entities were promoted or rejected, debugging gate failures.
+
+**Note:** See [RETRIEVAL_INVARIANTS.md](RETRIEVAL_INVARIANTS.md) for details on retrieval system guarantees and failure modes.
+
 #### `POST /debug/reset` (Debug Mode Only)
 Resets all persisted state (vault, ledger, state map).
 
