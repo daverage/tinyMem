@@ -131,9 +131,28 @@ func main() {
 	logger.Debug("Initializing hydration engine")
 	hydrator := hydration.New(rt.GetVault(), rt.GetState(), rt.GetHydrationTracker(), rt.GetConsistencyChecker())
 
-	// Initialize LLM client
-	logger.Debug("Initializing LLM client")
-	llmClient := llm.NewClient(cfg.LLM.Endpoint, cfg.LLM.APIKey, cfg.LLM.Model)
+	// Initialize LLM client (HTTP or CLI based on provider)
+	logger.Debug("Initializing LLM client (provider=%s)", cfg.LLM.Provider)
+	var llmClient interface {
+		Chat(ctx context.Context, messages []llm.Message) (*llm.ChatResponse, error)
+		GetModel() string
+	}
+
+	if cfg.LLM.IsCLIProvider() {
+		// CLI-based provider (claude, gemini, etc.)
+		logger.Info("Using CLI provider: %s", cfg.LLM.Provider)
+		cliClient, err := llm.NewCLIClient(cfg.LLM.Provider, cfg.LLM.Model)
+		if err != nil {
+			logger.Error("FATAL: Failed to create CLI client: %v", err)
+			fmt.Fprintf(os.Stderr, "FATAL: Failed to create CLI client: %v\n", err)
+			os.Exit(1)
+		}
+		llmClient = cliClient
+	} else {
+		// HTTP-based provider (lmstudio, openai, etc.)
+		logger.Info("Using HTTP provider: %s at %s", cfg.LLM.Provider, cfg.LLM.Endpoint)
+		llmClient = llm.NewClient(cfg.LLM.Endpoint, cfg.LLM.APIKey, cfg.LLM.Model)
+	}
 
 	// Initialize shadow auditor
 	logger.Debug("Initializing shadow auditor")

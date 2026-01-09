@@ -86,6 +86,9 @@ func NewServer(rt *runtime.Runtime, llmClient *llm.Client, hydrator *hydration.E
 	mux.HandleFunc("/state", s.handleState)
 	mux.HandleFunc("/recent", s.handleRecent)
 
+	// Introspection endpoints (always available)
+	s.RegisterIntrospectionRoutes(mux)
+
 	// Debug-only endpoints
 	if debugMode {
 		mux.HandleFunc("/debug/last-prompt", s.handleDebugLastPrompt)

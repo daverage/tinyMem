@@ -16,10 +16,11 @@ var schemaFS embed.FS
 // Config represents the complete tinyMem configuration
 // Per spec: minimal and boring, no tuning knobs, no feature flags
 type Config struct {
-	Database DatabaseConfig `toml:"database" json:"database"`
-	Logging  LoggingConfig  `toml:"logging" json:"logging"`
-	LLM      LLMConfig      `toml:"llm" json:"llm"`
-	Proxy    ProxyConfig    `toml:"proxy" json:"proxy"`
+	Database  DatabaseConfig  `toml:"database" json:"database"`
+	Logging   LoggingConfig   `toml:"logging" json:"logging"`
+	LLM       LLMConfig       `toml:"llm" json:"llm"`
+	Proxy     ProxyConfig     `toml:"proxy" json:"proxy"`
+	Hydration HydrationConfig `toml:"hydration" json:"hydration"`
 }
 
 // DatabaseConfig holds database settings
@@ -41,9 +42,45 @@ type LLMConfig struct {
 	Model    string `toml:"llm_model" json:"llm_model"`
 }
 
+// IsCLIProvider checks if the provider is a CLI-based provider
+func (c *LLMConfig) IsCLIProvider() bool {
+	// Known CLI providers
+	cliProviders := []string{"claude", "gemini", "sgpt", "aichat"}
+	for _, cli := range cliProviders {
+		if c.Provider == cli {
+			return true
+		}
+	}
+	// Check if provider starts with "cli:"
+	return len(c.Provider) > 4 && c.Provider[:4] == "cli:"
+}
+
 // ProxyConfig holds proxy server settings
 type ProxyConfig struct {
 	ListenAddress string `toml:"listen_address" json:"listen_address"`
+}
+
+// HydrationConfig holds hydration budget and retrieval settings
+type HydrationConfig struct {
+	// Budget settings
+	MaxTokens   int `toml:"max_tokens" json:"max_tokens"`     // 0 = unlimited
+	MaxEntities int `toml:"max_entities" json:"max_entities"` // 0 = unlimited
+
+	// Structural anchors (always enabled for determinism)
+	EnableFileMentionAnchors     bool `toml:"enable_file_mention_anchors" json:"enable_file_mention_anchors"`
+	EnableSymbolMentionAnchors   bool `toml:"enable_symbol_mention_anchors" json:"enable_symbol_mention_anchors"`
+	EnablePreviousHydrationAnchors bool `toml:"enable_previous_hydration_anchors" json:"enable_previous_hydration_anchors"`
+
+	// Semantic ranking (optional)
+	EnableSemanticRanking bool    `toml:"enable_semantic_ranking" json:"enable_semantic_ranking"`
+	SemanticThreshold     float64 `toml:"semantic_threshold" json:"semantic_threshold"`           // Cosine similarity cutoff (e.g., 0.7)
+	SemanticBudgetTokens  int     `toml:"semantic_budget_tokens" json:"semantic_budget_tokens"`   // Max tokens for semantic expansion
+	SemanticBudgetEntities int     `toml:"semantic_budget_entities" json:"semantic_budget_entities"` // Max entities from semantic ranking
+
+	// Embedding provider
+	EmbeddingProvider string `toml:"embedding_provider" json:"embedding_provider"` // "openai", "local", "none"
+	EmbeddingModel    string `toml:"embedding_model" json:"embedding_model"`
+	EmbeddingCacheTTL int    `toml:"embedding_cache_ttl" json:"embedding_cache_ttl"` // Seconds
 }
 
 // Load reads and parses the configuration file
@@ -89,17 +126,30 @@ func (c *Config) Validate() error {
 	if c.LLM.Provider == "" {
 		return fmt.Errorf("llm.llm_provider is required")
 	}
-	if c.LLM.Endpoint == "" {
-		return fmt.Errorf("llm.llm_endpoint is required")
-	}
-	if c.LLM.Model == "" {
-		return fmt.Errorf("llm.llm_model is required")
-	}
 
-	// Validate endpoint format
-	endpointPattern := regexp.MustCompile(`^https?://`)
-	if !endpointPattern.MatchString(c.LLM.Endpoint) {
-		return fmt.Errorf("llm.llm_endpoint must start with http:// or https://")
+	// Check if it's a CLI provider
+	isCLI := c.LLM.IsCLIProvider()
+
+	if isCLI {
+		// CLI providers don't need an endpoint
+		// Endpoint can be empty or "cli" or "local"
+		if c.LLM.Model == "" {
+			return fmt.Errorf("llm.llm_model is required")
+		}
+	} else {
+		// HTTP providers need an endpoint
+		if c.LLM.Endpoint == "" {
+			return fmt.Errorf("llm.llm_endpoint is required for HTTP providers")
+		}
+		if c.LLM.Model == "" {
+			return fmt.Errorf("llm.llm_model is required")
+		}
+
+		// Validate endpoint format
+		endpointPattern := regexp.MustCompile(`^https?://`)
+		if !endpointPattern.MatchString(c.LLM.Endpoint) {
+			return fmt.Errorf("llm.llm_endpoint must start with http:// or https://")
+		}
 	}
 
 	// Proxy validation
