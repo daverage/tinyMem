@@ -30,14 +30,20 @@ type AuditResponse struct {
 // Auditor performs shadow audits on artifacts
 // Per spec section 10: non-blocking, metadata only, affects durability only
 type Auditor struct {
-	llmClient *llm.Client
-	vault     *vault.Vault
-	ledger    *ledger.Ledger
-	logger    *logging.Logger
+	llmClient interface {
+		Chat(ctx context.Context, messages []llm.Message) (*llm.ChatResponse, error)
+		GetModel() string
+	}
+	vault  *vault.Vault
+	ledger *ledger.Ledger
+	logger *logging.Logger
 }
 
 // NewAuditor creates a new shadow auditor
-func NewAuditor(llmClient *llm.Client, v *vault.Vault, l *ledger.Ledger, logger *logging.Logger) *Auditor {
+func NewAuditor(llmClient interface {
+	Chat(ctx context.Context, messages []llm.Message) (*llm.ChatResponse, error)
+	GetModel() string
+}, v *vault.Vault, l *ledger.Ledger, logger *logging.Logger) *Auditor {
 	return &Auditor{
 		llmClient: llmClient,
 		vault:     v,
@@ -75,11 +81,11 @@ func (a *Auditor) performAudit(episodeID, artifactHash string) error {
 	messages := []llm.Message{
 		{
 			Role:    "system",
-			Content: "You are a code auditor. You MUST respond with ONLY valid JSON. No other text is allowed.\n\nAnalyze the code artifact and return this exact JSON format:\n{\"entity\": \"<primary entity name>\", \"status\": \"<completed|partial|discussion>\"}\n\nRules:\n- entity: the main function/class/type name in the code\n- status: completed (full implementation), partial (incomplete), discussion (no code/planning)\n- Return ONLY the JSON object, nothing else",
+			Content: llm.Content{Value: "You are a code auditor. You MUST respond with ONLY valid JSON. No other text is allowed.\n\nAnalyze the code artifact and return this exact JSON format:\n{\"entity\": \"<primary entity name>\", \"status\": \"<completed|partial|discussion>\"}\n\nRules:\n- entity: the main function/class/type name in the code\n- status: completed (full implementation), partial (incomplete), discussion (no code/planning)\n- Return ONLY the JSON object, nothing else"},
 		},
 		{
 			Role:    "user",
-			Content: fmt.Sprintf("Analyze this code and return JSON only:\n\n%s", artifact.Content),
+			Content: llm.Content{Value: fmt.Sprintf("Analyze this code and return JSON only:\n\n%s", artifact.Content)},
 		},
 	}
 
@@ -98,7 +104,7 @@ func (a *Auditor) performAudit(episodeID, artifactHash string) error {
 
 	// Parse JSON response
 	var auditResp AuditResponse
-	raw := response.Choices[0].Message.Content
+	raw := response.Choices[0].Message.Content.GetString()
 	if err := json.Unmarshal([]byte(raw), &auditResp); err != nil {
 		truncated := truncateAuditLog(raw)
 		if extracted, ok := extractJSONObject(raw); ok {

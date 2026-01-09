@@ -66,7 +66,7 @@ enable_previous_hydration_anchors = true # Include previously hydrated entities
 
 # Semantic Ranking (Optional)
 # Uses embeddings to find semantically similar code
-enable_semantic_ranking = false          # Set to true to enable semantic search
+enable_semantic_ranking = true          # Set to true to enable semantic search
 semantic_threshold = 0.7                 # Cosine similarity cutoff (0.0 to 1.0)
 semantic_budget_tokens = 8000            # Max tokens for semantic expansion
 semantic_budget_entities = 10            # Max entities from semantic ranking

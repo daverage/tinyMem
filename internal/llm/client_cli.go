@@ -118,7 +118,7 @@ func (c *CLIClient) Chat(ctx context.Context, messages []Message) (*ChatResponse
 				Index: 0,
 				Message: Message{
 					Role:    "assistant",
-					Content: strings.TrimSpace(string(output)),
+					Content: Content{Value: strings.TrimSpace(string(output))},
 				},
 			},
 		},
@@ -164,7 +164,7 @@ func (c *CLIClient) formatMessages(messages []Message) string {
 		if msg.Role == "system" {
 			// Include system messages as context
 			sb.WriteString("## Context\n")
-			sb.WriteString(msg.Content)
+			sb.WriteString(msg.Content.GetString())
 			sb.WriteString("\n\n")
 			continue
 		}
@@ -174,10 +174,10 @@ func (c *CLIClient) formatMessages(messages []Message) string {
 			if i > 0 {
 				sb.WriteString("\n\n")
 			}
-			sb.WriteString(msg.Content)
+			sb.WriteString(msg.Content.GetString())
 		} else if msg.Role == "assistant" {
 			sb.WriteString("\n\nAssistant: ")
-			sb.WriteString(msg.Content)
+			sb.WriteString(msg.Content.GetString())
 		}
 	}
 

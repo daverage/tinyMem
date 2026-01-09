@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/andrzejmarczewski/tinyMem/internal/logging"
-	"github.com/andrzejmarczewski/tinyMem/internal/state"
 )
 
 // HybridEngine implements hybrid retrieval: structural anchors + semantic ranking
@@ -127,8 +126,8 @@ func (h *HybridEngine) ExtractAnchors(query string, episodeID string) []Structur
 
 	// 3. Previously hydrated entities (structural invariant!)
 	if episodeID != "" && h.engine.tracker != nil {
-		hydratedKeys, err := h.engine.tracker.GetHydratedEntities(episodeID)
-		if err == nil {
+		hydratedKeys, err := h.engine.tracker.GetPreviousHydration(episodeID)
+		if err == nil && hydratedKeys != nil {
 			for _, key := range hydratedKeys {
 				if seen[key] {
 					continue
@@ -243,8 +242,8 @@ func (h *HybridEngine) BuildHydrationPlan(query string, episodeID string, budget
 	})
 
 	for _, anchor := range anchors {
-		entity := h.engine.state.Get(anchor.EntityKey)
-		if entity == nil {
+		entity, err := h.engine.state.Get(anchor.EntityKey)
+		if err != nil || entity == nil {
 			continue
 		}
 
@@ -291,8 +290,8 @@ func (h *HybridEngine) BuildHydrationPlan(query string, episodeID string, budget
 			break
 		}
 
-		entity := h.engine.state.Get(candidate.EntityKey)
-		if entity == nil {
+		entity, err := h.engine.state.Get(candidate.EntityKey)
+		if err != nil || entity == nil {
 			continue
 		}
 
@@ -359,8 +358,8 @@ func (h *HybridEngine) ExecutePlan(plan HydrationPlan, episodeID string) (string
 	// Build hydration blocks
 	var blocks []HydrationBlock
 	for _, e := range plan.Entities {
-		entity := h.engine.state.Get(e.EntityKey)
-		if entity == nil {
+		entity, err := h.engine.state.Get(e.EntityKey)
+		if err != nil || entity == nil {
 			continue
 		}
 

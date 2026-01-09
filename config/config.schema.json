@@ -73,6 +73,67 @@
           "pattern": "^[0-9.]+:[0-9]+$"
         }
       }
+    },
+    "hydration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_tokens": {
+          "type": "integer",
+          "description": "Maximum tokens to hydrate (0 for unlimited)",
+          "minimum": 0
+        },
+        "max_entities": {
+          "type": "integer",
+          "description": "Maximum entities to hydrate (0 for unlimited)",
+          "minimum": 0
+        },
+        "enable_file_mention_anchors": {
+          "type": "boolean",
+          "description": "Include entities from explicitly mentioned files"
+        },
+        "enable_symbol_mention_anchors": {
+          "type": "boolean",
+          "description": "Include entities matching mentioned symbols"
+        },
+        "enable_previous_hydration_anchors": {
+          "type": "boolean",
+          "description": "Include previously hydrated entities"
+        },
+        "enable_semantic_ranking": {
+          "type": "boolean",
+          "description": "Enable semantic ranking for similar code"
+        },
+        "semantic_threshold": {
+          "type": "number",
+          "description": "Cosine similarity cutoff (0.0 to 1.0)",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "semantic_budget_tokens": {
+          "type": "integer",
+          "description": "Max tokens for semantic expansion",
+          "minimum": 0
+        },
+        "semantic_budget_entities": {
+          "type": "integer",
+          "description": "Max entities from semantic ranking",
+          "minimum": 0
+        },
+        "embedding_provider": {
+          "type": "string",
+          "description": "Embedding provider ('simple', 'openai', 'none')"
+        },
+        "embedding_model": {
+          "type": "string",
+          "description": "Embedding model identifier"
+        },
+        "embedding_cache_ttl": {
+          "type": "integer",
+          "description": "Cache TTL in seconds",
+          "minimum": 0
+        }
+      }
     }
   }
 }
