@@ -34,7 +34,7 @@ maxContextTokens = 8000
 # The proxy will listen on this address for OpenAI-compatible requests
 # Default: Port 4321
 # Endpoint: http://{listen_address}/v1/chat/completions
-listen_address = "127.0.0.1:4321"
+listen_address = "127.0.0.1:4322"
 
 [hydration]
 # Hydration Budget Limits

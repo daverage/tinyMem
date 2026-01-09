@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"unicode"
 	"time"
 )
 
@@ -195,6 +196,67 @@ func generateID() string {
 	b := make([]byte, 16)
 	rand.Read(b)
 	return "chatcmpl-" + hex.EncodeToString(b)
+}
+
+// CountTokens estimates the number of tokens in a text string
+// This is a simple approximation based on character patterns common in English
+func (c *CLIClient) CountTokens(text string) int {
+	if text == "" {
+		return 0
+	}
+
+	// Simple heuristic: split on whitespace and punctuation boundaries
+	// This approximates tokenization for common cases
+	count := 0
+	inToken := false
+
+	for _, char := range text {
+		isWordChar := unicode.IsLetter(char) || unicode.IsNumber(char) || char == '\''
+
+		if isWordChar && !inToken {
+			inToken = true
+			count++
+		} else if !isWordChar && inToken {
+			inToken = false
+		}
+	}
+
+	// Additional tokens for punctuation sequences and special characters
+	punctuationTokens := c.countPunctuationTokens(text)
+
+	estimatedTokens := count + punctuationTokens
+
+	return estimatedTokens
+}
+
+// countPunctuationTokens counts punctuation sequences as additional tokens
+func (c *CLIClient) countPunctuationTokens(text string) int {
+	count := 0
+	inPunctSeq := false
+
+	for _, char := range text {
+		isPunct := unicode.IsPunct(char) && char != '\'' // Exclude apostrophe from punctuation counting
+
+		if isPunct && !inPunctSeq {
+			inPunctSeq = true
+			count++
+		} else if !isPunct && inPunctSeq {
+			inPunctSeq = false
+		}
+	}
+
+	return count
+}
+
+// CountMessagesTokens estimates tokens for a slice of messages
+func (c *CLIClient) CountMessagesTokens(messages []Message) int {
+	total := 0
+	for _, msg := range messages {
+		total += c.CountTokens(msg.Content.GetString())
+		// Add tokens for role identifiers
+		total += c.CountTokens(msg.Role)
+	}
+	return total
 }
 
 // IsCLIProvider checks if a provider string is a CLI provider

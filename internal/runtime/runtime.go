@@ -9,6 +9,7 @@ import (
 	"github.com/andrzejmarczewski/tinyMem/internal/fs"
 	"github.com/andrzejmarczewski/tinyMem/internal/hydration"
 	"github.com/andrzejmarczewski/tinyMem/internal/ledger"
+	"github.com/andrzejmarczewski/tinyMem/internal/logging"
 	"github.com/andrzejmarczewski/tinyMem/internal/state"
 	"github.com/andrzejmarczewski/tinyMem/internal/vault"
 )
@@ -24,6 +25,7 @@ type Runtime struct {
 	resolver           *entity.Resolver
 	hydrationTracker   *hydration.Tracker
 	consistencyChecker *state.ConsistencyChecker
+	hybridHydrator     *hydration.HybridEngine
 }
 
 // New creates a new Runtime instance
@@ -45,6 +47,13 @@ func New(db *sql.DB) *Runtime {
 	fsReader := fs.NewReader()
 	consistencyChecker := state.NewConsistencyChecker(fsReader, vaultInstance)
 
+	// Create basic hydration engine
+	hydrationEngine := hydration.New(vaultInstance, stateManager, tracker, consistencyChecker)
+
+	// Create hybrid hydration engine (for intelligent, context-aware hydration)
+	// This will be configured later when we have access to logger and config
+	hybridHydrator := hydration.NewHybridEngine(hydrationEngine, nil, nil, false, 0.0)
+
 	return &Runtime{
 		db:                 db,
 		vault:              vaultInstance,
@@ -53,6 +62,7 @@ func New(db *sql.DB) *Runtime {
 		resolver:           resolver,
 		hydrationTracker:   tracker,
 		consistencyChecker: consistencyChecker,
+		hybridHydrator:     hybridHydrator,
 	}
 }
 
@@ -442,6 +452,17 @@ func (r *Runtime) GetResolver() *entity.Resolver {
 // GetHydrationTracker returns the hydration tracker instance
 func (r *Runtime) GetHydrationTracker() *hydration.Tracker {
 	return r.hydrationTracker
+}
+
+// ConfigureHybridHydrator configures the hybrid hydration engine with logger and embedder
+func (r *Runtime) ConfigureHybridHydrator(logger *logging.Logger, embedder hydration.Embedder, enabled bool, threshold float64) {
+	// Update the hybrid hydrator with the provided components
+	r.hybridHydrator = hydration.NewHybridEngine(r.hybridHydrator.Engine(), logger, embedder, enabled, threshold)
+}
+
+// GetHybridHydrator returns the hybrid hydration engine instance
+func (r *Runtime) GetHybridHydrator() *hydration.HybridEngine {
+	return r.hybridHydrator
 }
 
 // GetConsistencyChecker returns the ETV consistency checker instance

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/andrzejmarczewski/tinyMem/config"
 	"github.com/andrzejmarczewski/tinyMem/internal/audit"
 	"github.com/andrzejmarczewski/tinyMem/internal/hydration"
 	"github.com/andrzejmarczewski/tinyMem/internal/llm"
@@ -28,6 +29,7 @@ type Server struct {
 		GetModel() string
 	}
 	hydrator     *hydration.Engine
+	hybridHydrator *hydration.HybridEngine
 	auditor      *audit.Auditor
 	logger       *logging.Logger
 	debugMode    bool
@@ -38,6 +40,7 @@ type Server struct {
 	llmEndpoint  string
 	startTime    time.Time
 	workingDir   string
+	hydrationConfig config.HydrationConfig // Store hydration config for use in hydration
 }
 
 const (
@@ -64,7 +67,7 @@ const toolPolicy = "[TOOL POLICY]\n" +
 func NewServer(rt *runtime.Runtime, llmClient interface {
 	Chat(ctx context.Context, messages []llm.Message) (*llm.ChatResponse, error)
 	GetModel() string
-}, hydrator *hydration.Engine, auditor *audit.Auditor, logger *logging.Logger, listenAddr, databasePath, llmProvider, llmEndpoint string, debugMode bool) *Server {
+}, hydrator *hydration.Engine, auditor *audit.Auditor, logger *logging.Logger, listenAddr, databasePath, llmProvider, llmEndpoint string, debugMode bool, hydrationConfig config.HydrationConfig) *Server {
 	workingDir, err := os.Getwd()
 	if err != nil {
 		workingDir = ""
@@ -74,6 +77,7 @@ func NewServer(rt *runtime.Runtime, llmClient interface {
 		runtime:      rt,
 		llmClient:    llmClient,
 		hydrator:     hydrator,
+		hybridHydrator: rt.GetHybridHydrator(),
 		auditor:      auditor,
 		logger:       logger,
 		debugMode:    debugMode,
@@ -82,6 +86,7 @@ func NewServer(rt *runtime.Runtime, llmClient interface {
 		llmProvider:  llmProvider,
 		llmEndpoint:  llmEndpoint,
 		workingDir:   workingDir,
+		hydrationConfig: hydrationConfig,
 	}
 
 	mux := http.NewServeMux()
@@ -183,9 +188,48 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 
 	// Pre-flight: JIT Hydration
 	// Per spec section 8.1: scan state map, retrieve authoritative artifacts, inject
-	hydrationContent, hydratedKeys, err := s.hydrator.HydrateWithTracking(episodeID)
-	if err != nil {
-		s.logger.Error("Hydration failed: %v", err)
+	var hydrationContent string
+	var hydratedKeys []string
+	var hydrationErr error
+
+	// Use hybrid hydration if available and enabled, otherwise use basic hydration
+	if s.hybridHydrator != nil {
+		s.logger.Debug("Using hybrid hydration engine")
+		// Extract user prompt to use for semantic ranking
+		var userPrompt string
+		for i := len(req.Messages) - 1; i >= 0; i-- {
+			if req.Messages[i].Role == "user" {
+				userPrompt = req.Messages[i].Content.GetString()
+				break
+			}
+		}
+		s.logger.Debug("Processing user prompt: %s", truncateForLog(userPrompt, 100))
+
+		// Create budget based on configuration
+		budget := hydration.HydrationBudget{
+			MaxTokens:   s.hydrationConfig.MaxTokens,
+			MaxEntities: s.hydrationConfig.MaxEntities,
+			UsedTokens:  0,
+			UsedEntities: 0,
+		}
+
+		// Use hybrid hydration with intelligent selection
+		plan, err := s.hybridHydrator.BuildHydrationPlan(userPrompt, episodeID, budget)
+		if err != nil {
+			s.logger.Warn("Hybrid hydration failed, falling back to basic hydration: %v", err)
+			hydrationContent, hydratedKeys, hydrationErr = s.hydrator.HydrateWithTracking(episodeID)
+		} else {
+			s.logger.Debug("Hybrid hydration plan created with %d entities", len(plan.Entities))
+			hydrationContent, hydratedKeys, hydrationErr = s.hybridHydrator.ExecutePlan(plan, episodeID)
+		}
+	} else {
+		s.logger.Debug("Using basic hydration engine (hybrid not available)")
+		// Fallback to basic hydration
+		hydrationContent, hydratedKeys, hydrationErr = s.hydrator.HydrateWithTracking(episodeID)
+	}
+
+	if hydrationErr != nil {
+		s.logger.Error("Hydration failed: %v", hydrationErr)
 		http.Error(w, "Internal error", http.StatusInternalServerError)
 		return
 	}
@@ -238,6 +282,16 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 			"llm_prompt_bytes": len(promptPayload),
 		}); err != nil {
 			s.logger.Error("Failed to update episode metadata: %v", err)
+		}
+	}
+
+	// Log token usage if debug mode is enabled
+	if s.debugMode {
+		if client, ok := s.llmClient.(interface{ CountMessagesTokens([]llm.Message) int }); ok {
+			totalTokens := client.CountMessagesTokens(req.Messages)
+			s.logger.Debug("Total tokens in request: %d", totalTokens)
+		} else {
+			s.logger.Debug("LLM client does not support token counting interface")
 		}
 	}
 
@@ -313,6 +367,28 @@ func (s *Server) handleNonStreamingCompletion(w http.ResponseWriter, r *http.Req
 		s.logger.Error("LLM call failed: %v", err)
 		http.Error(w, "Internal error", http.StatusInternalServerError)
 		return
+	}
+
+	// Log token usage for the final response if debug mode is enabled
+	if s.debugMode && response != nil {
+		if response.Usage.TotalTokens > 0 {
+			s.logger.Debug("Final response token usage - Prompt: %d, Completion: %d, Total: %d",
+				response.Usage.PromptTokens, response.Usage.CompletionTokens, response.Usage.TotalTokens)
+		} else {
+			// If the API didn't return token usage, estimate it
+			if client, ok := s.llmClient.(interface{ CountMessagesTokens([]llm.Message) int }); ok {
+				promptTokens := client.CountMessagesTokens(req.Messages)
+				if tokenClient, ok := s.llmClient.(interface{ CountTokens(string) int }); ok {
+					completionTokens := tokenClient.CountTokens(responseContent)
+					s.logger.Debug("Final response estimated token usage - Prompt: %d, Completion: %d, Total: %d",
+						promptTokens, completionTokens, promptTokens+completionTokens)
+				} else {
+					s.logger.Debug("LLM client does not support CountTokens method (final response)")
+				}
+			} else {
+				s.logger.Debug("LLM client does not support CountMessagesTokens method (final response)")
+			}
+		}
 	}
 
 	// Post-processing: store response and trigger shadow audit
@@ -398,6 +474,16 @@ func (s *Server) completeWithTools(ctx context.Context, messages []llm.Message, 
 	var toolResultHashes []string
 	rounds := 0
 
+	// Count tokens in initial messages if debug mode is enabled
+	if s.debugMode {
+		if client, ok := s.llmClient.(interface{ CountMessagesTokens([]llm.Message) int }); ok {
+			promptTokens := client.CountMessagesTokens(messages)
+			s.logger.Debug("Initial prompt tokens: %d", promptTokens)
+		} else {
+			s.logger.Debug("LLM client does not support token counting interface (initial messages)")
+		}
+	}
+
 	if userContent, ok := lastUserMessageContent(messages); ok {
 		calls, err := extractToolCalls(userContent)
 		if err != nil {
@@ -431,12 +517,47 @@ func (s *Server) completeWithTools(ctx context.Context, messages []llm.Message, 
 		}
 	}
 
+	// Log request data if debug mode is enabled
+	if s.debugMode {
+		s.logger.Debug("Sending request to LLM with %d messages", len(messages))
+		for i, msg := range messages {
+			contentStr := msg.Content.GetString()
+			s.logger.Debug("Message %d - Role: %s, Content length: %d", i+1, msg.Role, len(contentStr))
+			if len(contentStr) > 200 { // Only log if short enough
+				s.logger.Debug("Message %d content: %s", i+1, truncateForLog(contentStr, 200))
+			}
+		}
+	}
+
 	response, err := s.llmClient.Chat(ctx, messages)
 	if err != nil {
 		return nil, "", err
 	}
 
 	responseContent := extractResponseContent(response)
+
+	// Log response data if debug mode is enabled
+	if s.debugMode && response != nil {
+		s.logger.Debug("Received response from LLM")
+		if response.Usage.TotalTokens > 0 {
+			s.logger.Debug("Token usage - Prompt: %d, Completion: %d, Total: %d",
+				response.Usage.PromptTokens, response.Usage.CompletionTokens, response.Usage.TotalTokens)
+		} else {
+			// If the API didn't return token usage, estimate it
+			if client, ok := s.llmClient.(interface{ CountMessagesTokens([]llm.Message) int }); ok {
+				promptTokens := client.CountMessagesTokens(messages)
+				if tokenClient, ok := s.llmClient.(interface{ CountTokens(string) int }); ok {
+					completionTokens := tokenClient.CountTokens(responseContent)
+					s.logger.Debug("Estimated token usage - Prompt: %d, Completion: %d, Total: %d",
+						promptTokens, completionTokens, promptTokens+completionTokens)
+				} else {
+					s.logger.Debug("LLM client does not support CountTokens method")
+				}
+			} else {
+				s.logger.Debug("LLM client does not support CountMessagesTokens method (response)")
+			}
+		}
+	}
 
 	for rounds < toolMaxRounds {
 		calls, err := extractToolCalls(responseContent)
@@ -476,11 +597,39 @@ func (s *Server) completeWithTools(ctx context.Context, messages []llm.Message, 
 			messages = append(messages, llm.Message{Role: "tool", Content: llm.Content{Value: resultText}})
 		}
 
+		// Log additional round data if debug mode is enabled
+		if s.debugMode {
+			s.logger.Debug("Sending additional request to LLM (round %d) with %d messages", rounds, len(messages))
+		}
+
 		response, err = s.llmClient.Chat(ctx, messages)
 		if err != nil {
 			return response, responseContent, err
 		}
 		responseContent = extractResponseContent(response)
+
+		// Log additional round response data if debug mode is enabled
+		if s.debugMode && response != nil {
+			s.logger.Debug("Received response from LLM (round %d)", rounds)
+			if response.Usage.TotalTokens > 0 {
+				s.logger.Debug("Token usage - Prompt: %d, Completion: %d, Total: %d",
+					response.Usage.PromptTokens, response.Usage.CompletionTokens, response.Usage.TotalTokens)
+			} else {
+				// If the API didn't return token usage, estimate it
+				if client, ok := s.llmClient.(interface{ CountMessagesTokens([]llm.Message) int }); ok {
+					promptTokens := client.CountMessagesTokens(messages)
+					if tokenClient, ok := s.llmClient.(interface{ CountTokens(string) int }); ok {
+						completionTokens := tokenClient.CountTokens(responseContent)
+						s.logger.Debug("Estimated token usage - Prompt: %d, Completion: %d, Total: %d",
+							promptTokens, completionTokens, promptTokens+completionTokens)
+					} else {
+						s.logger.Debug("LLM client does not support CountTokens method (round %d)", rounds)
+					}
+				} else {
+					s.logger.Debug("LLM client does not support CountMessagesTokens method (round %d)", rounds)
+				}
+			}
+		}
 	}
 
 	if rounds > 0 {

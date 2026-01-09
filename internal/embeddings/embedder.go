@@ -2,7 +2,6 @@ package embeddings
 
 import (
 	"crypto/sha256"
-	"encoding/binary"
 	"fmt"
 	"math"
 	"strings"
@@ -52,7 +51,7 @@ func (e *SimpleEmbedder) Embed(text string) ([]float32, error) {
 		embedding[i] = value
 	}
 
-	// Component 2: Character frequency features (second half)
+	// Component 2: Character frequency features (remaining dimensions)
 	charFreq := make(map[rune]int)
 	totalChars := 0
 	for _, char := range text {
@@ -61,7 +60,6 @@ func (e *SimpleEmbedder) Embed(text string) ([]float32, error) {
 	}
 
 	// Generate features from character frequencies
-	freqDim := e.dimensions - hashDim
 	idx := hashDim
 	for char, freq := range charFreq {
 		if idx >= e.dimensions {

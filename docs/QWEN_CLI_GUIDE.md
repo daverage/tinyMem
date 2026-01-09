@@ -1,439 +1,1139 @@
-# tinyMem with Qwen CLI Integration Guide
+# Setting Up tinyMem with Qwen Code CLI
 
-## 🎯 Overview
+ 
 
-This guide explains how to integrate tinyMem with the Qwen CLI tool. tinyMem provides state management and context hydration capabilities that work seamlessly with the Qwen CLI, allowing you to maintain conversation history and code state while leveraging the power of Qwen's AI models.
+This guide shows you how to integrate tinyMem with **Qwen Code CLI** - a separate command-line tool for Qwen models that provides stateful memory and intelligent code retrieval.
 
-**Key Benefits:**
-- ✅ Deterministic state management across Qwen CLI sessions
-- ✅ Automatic context hydration with relevant code snippets
-- ✅ Reduced token usage by sending only relevant context
-- ✅ Session continuity with `--continue` and `--resume` options
+ 
 
 ---
 
-## 🚀 Quick Start
+ 
 
-### 1. Verify Qwen CLI Installation
+## 📋 **What is Qwen Code CLI?**
 
-First, ensure you have the Qwen CLI installed (which you already have via Homebrew):
+ 
 
-```bash
-# Check installation
-qwen --version
-# Should output: 0.6.0 or similar
+Qwen Code CLI is an **official CLI tool** from QwenLM that lets you interact with Qwen Code models from your terminal. It's similar to Claude CLI or GitHub Copilot CLI.
 
-# Test basic functionality
-qwen --prompt "Say hello"
-```
+ 
 
-### 2. Configure tinyMem for Qwen CLI
+**GitHub:** https://github.com/QwenLM/qwen-code
 
-Create a configuration file that tells tinyMem to use the Qwen CLI as the LLM provider:
-
-```bash
-# Create a new config file for Qwen CLI
-cp config/config.example.toml config/config.qwen-cli.toml
-```
-
-Edit the configuration file to use the CLI endpoint:
-
-```toml
-[llm]
-llm_provider = "qwen"
-llm_endpoint = "cli"
-llm_api_key = ""
-llm_model = "qwen-max"  # or whatever model you prefer
-
-[server]
-port = 4321
-host = "127.0.0.1"
-
-[context]
-recentContextPairs = 5
-maxContextTokens = 8000
-```
-
-### 3. Start tinyMem with Qwen CLI
-
-```bash
-# Start tinyMem with the Qwen CLI configuration
-./tinyMem --config config/config.qwen-cli.toml
-```
-
-You should see:
-```
-Using CLI provider: qwen
-tinyMem Ready
-Endpoint: http://127.0.0.1:4321/v1/chat/completions
-```
-
-### 4. Use with Your Favorite Tools
-
-Now you can use tinyMem's HTTP endpoint with any tool that supports OpenAI-compatible APIs:
-
-```bash
-# Use with curl
-curl -X POST http://localhost:4321/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "messages": [
-      {"role": "user", "content": "Write a Go function to add two integers"}
-    ]
-  }'
-
-# Use with VS Code, JetBrains IDEs, or any other tool
-# that supports OpenAI-compatible endpoints
-```
+ 
 
 ---
 
-## 🔧 Configuration Details
+ 
 
-### Qwen CLI Provider Configuration
+## 🔧 **Step 1: Install Qwen Code CLI**
 
-tinyMem recognizes the Qwen CLI through the `cli:qwen` provider format:
+ 
 
-```toml
-[llm]
-llm_provider = "cli:qwen"
-llm_endpoint = "cli"
-llm_model = "qwen-max"
-```
+### **Option A: Install via npm (Recommended)**
 
-This tells tinyMem to:
-1. Use the CLI adapter
-2. Execute the `qwen` command
-3. Pass the conversation context to the CLI tool
-4. Process the response back through tinyMem's state management
-
-### Session Management Integration
-
-tinyMem's session management works perfectly with Qwen CLI's session features:
+ 
 
 ```bash
-# Start tinyMem with Qwen CLI
-./tinyMem --config config/config.qwen-cli.toml
 
-# In another terminal, use the tinyMem endpoint
-curl -X POST http://localhost:4321/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "messages": [{"role": "user", "content": "Create a simple calculator class in Python"}],
-    "session_id": "calculator-project"
-  }'
+# Install globally
 
-# Later, continue the same session
-curl -X POST http://localhost:4321/v1/chat/completions \
-  -H "Content-Type" \
-  -d '{
-    "messages": [{"role": "user", "content": "Add division method to the calculator"}],
-    "session_id": "calculator-project"
-  }'
-```
+npm install -g @qwen-code/qwen-code@latest
 
-### Context Hydration with Qwen CLI
-
-tinyMem's context hydration works seamlessly with Qwen CLI:
-
-```
-## Context Provided to Qwen CLI
-[CURRENT STATE: AUTHORITATIVE]
-Entity: /calculator.py::Calculator
-Source: Confirmed via AST
-
-class Calculator:
-    def __init__(self):
-        pass
-    
-    def add(self, a, b):
-        return a + b
-
-    def subtract(self, a, b):
-        return a - b
-[END CURRENT STATE]
-
-[RECENT CONTEXT]
-Pair 1:
-USER: Create a simple calculator class in Python
-ASSISTANT: Here's a basic calculator class...
-[END RECENT CONTEXT]
-
-Can you add a division method to the calculator?
-```
-
-**Key Benefit:** Only relevant code + recent context, not the entire history!
-
----
-
-## 💰 Token Savings Example
-
-### Without tinyMem (Direct Qwen CLI usage)
-```bash
-# Request 1
-qwen "Write a function to add numbers"
-# Tokens: 20 (prompt) + 100 (response) = 120
-
-# Request 2 - Must provide full context manually
-qwen "Here's what I have: [paste 100 tokens of code]
-Now modify it to handle overflow"
-# Tokens: 150 (prompt with full context) + 100 (response) = 250
-
-# Request 3 - Context keeps growing
-qwen "Here's what I have: [paste 200 tokens of code]
-Now add error handling"
-# Tokens: 250 (prompt with full context) + 100 (response) = 350
-
-Total: 720 tokens
-```
-
-### With tinyMem + Qwen CLI (Managed context)
-```bash
-# Start tinyMem with Qwen CLI
-./tinyMem --config config/config.qwen-cli.toml
-
-# Request 1 - tinyMem stores the function
-curl -X POST http://localhost:4321/v1/chat/completions \
-  -d '{"messages":[{"role":"user","content":"Write a function to add numbers"}]}'
-# Tokens: 20 (prompt) + 100 (response) = 120
-# State Map: Add function stored (AUTHORITATIVE)
-
-# Request 2 - tinyMem provides only relevant code
-curl -X POST http://localhost:4321/v1/chat/completions \
-  -d '{"messages":[{"role":"user","content":"Modify Add to handle overflow"}]}'
-# Tokens: 50 (prompt + hydrated Add function) + 100 (response) = 150
-# State Map: Add function updated
-
-# Request 3 - Still only relevant code
-curl -X POST http://localhost:4321/v1/chat/completions \
-  -d '{"messages":[{"role":"user","content":"Add error handling"}]}'
-# Tokens: 50 (prompt + hydrated Add function) + 100 (response) = 150
-
-Total: 420 tokens (42% savings!)
-```
-
----
-
-## 🎯 Use Cases
-
-### 1. **Enhanced Development Workflow**
-- Use tinyMem's state management with Qwen CLI's advanced features
-- Leverage Qwen CLI's approval modes (`--approval-mode`) with tinyMem's entity tracking
-- Combine Qwen CLI's extensions with tinyMem's context hydration
-
-### 2. **Reduced API Costs**
-- Only send relevant context to Qwen models
-- Avoid repeating full conversation history
-- Maximize efficiency of Qwen's token usage
-
-### 3. **Integration with Existing Tools**
-- Use tinyMem's HTTP endpoint with IDE plugins
-- Maintain Qwen CLI's rich features while getting state management
-- Example: Use Qwen CLI with tinyMem in VS Code terminal
-
-### 4. **Advanced Features Combination**
-- Use Qwen CLI's `--sandbox` mode with tinyMem's state tracking
-- Combine Qwen CLI's `--experimental-skills` with tinyMem's entity resolution
-- Leverage Qwen CLI's web search (`--web-search-default`) with tinyMem's context
-
----
-
-## 🔍 Advanced Configuration
-
-### Custom Qwen CLI Options
-
-You can pass specific Qwen CLI options through tinyMem by configuring environment variables:
-
-```bash
-# Set Qwen CLI specific options as environment variables
-export QWEN_MODEL="qwen-plus"
-export QWEN_APPROVAL_MODE="auto-edit"
-
-# Start tinyMem
-./tinyMem --config config/config.qwen-cli.toml
-```
-
-### Multiple Model Configuration
-
-You can configure different Qwen models in your config:
-
-```toml
-[llm]
-llm_provider = "cli:qwen"
-llm_endpoint = "cli"
-llm_model = "qwen-max"  # Use qwen-max for complex tasks
-
-# Or use qwen-plus for balanced performance
-# llm_model = "qwen-plus"
-
-# Or use qwen-turbo for faster responses
-# llm_model = "qwen-turbo"
-```
-
-### Qwen CLI Extensions Integration
-
-If you're using Qwen CLI extensions, you can configure them in your setup:
-
-```bash
-# First, install extensions with Qwen CLI directly
-qwen extensions install https://github.com/example/qwen-git-extension
-
-# Then configure tinyMem to use them
-# This would typically be handled by setting the appropriate environment
-# variables that Qwen CLI recognizes
-```
-
----
-
-## 📊 Comparison: Direct Qwen CLI vs tinyMem + Qwen CLI
-
-| Feature | Direct Qwen CLI | tinyMem + Qwen CLI |
-|---------|----------------|-------------------|
-| **State Management** | ❌ Manual context | ✅ Automatic state tracking |
-| **Context Hydration** | ❌ Manual pasting | ✅ Automatic code injection |
-| **Session Continuity** | ❌ Limited | ✅ Full session support |
-| **Token Efficiency** | ❌ Full context sent | ✅ Relevant context only |
-| **IDE Integration** | ❌ Terminal only | ✅ HTTP endpoint for tools |
-| **Entity Tracking** | ❌ None | ✅ Full AST-based tracking |
-| **Use Case** | Quick tasks | Complex projects |
-
-**Recommendation:**
-- **Direct Qwen CLI**: For quick, standalone tasks
-- **tinyMem + Qwen CLI**: For ongoing projects requiring state management
-
----
-
-## 🐛 Troubleshooting
-
-### Qwen CLI not found
-```
-Error: exec: "qwen": executable file not found in $PATH
-```
-
-**Solution:**
-```bash
-# Check if qwen is in PATH
-which qwen
+ 
 
 # Verify installation
+
 qwen --version
 
-# If not found, reinstall
-brew install qwen
-# or
-npm install -g @qwen/qwen-cli
 ```
 
-### Configuration errors
-```
-Error: Unknown provider: qwen
-```
+ 
 
-**Solution:**
-```toml
-# Make sure to use the correct provider format
-[llm]
-llm_provider = "cli:qwen"  # Note the cli: prefix
-llm_endpoint = "cli"
-```
+### **Option B: Install via Homebrew (macOS/Linux)**
 
-### Context not hydrating
-```
-Qwen CLI receives full context instead of relevant snippets
-```
+ 
 
-**Solution:**
-- Verify that tinyMem is running with the correct configuration
-- Check that the LLM provider is set to `"cli:qwen"` and not `"http"`
-- Ensure the state map is properly populated with entities
-
-### Session management issues
-```
-Sessions not persisting between calls
-```
-
-**Solution:**
 ```bash
-# Use the --chat-recording flag with Qwen CLI if needed
-# This is handled automatically by tinyMem, but you can verify:
-export QWEN_CHAT_RECORDING=true
-./tinyMem --config config/config.qwen-cli.toml
+
+brew install qwen-code
+
+ 
+
+# Verify installation
+
+qwen --version
+
 ```
+
+ 
+
+### **Prerequisites:**
+
+- **Node.js 20+** (required for npm installation)
+
+ 
 
 ---
 
-## 📚 Example Workflow
+ 
 
-### Scenario: Building a Python Application with tinyMem + Qwen CLI
+## 📦 **Step 2: Build tinyMem**
+
+ 
 
 ```bash
-# 1. Configure tinyMem for Qwen CLI
-cat > config/config.qwen-python.toml << EOF
+
+# Clone the repository (if not already done)
+
+git clone https://github.com/yourusername/tinyMem.git
+
+cd tinyMem
+
+ 
+
+# Build tinyMem
+
+go build -o tinyMem ./cmd/tinyMem
+
+ 
+
+# Verify build
+
+./tinyMem --version
+
+```
+
+ 
+
+---
+
+ 
+
+## ⚙️ **Step 3: Configure tinyMem for Qwen Code**
+
+ 
+
+### **Create Qwen-specific config:**
+
+ 
+
+```bash
+
+# Create config directory if it doesn't exist
+
+mkdir -p config
+
+ 
+
+# Create config file
+
+cat > config/config.qwen-code.toml << 'EOF'
+
+# tinyMem Configuration for Qwen Code CLI
+
+ 
+
+[database]
+
+database_path = "./runtime/tinyMem.db"
+
+ 
+
+[logging]
+
+log_path = "./runtime/tinyMem.log"
+
+debug = true
+
+ 
+
 [llm]
-llm_provider = "cli:qwen"
+
+# Use "qwen-code" to indicate Qwen Code CLI provider
+
+llm_provider = "qwen-code"
+
 llm_endpoint = "cli"
-llm_model = "qwen-max"
 
-[server]
-port = 4321
-host = "127.0.0.1"
+llm_api_key = ""
 
-[context]
-recentContextPairs = 3
-maxContextTokens = 12000
+llm_model = "qwen-code"
+
+ 
+
+[proxy]
+
+listen_address = "127.0.0.1:4321"
+
+ 
+
+[hydration]
+
+# Budget settings (tuned for Qwen Code models)
+
+max_tokens = 16000      # Conservative limit for smaller models
+
+max_entities = 30       # Limit entities to prevent context overflow
+
+ 
+
+# Structural anchors (always enabled for deterministic retrieval)
+
+enable_file_mention_anchors = true
+
+enable_symbol_mention_anchors = true
+
+enable_previous_hydration_anchors = true
+
+ 
+
+# Semantic ranking (optional - start disabled)
+
+enable_semantic_ranking = false
+
+semantic_threshold = 0.7
+
+semantic_budget_tokens = 4000
+
+semantic_budget_entities = 5
+
+ 
+
+# Embedding provider
+
+embedding_provider = "simple"
+
+embedding_model = "simple-384"
+
+embedding_cache_ttl = 86400
+
 EOF
 
-# 2. Start tinyMem with Qwen CLI
-./tinyMem --config config/config.qwen-python.toml
-
-# 3. Request: Create a basic calculator
-curl -X POST http://localhost:4321/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "messages": [{
-      "role": "user",
-      "content": "Write a Python class for a basic calculator with add, subtract, multiply, divide methods"
-    }]
-  }'
-
-# Result: Calculator class committed to State Map
-
-# 4. Request: Add scientific functions (tinyMem hydrates Calculator class)
-curl -X POST http://localhost:4321/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "messages": [{
-      "role": "user",
-      "content": "Add power and square root methods to the calculator"
-    }]
-  }'
-
-# Result: Only sends:
-#  [CURRENT STATE] Calculator class (with 4 methods)
-#  + "Add power and square root methods"
-# Instead of full conversation history!
-
-# 5. Check state and continue development
-curl http://localhost:4321/state | jq
 ```
 
-**Tokens saved:** ~40-60% compared to manual context management
+ 
+
+### **Key Configuration Notes:**
+
+ 
+
+- **`llm_provider = "qwen-code"`** - Tells tinyMem to use Qwen Code CLI
+
+- **`llm_endpoint = "cli"`** - Indicates CLI mode (not HTTP)
+
+- **`max_tokens = 16000`** - Conservative budget to prevent context overflow
+
+- **`max_entities = 30`** - Limits number of code entities hydrated
+
+ 
 
 ---
 
-## 🚀 Next Steps
+ 
 
-1. **Start Small**: Begin with simple projects to understand the workflow
-2. **Configure Properly**: Set up your config file with appropriate context sizes
-3. **Monitor Usage**: Watch how tinyMem manages your code entities
-4. **Scale Up**: Apply to larger projects where state management becomes critical
+## 🚀 **Step 4: Start tinyMem**
 
-For more information:
-- Main README: [README.md](../README.md)
-- General CLI Integration: [CLI_GUIDE.md](CLI_GUIDE.md)
-- Configuration: [config/config.toml](../config/config.toml)
-- Specification: [specification.md](specification.md)
+ 
+
+```bash
+
+# Create runtime directory
+
+mkdir -p runtime
+
+ 
+
+# Start tinyMem with Qwen Code config
+
+./tinyMem --config config/config.qwen-code.toml
+
+```
+
+ 
+
+**Expected output:**
+
+```
+
+[INFO] Starting tinyMem proxy server on 127.0.0.1:4321
+
+[INFO] Using CLI provider: qwen-code
+
+[INFO] CLI command: qwen -p [prompt]
+
+[INFO] Database initialized at ./runtime/tinyMem.db
+
+[INFO] Hydration budget: 16000 tokens, 30 entities
+
+[INFO] Server ready for requests
+
+```
+
+ 
 
 ---
 
-**tinyMem + Qwen CLI Integration** — Combining Qwen's powerful AI with deterministic state management! 🎯
+ 
+
+## ✅ **Step 5: Test the Setup**
+
+ 
+
+### **Test 1: Health Check**
+
+ 
+
+```bash
+
+curl http://localhost:4321/health
+
+```
+
+ 
+
+**Expected:**
+
+```json
+
+{"status": "ok", "timestamp": 1704931200}
+
+```
+
+ 
+
+### **Test 2: Doctor Check**
+
+ 
+
+```bash
+
+curl http://localhost:4321/doctor | jq
+
+```
+
+ 
+
+**Expected:**
+
+```json
+
+{
+
+  "database": {
+
+    "connected": true,
+
+    "vault_count": 0,
+
+    "state_count": 0,
+
+    "ledger_count": 0
+
+  },
+
+  "llm": {
+
+    "provider": "qwen-code",
+
+    "endpoint": "cli",
+
+    "model": "qwen-code"
+
+  },
+
+  "proxy": {
+
+    "listen_address": "127.0.0.1:4321",
+
+    "uptime_seconds": 10
+
+  }
+
+}
+
+```
+
+ 
+
+### **Test 3: Simple Chat Request**
+
+ 
+
+```bash
+
+curl -X POST http://localhost:4321/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen-code",
+    "messages": [
+      {"role": "user", "content": "Write a Python function that adds two numbers."}
+    ],
+    "stream": false
+  }'
+
+```
+
+ 
+
+**Expected:** JSON response with Qwen's generated code.
+
+ 
+
+---
+
+ 
+
+## 🎯 **Step 6: Configure Your Code Editor**
+
+### **Option A: VSCode with Continue.dev**
+
+ 
+
+Add to `.continue/config.json`:
+
+ 
+
+```json
+
+{
+
+  "models": [
+
+    {
+
+      "title": "Qwen Code via tinyMem",
+
+      "provider": "openai",
+
+      "model": "qwen-code",
+
+      "apiBase": "http://localhost:4321/v1",
+
+      "apiKey": "not-needed"
+
+    }
+
+  ]
+
+}
+
+```
+
+ 
+
+### **Option B: Cursor**
+
+ 
+
+Settings → Models → Add Custom Model:
+
+- **Base URL:** `http://localhost:4321/v1`
+
+- **Model Name:** `qwen-code`
+
+- **API Key:** Leave empty
+
+ 
+
+### **Option C: Direct curl (for testing)**
+
+ 
+
+```bash
+
+curl -X POST http://localhost:4321/v1/chat/completions \
+
+  -H "Content-Type: application/json" \
+
+  -d '{
+
+    "model": "qwen-code",
+
+    "messages": [
+
+      {"role": "user", "content": "Create a REST API endpoint for user login"}
+
+    ]
+    
+  }'
+
+```
+
+ 
+
+---
+
+ 
+
+## 📊 **How tinyMem Works with Qwen Code**
+
+ 
+
+### **Without tinyMem:**
+
+ 
+
+```
+
+You: Write a Flask app
+
+Qwen: [generates app.py]
+
+ 
+
+You: Add authentication
+
+Qwen: [doesn't know about previous app.py, starts fresh]
+
+```
+
+ 
+
+### **With tinyMem:**
+
+ 
+
+```
+
+You: Write a Flask app
+
+tinyMem → Stores app.py entities in state map
+
+Qwen: [generates app.py]
+
+ 
+
+You: Add authentication
+
+tinyMem → Hydrates app.py entities
+
+tinyMem → Sends: [CURRENT STATE: app.py] + your prompt
+
+Qwen: [generates auth.py knowing about existing app structure]
+
+```
+
+ 
+
+---
+
+ 
+
+## 🔍 **Monitor tinyMem State**
+
+ 
+
+### **Check State Map:**
+
+ 
+
+```bash
+
+curl http://localhost:4321/state | jq
+
+```
+
+ 
+
+**Example output:**
+
+```json
+
+{
+
+  "authoritative_count": 3,
+
+  "entities": [
+
+    {
+
+      "entity_key": "/app.py::create_app",
+
+      "filepath": "/app.py",
+
+      "symbol": "create_app",
+
+      "state": "AUTHORITATIVE",
+
+      "confidence": "CONFIRMED",
+
+      "artifact_hash": "7f8a9b...",
+
+      "stale": false
+
+    }
+
+  ]
+
+}
+
+```
+
+ 
+
+### **Check Recent Conversations:**
+
+ 
+
+```bash
+
+curl http://localhost:4321/recent | jq
+
+```
+
+ 
+
+### **Introspect Hydration Decisions:**
+
+ 
+
+```bash
+
+# Get latest episode ID
+
+EPISODE_ID=$(curl -s http://localhost:4321/recent | jq -r '.episodes[0].episode_id')
+
+ 
+
+# See what was hydrated
+
+curl "http://localhost:4321/introspect/hydration?episode_id=$EPISODE_ID" | jq
+
+```
+
+ 
+
+**Shows:**
+
+- Which code entities were included
+
+- Why (file mention, symbol mention, previous hydration)
+
+- Token counts and budget usage
+
+ 
+
+---
+
+ 
+
+## 🔧 **Advanced Configuration**
+
+ 
+
+### **Increase Budget for Larger Projects:**
+
+ 
+
+```toml
+
+[hydration]
+
+max_tokens = 32000      # More context for complex tasks
+
+max_entities = 50       # More code entities
+
+```
+
+ 
+
+### **Enable Semantic Ranking:**
+
+ 
+
+```toml
+
+[hydration]
+
+enable_semantic_ranking = true
+
+semantic_threshold = 0.7
+
+semantic_budget_tokens = 8000
+
+semantic_budget_entities = 10
+
+```
+
+ 
+
+**Benefits:**
+
+- Finds related code even without explicit mentions
+
+- Example: "fix auth bug" → automatically includes `ValidateToken`, `CheckPermissions`, etc.
+
+ 
+
+### **Use Different Qwen Model:**
+
+ 
+
+If Qwen Code CLI supports model selection (check docs):
+
+```toml
+
+[llm]
+
+llm_model = "qwen2.5-coder-7b"  # Adjust based on available models
+
+```
+
+ 
+
+---
+
+ 
+
+## 🐛 **Troubleshooting**
+
+ 
+
+### **Problem 1: "qwen: command not found"**
+
+ 
+
+**Solution:**
+
+```bash
+
+# Check if qwen is in PATH
+
+which qwen
+
+ 
+
+# If not found, reinstall:
+
+npm install -g @qwen-code/qwen-code@latest
+
+ 
+
+# Verify:
+
+qwen --version
+
+```
+
+ 
+
+### **Problem 2: Qwen Code requires authentication**
+
+ 
+
+Qwen Code CLI may require authentication. Check the official docs:
+
+ 
+
+```bash
+
+# Authenticate Qwen Code
+
+qwen --auth
+
+ 
+
+# Or set API key if needed
+
+export QWEN_API_KEY="your-key"
+
+```
+
+ 
+
+### **Problem 3: tinyMem can't execute qwen**
+
+ 
+
+**Check logs:**
+
+```bash
+
+tail -f runtime/tinyMem.log
+
+```
+
+ 
+
+**Look for:**
+
+```
+
+[INFO] Using CLI provider: qwen-code
+
+[ERROR] Failed to execute command: qwen -p [prompt]
+
+```
+
+ 
+
+**Solutions:**
+
+- Verify `qwen` is executable: `qwen --version`
+
+- Check PATH: `echo $PATH`
+
+- Try absolute path in config (custom provider):
+
+  ```toml
+
+  [llm]
+
+  llm_provider = "cli:/usr/local/bin/qwen"
+
+  ```
+
+ 
+
+### **Problem 4: Context overflow errors**
+
+ 
+
+**Error:** `"maximum context length exceeded"`
+
+ 
+
+**Solution:** Reduce hydration budget:
+
+```toml
+
+[hydration]
+
+max_tokens = 8000       # Lower limit
+
+max_entities = 15       # Fewer entities
+
+```
+
+ 
+
+### **Problem 5: Slow response times**
+
+ 
+
+**Causes:**
+
+- Qwen Code CLI loads model on every request
+
+- Large hydration context
+
+ 
+
+**Solutions:**
+
+ 
+
+**A) Reduce budget:**
+
+```toml
+
+[hydration]
+
+max_tokens = 8000
+
+max_entities = 20
+
+```
+
+ 
+
+**B) Check Qwen Code CLI performance:**
+
+```bash
+
+# Test direct performance
+
+time qwen -p "Hello"
+
+```
+
+ 
+
+If slow, consider using Qwen via Ollama instead (faster):
+
+```bash
+
+ollama pull qwen:7b
+
+ 
+
+# Update config:
+
+[llm]
+
+llm_provider = "ollama"
+
+llm_endpoint = "http://localhost:11434/v1"
+
+llm_model = "qwen:7b"
+
+```
+
+ 
+
+---
+
+ 
+
+## 📊 **Token Usage Example**
+
+ 
+
+### **Without tinyMem:**
+
+```
+
+Request 1: "Write Flask app" → 200 tokens
+
+Request 2: "Add auth" + manual paste of app.py → 500 tokens
+
+Request 3: "Fix bug" + manual paste of all code → 800 tokens
+
+Total: 1500 tokens
+
+```
+
+ 
+
+### **With tinyMem:**
+
+```
+
+Request 1: "Write Flask app" → 200 tokens
+
+Request 2: "Add auth" + auto-hydrated app.py → 350 tokens
+
+Request 3: "Fix bug" + auto-hydrated relevant entities → 400 tokens
+
+Total: 950 tokens (37% savings)
+
+```
+
+ 
+
+---
+
+ 
+
+## 🎓 **Usage Examples**
+
+ 
+
+### **Example 1: Build a Multi-File Project**
+
+ 
+
+```bash
+
+# Request 1: Create initial structure
+
+curl -X POST http://localhost:4321/v1/chat/completions \
+
+  -H "Content-Type: application/json" \
+
+  -d '{
+
+    "model": "qwen-code",
+
+    "messages": [{"role": "user", "content": "Create a Python REST API with Flask"}]
+
+  }'
+
+ 
+
+# tinyMem stores: /app.py entities
+
+ 
+
+# Request 2: Add authentication
+
+curl -X POST http://localhost:4321/v1/chat/completions \
+
+  -H "Content-Type: application/json" \
+
+  -d '{
+
+    "model": "qwen-code",
+
+    "messages": [{"role": "user", "content": "Add JWT authentication"}]
+
+  }'
+
+ 
+
+# tinyMem hydrates app.py, Qwen generates auth.py with context
+
+ 
+
+# Request 3: Add database
+
+curl -X POST http://localhost:4321/v1/chat/completions \
+
+  -H "Content-Type: application/json" \
+
+  -d '{
+
+    "model": "qwen-code",
+
+    "messages": [{"role": "user", "content": "Add PostgreSQL database"}]
+
+  }'
+
+ 
+
+# tinyMem hydrates app.py + auth.py, Qwen generates db.py
+
+```
+
+ 
+
+### **Example 2: Check What's in Memory**
+
+ 
+
+```bash
+
+# See all tracked code entities
+
+curl http://localhost:4321/state | jq '.entities[] | {symbol, filepath}'
+
+```
+
+ 
+
+Output:
+
+```json
+
+{"symbol": "create_app", "filepath": "/app.py"}
+
+{"symbol": "run_server", "filepath": "/app.py"}
+
+{"symbol": "validate_token", "filepath": "/auth.py"}
+
+{"symbol": "init_db", "filepath": "/db.py"}
+
+```
+
+ 
+
+---
+
+ 
+
+## 🔄 **Alternative: Use Ollama for Better Performance**
+
+ 
+
+If Qwen Code CLI is slow, use Ollama instead:
+
+ 
+
+### **Install Ollama:**
+
+```bash
+
+curl -fsSL https://ollama.com/install.sh | sh
+
+ollama pull qwen:7b
+
+```
+
+ 
+
+### **Update tinyMem config:**
+
+```toml
+
+[llm]
+
+llm_provider = "ollama"
+
+llm_endpoint = "http://localhost:11434/v1"
+
+llm_api_key = ""
+
+llm_model = "qwen:7b"
+
+```
+
+ 
+
+**Benefits:**
+
+- Model stays loaded in memory (fast subsequent requests)
+
+- Optimized inference
+
+- GPU acceleration
+
+ 
+
+---
+
+ 
+
+## 📚 **Next Steps**
+
+ 
+
+1. **Enable Semantic Ranking:**
+
+   ```toml
+
+   enable_semantic_ranking = true
+
+   ```
+
+ 
+
+2. **Read Documentation:**
+
+   - `RETRIEVAL_INVARIANTS.md` - System guarantees and failure modes
+
+   - `HYBRID_RETRIEVAL_DESIGN.md` - Retrieval architecture
+
+   - `README.md` - Full feature documentation
+
+ 
+
+3. **Experiment with Budget:**
+
+   - Tune `max_tokens` based on your projects
+
+   - Monitor with `/introspect/hydration` endpoint
+
+ 
+
+4. **Check Qwen Code CLI docs:**
+
+   - https://github.com/QwenLM/qwen-code
+
+ 
+
+---
+
+ 
+
+## ✨ **What You Get with tinyMem + Qwen Code**
+
+ 
+
+- ✅ **Stateful Memory** - Qwen remembers all your code across sessions
+
+- ✅ **Token Budget** - Never exceed context limits
+
+- ✅ **Structural Anchors** - Deterministic code retrieval
+
+- ✅ **AST Verification** - Code is validated before storage
+
+- ✅ **ETV (External Truth)** - Detects manual file edits
+
+- ✅ **Introspection** - See why code was included
+
+- ✅ **Budget Control** - Prevent context overflow
+
+ 
+
+**Enjoy stateful, intelligent coding with Qwen! 🚀**

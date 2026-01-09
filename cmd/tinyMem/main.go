@@ -18,6 +18,7 @@ import (
 	"github.com/andrzejmarczewski/tinyMem/internal/logging"
 	"github.com/andrzejmarczewski/tinyMem/internal/runtime"
 	"github.com/andrzejmarczewski/tinyMem/internal/storage"
+	"github.com/andrzejmarczewski/tinyMem/internal/embeddings"
 )
 
 var (
@@ -131,11 +132,24 @@ func main() {
 	logger.Debug("Initializing hydration engine")
 	hydrator := hydration.New(rt.GetVault(), rt.GetState(), rt.GetHydrationTracker(), rt.GetConsistencyChecker())
 
+	// Initialize hybrid hydration engine with configuration
+	logger.Debug("Initializing hybrid hydration engine")
+	embedder, err := embeddings.GetEmbedder(cfg.Hydration.EmbeddingProvider, cfg.Hydration.EmbeddingModel, cfg.LLM.APIKey)
+	if err != nil {
+		logger.Warn("Failed to initialize embedder: %v (using basic hydration only)", err)
+		embedder = nil
+	}
+
+	// Configure hybrid hydrator with configuration values
+	rt.ConfigureHybridHydrator(logger, embedder, cfg.Hydration.EnableSemanticRanking, cfg.Hydration.SemanticThreshold)
+
 	// Initialize LLM client (HTTP or CLI based on provider)
 	logger.Debug("Initializing LLM client (provider=%s)", cfg.LLM.Provider)
 	var llmClient interface {
 		Chat(ctx context.Context, messages []llm.Message) (*llm.ChatResponse, error)
 		GetModel() string
+		CountMessagesTokens([]llm.Message) int
+		CountTokens(string) int
 	}
 
 	if cfg.LLM.IsCLIProvider() {
@@ -171,6 +185,7 @@ func main() {
 		cfg.LLM.Provider,
 		cfg.LLM.Endpoint,
 		cfg.Logging.Debug,
+		cfg.Hydration,
 	)
 
 	// Start server in goroutine

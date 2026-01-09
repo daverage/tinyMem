@@ -408,6 +408,11 @@ func isCommonWord(word string) bool {
 	return commonWords[strings.ToLower(word)]
 }
 
+// Engine returns the underlying basic hydration engine
+func (h *HybridEngine) Engine() *Engine {
+	return h.engine
+}
+
 // truncate truncates a string to maxLen characters
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
