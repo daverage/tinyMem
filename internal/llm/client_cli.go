@@ -41,6 +41,12 @@ var CLIProviders = map[string]CLIProviderConfig{
 		Model:       "gemini-pro",
 		ContextMode: "args",
 	},
+	"qwen-code": {
+		Command:     "qwen",
+		BaseArgs:    []string{"-p"},
+		Model:       "qwen-code",
+		ContextMode: "args",
+	},
 	"sgpt": {
 		Command:     "sgpt",
 		BaseArgs:    []string{"--no-cache"},
