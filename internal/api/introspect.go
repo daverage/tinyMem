@@ -109,11 +109,16 @@ func (s *Server) HandleIntrospectHydration(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	// Get hydrated entities for this episode
-	hydratedEntities, err := s.runtime.GetHydrationTracker().GetHydratedEntities(episodeID)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get hydrated entities: %v", err), http.StatusInternalServerError)
-		return
+	// Get hydrated entities for this episode from episode metadata
+	hydratedEntities := []string{}
+	if episode.Metadata != nil {
+		if hydratedData, ok := episode.Metadata["hydrated_entities"].([]interface{}); ok {
+			for _, item := range hydratedData {
+				if str, ok := item.(string); ok {
+					hydratedEntities = append(hydratedEntities, str)
+				}
+			}
+		}
 	}
 
 	// Build introspection response
@@ -121,8 +126,8 @@ func (s *Server) HandleIntrospectHydration(w http.ResponseWriter, r *http.Reques
 	totalTokens := 0
 
 	for _, entityKey := range hydratedEntities {
-		entity := s.runtime.GetState().Get(entityKey)
-		if entity == nil {
+		entity, err := s.runtime.GetState().Get(entityKey)
+		if err != nil || entity == nil {
 			continue
 		}
 
@@ -135,7 +140,10 @@ func (s *Server) HandleIntrospectHydration(w http.ResponseWriter, r *http.Reques
 		// Determine reason and method
 		reason, method, triggeredBy := s.determineHydrationReason(entityKey, episodeID, userMessage)
 
-		tokenCount := artifact.TokenCount
+		tokenCount := 0
+		if artifact.TokenCount != nil {
+			tokenCount = *artifact.TokenCount
+		}
 		totalTokens += tokenCount
 
 		blocks = append(blocks, HydrationBlockIntrospect{
@@ -171,7 +179,18 @@ func (s *Server) determineHydrationReason(entityKey, episodeID, query string) (r
 			break // Don't check the current episode
 		}
 
-		hydrated, _ := s.runtime.GetHydrationTracker().GetHydratedEntities(ep.EpisodeID)
+		// Get hydrated entities from episode metadata
+		hydrated := []string{}
+		if ep.Metadata != nil {
+			if hydratedData, ok := ep.Metadata["hydrated_entities"].([]interface{}); ok {
+				for _, item := range hydratedData {
+					if str, ok := item.(string); ok {
+						hydrated = append(hydrated, str)
+					}
+				}
+			}
+		}
+
 		for _, key := range hydrated {
 			if key == entityKey {
 				return "previously_hydrated", "tracking", fmt.Sprintf("hydrated in episode %s", ep.EpisodeID[:12]+"...")
@@ -180,8 +199,8 @@ func (s *Server) determineHydrationReason(entityKey, episodeID, query string) (r
 	}
 
 	// Check if query mentions the file or symbol
-	entity := s.runtime.GetState().Get(entityKey)
-	if entity == nil {
+	entity, err := s.runtime.GetState().Get(entityKey)
+	if err != nil || entity == nil {
 		return "unknown", "unknown", "entity not found in state"
 	}
 
@@ -223,8 +242,8 @@ func (s *Server) HandleIntrospectEntity(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Get entity from state
-	entity := s.runtime.GetState().Get(entityKey)
-	if entity == nil {
+	entity, err := s.runtime.GetState().Get(entityKey)
+	if err != nil || entity == nil {
 		http.Error(w, "Entity not found", http.StatusNotFound)
 		return
 	}
@@ -263,7 +282,18 @@ func (s *Server) HandleIntrospectEntity(w http.ResponseWriter, r *http.Request) 
 	var hydrationHistory []HydrationEventInfo
 	episodes, _ := s.runtime.GetLedger().GetRecentEpisodesBefore(time.Now().Unix(), 100)
 	for _, ep := range episodes {
-		hydrated, _ := s.runtime.GetHydrationTracker().GetHydratedEntities(ep.EpisodeID)
+		// Get hydrated entities from episode metadata
+		hydrated := []string{}
+		if ep.Metadata != nil {
+			if hydratedData, ok := ep.Metadata["hydrated_entities"].([]interface{}); ok {
+				for _, item := range hydratedData {
+					if str, ok := item.(string); ok {
+						hydrated = append(hydrated, str)
+					}
+				}
+			}
+		}
+
 		for _, key := range hydrated {
 			if key == entityKey {
 				hydrationHistory = append(hydrationHistory, HydrationEventInfo{
@@ -275,18 +305,18 @@ func (s *Server) HandleIntrospectEntity(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Check ETV status
-	etvResult := s.runtime.GetConsistencyChecker().CheckStaleness(entity)
+	isStale, diskExists, err := s.runtime.GetConsistencyChecker().IsEntityStale(entity)
 	etvStatus := ETVStatusIntrospect{
 		LastCheck:  time.Now(),
-		IsStale:    etvResult.IsStale,
-		DiskExists: etvResult.FileExists,
-		DiskHash:   etvResult.DiskHash,
+		IsStale:    isStale,
+		DiskExists: diskExists,
+		DiskHash:   "", // We don't have the actual hash here, only whether it exists
 		CacheHit:   false, // TODO: Track cache hits in consistency checker
 	}
 
 	response := IntrospectionEntityResponse{
 		EntityKey:        entityKey,
-		CurrentState:     entity.State,
+		CurrentState:     string(entity.State),
 		CurrentArtifact:  entity.ArtifactHash,
 		Filepath:         entity.Filepath,
 		ETVStatus:        etvStatus,
@@ -324,8 +354,8 @@ func (s *Server) HandleIntrospectGates(w http.ResponseWriter, r *http.Request) {
 
 	var evaluations []GateEvaluationInfo
 	for _, t := range transitions {
-		entity := s.runtime.GetState().Get(t.EntityKey)
-		if entity == nil {
+		entity, err := s.runtime.GetState().Get(t.EntityKey)
+		if err != nil || entity == nil {
 			continue
 		}
 

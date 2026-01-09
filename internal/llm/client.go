@@ -10,10 +10,55 @@ import (
 	"time"
 )
 
+// ContentPart represents a single content part (for multimodal support)
+type ContentPart struct {
+	Type string `json:"type"`
+	Text string `json:"text,omitempty"`
+	ImageURL string `json:"image_url,omitempty"`
+}
+
+// Content represents message content that can be either a string or array of parts
+type Content struct {
+	Value interface{} // Can be string or []ContentPart
+}
+
+// MarshalJSON implements custom JSON marshaling for Content
+func (c Content) MarshalJSON() ([]byte, error) {
+	return json.Marshal(c.Value)
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for Content
+func (c *Content) UnmarshalJSON(data []byte) error {
+	// Try to unmarshal as string first
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		c.Value = str
+		return nil
+	}
+
+	// Try to unmarshal as array of ContentPart
+	var parts []ContentPart
+	if err := json.Unmarshal(data, &parts); err == nil {
+		c.Value = parts
+		return nil
+	}
+
+	// If both fail, return error
+	return fmt.Errorf("content must be string or array of content parts")
+}
+
+// GetString returns the content as a string if it's a string, otherwise returns empty string
+func (c Content) GetString() string {
+	if str, ok := c.Value.(string); ok {
+		return str
+	}
+	return ""
+}
+
 // Message represents a chat message
 type Message struct {
 	Role    string `json:"role"`
-	Content string `json:"content"`
+	Content Content `json:"content"`
 }
 
 // ChatRequest represents an OpenAI-compatible chat completion request
@@ -46,7 +91,7 @@ type Choice struct {
 // Delta represents a streaming message delta
 type Delta struct {
 	Role    string `json:"role,omitempty"`
-	Content string `json:"content,omitempty"`
+	Content Content `json:"content,omitempty"`
 }
 
 // Usage represents token usage statistics

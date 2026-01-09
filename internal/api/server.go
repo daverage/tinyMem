@@ -23,7 +23,10 @@ import (
 // Per spec: local HTTP proxy, streaming responses, async background processing
 type Server struct {
 	runtime      *runtime.Runtime
-	llmClient    *llm.Client
+	llmClient    interface {
+		Chat(ctx context.Context, messages []llm.Message) (*llm.ChatResponse, error)
+		GetModel() string
+	}
 	hydrator     *hydration.Engine
 	auditor      *audit.Auditor
 	logger       *logging.Logger
@@ -58,7 +61,10 @@ const toolPolicy = "[TOOL POLICY]\n" +
 	"[END TOOL POLICY]"
 
 // NewServer creates a new API server
-func NewServer(rt *runtime.Runtime, llmClient *llm.Client, hydrator *hydration.Engine, auditor *audit.Auditor, logger *logging.Logger, listenAddr, databasePath, llmProvider, llmEndpoint string, debugMode bool) *Server {
+func NewServer(rt *runtime.Runtime, llmClient interface {
+	Chat(ctx context.Context, messages []llm.Message) (*llm.ChatResponse, error)
+	GetModel() string
+}, hydrator *hydration.Engine, auditor *audit.Auditor, logger *logging.Logger, listenAddr, databasePath, llmProvider, llmEndpoint string, debugMode bool) *Server {
 	workingDir, err := os.Getwd()
 	if err != nil {
 		workingDir = ""
@@ -140,7 +146,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	req.Messages = append([]llm.Message{
 		{
 			Role:    "system",
-			Content: toolPolicy,
+			Content: llm.Content{Value: toolPolicy},
 		},
 	}, req.Messages...)
 
@@ -148,7 +154,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	var userPrompt string
 	for i := len(req.Messages) - 1; i >= 0; i-- {
 		if req.Messages[i].Role == "user" {
-			userPrompt = req.Messages[i].Content
+			userPrompt = req.Messages[i].Content.GetString()
 			break
 		}
 	}
@@ -195,7 +201,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 				// Insert hydration before last user message
 				messages = append(messages, llm.Message{
 					Role:    "system",
-					Content: hydrationContent,
+					Content: llm.Content{Value: hydrationContent},
 				})
 			}
 			messages = append(messages, msg)
@@ -212,7 +218,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 			if i == len(req.Messages)-1 && msg.Role == "user" {
 				messages = append(messages, llm.Message{
 					Role:    "system",
-					Content: recentContext,
+					Content: llm.Content{Value: recentContext},
 				})
 			}
 			messages = append(messages, msg)
@@ -279,7 +285,7 @@ func (s *Server) handleStreamingCompletion(w http.ResponseWriter, r *http.Reques
 			{
 				Index: 0,
 				Delta: &llm.Delta{
-					Content: responseContent,
+					Content: llm.Content{Value: responseContent},
 				},
 			},
 		},
@@ -420,7 +426,7 @@ func (s *Server) completeWithTools(ctx context.Context, messages []llm.Message, 
 					s.logger.Error("Failed to store tool result: %v", err)
 				}
 
-				messages = append(messages, llm.Message{Role: "tool", Content: resultText})
+				messages = append(messages, llm.Message{Role: "tool", Content: llm.Content{Value: resultText}})
 			}
 		}
 	}
@@ -443,7 +449,7 @@ func (s *Server) completeWithTools(ctx context.Context, messages []llm.Message, 
 		}
 
 		rounds++
-		messages = append(messages, llm.Message{Role: "assistant", Content: responseContent})
+		messages = append(messages, llm.Message{Role: "assistant", Content: llm.Content{Value: responseContent}})
 
 		for _, call := range calls {
 			if call.Type != "shell" || strings.TrimSpace(call.Command) == "" {
@@ -467,7 +473,7 @@ func (s *Server) completeWithTools(ctx context.Context, messages []llm.Message, 
 				s.logger.Error("Failed to store tool result: %v", err)
 			}
 
-			messages = append(messages, llm.Message{Role: "tool", Content: resultText})
+			messages = append(messages, llm.Message{Role: "tool", Content: llm.Content{Value: resultText}})
 		}
 
 		response, err = s.llmClient.Chat(ctx, messages)
@@ -492,13 +498,13 @@ func extractResponseContent(response *llm.ChatResponse) string {
 	if response == nil || len(response.Choices) == 0 {
 		return ""
 	}
-	return response.Choices[0].Message.Content
+	return response.Choices[0].Message.Content.GetString()
 }
 
 func lastUserMessageContent(messages []llm.Message) (string, bool) {
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role == "user" {
-			return messages[i].Content, true
+			return messages[i].Content.GetString(), true
 		}
 	}
 	return "", false
