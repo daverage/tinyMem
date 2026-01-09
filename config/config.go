@@ -45,7 +45,7 @@ type LLMConfig struct {
 // IsCLIProvider checks if the provider is a CLI-based provider
 func (c *LLMConfig) IsCLIProvider() bool {
 	// Known CLI providers
-	cliProviders := []string{"claude", "gemini", "sgpt", "aichat"}
+	cliProviders := []string{"claude", "gemini", "qwen-code", "sgpt", "aichat"}
 	for _, cli := range cliProviders {
 		if c.Provider == cli {
 			return true
