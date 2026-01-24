@@ -1,0 +1,11 @@
+# Compiled binaries
+tinymem
+*.exe
+
+# OS-specific files
+.DS_Store
+
+# Project-specific data directories
+.tinyMem/
+.gemini/
+.claude/

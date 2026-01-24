@@ -491,16 +491,38 @@ go test ./...
 
 ### Cross-Platform Build
 
-```bash
-# macOS ARM64
-GOOS=darwin GOARCH=arm64 go build -o tinymem-darwin-arm64 ./cmd/tinymem
+You can build `tinymem` for different operating systems and architectures by setting the `GOOS` (target operating system) and `GOARCH` (target architecture) environment variables before running the `go build` command.
 
-# Linux AMD64
+Here are some common examples:
+
+**For Linux:**
+```bash
+# For AMD64 (most common desktops and servers)
 GOOS=linux GOARCH=amd64 go build -o tinymem-linux-amd64 ./cmd/tinymem
 
-# Windows AMD64
-GOOS=windows GOARCH=amd64 go build -o tinymem-windows-amd64.exe ./cmd/tinymem
+# For ARM64 (e.g., Raspberry Pi, some cloud instances)
+GOOS=linux GOARCH=arm64 go build -o tinymem-linux-arm64 ./cmd/tinymem
 ```
+
+**For macOS:**
+```bash
+# For Apple Silicon (M1, M2, etc.)
+GOOS=darwin GOARCH=arm64 go build -o tinymem-darwin-arm64 ./cmd/tinymem
+
+# For Intel-based Macs
+GOOS=darwin GOARCH=amd64 go build -o tinymem-darwin-amd64 ./cmd/tinymem
+```
+
+**For Windows:**
+```bash
+# For AMD64
+GOOS=windows GOARCH=amd64 go build -o tinymem-windows-amd64.exe ./cmd/tinymem
+
+# For ARM64
+GOOS=windows GOARCH=arm64 go build -o tinymem-windows-arm64.exe ./cmd/tinymem
+```
+
+The output binary will be named according to the `-o` flag in the command. You can then move this binary to the target machine and run it.
 
 ## Contributing
 
