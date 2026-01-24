@@ -8,16 +8,19 @@ import (
 	"os"
 	"strings"
 	"time"
-	"tinymem/internal/config"
-	"tinymem/internal/evidence"
-	"tinymem/internal/extract"
-	"tinymem/internal/memory"
-	"tinymem/internal/recall"
-	"tinymem/internal/storage"
+
+	"github.com/a-marczewski/tinymem/internal/app" // Add app import
+	"github.com/a-marczewski/tinymem/internal/config"
+	"github.com/a-marczewski/tinymem/internal/evidence"
+	"github.com/a-marczewski/tinymem/internal/extract"
+	"github.com/a-marczewski/tinymem/internal/memory"
+	"github.com/a-marczewski/tinymem/internal/recall"
+	"github.com/a-marczewski/tinymem/internal/storage"
 )
 
 // Server implements the Model Context Protocol server
 type Server struct {
+	app             *app.App // New: Hold the app instance
 	config          *config.Config
 	db              *storage.DB
 	memoryService   *memory.Service
@@ -49,20 +52,20 @@ type MCPError struct {
 }
 
 // NewServer creates a new MCP server
-func NewServer(
-	cfg *config.Config,
-	db *storage.DB,
-	memoryService *memory.Service,
-	evidenceService *evidence.Service,
-	recallEngine *recall.Engine,
-	extractor *extract.Extractor,
-) *Server {
+func NewServer(a *app.App) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
+	// Create new instances of services using app.App's components
+	// These will now receive the logger from the app.App instance automatically
+	evidenceService := evidence.NewService(a.DB)
+	recallEngine := recall.NewEngine(a.Memory, evidenceService, a.Config)
+	extractor := extract.NewExtractor(evidenceService)
+
 	return &Server{
-		config:          cfg,
-		db:              db,
-		memoryService:   memoryService,
+		app:             a, // Store the app instance
+		config:          a.Config,
+		db:              a.DB,
+		memoryService:   a.Memory,
 		evidenceService: evidenceService,
 		recallEngine:    recallEngine,
 		extractor:       extractor,
@@ -477,7 +480,8 @@ func (s *Server) handleMemoryStats(req *MCPRequest) {
 	// Get all memories to calculate stats
 	memories, err := s.memoryService.GetAllMemories("default_project") // In real impl, get from context
 	if err != nil {
-		s.sendError(req.ID, -32603, fmt.Sprintf("Failed to get memory stats: %v", err))
+		s.app.Logger.Error("Failed to get memory stats for MCP", zap.Error(err))
+		s.sendError(req.ID, -32603, "Failed to retrieve memory statistics")
 		return
 	}
 
@@ -518,14 +522,15 @@ func (s *Server) handleMemoryStats(req *MCPRequest) {
 func (s *Server) handleMemoryHealth(req *MCPRequest) {
 	// Check database connectivity
 	if err := s.db.GetConnection().Ping(); err != nil {
-		s.sendError(req.ID, -32603, fmt.Sprintf("Database health check failed: %v", err))
+		s.app.Logger.Error("Database health check failed for MCP", zap.Error(err))
+		s.sendError(req.ID, -32603, "Database health check failed")
 		return
 	}
 
 	// Check if we can perform a simple query
-	_, err := s.memoryService.GetAllMemories("default_project")
-	if err != nil {
-		s.sendError(req.ID, -32603, fmt.Sprintf("Memory service health check failed: %v", err))
+	if _, err := s.memoryService.GetAllMemories("default_project"); err != nil {
+		s.app.Logger.Error("Memory service health check failed for MCP", zap.Error(err))
+		s.sendError(req.ID, -32603, "Memory service health check failed")
 		return
 	}
 
@@ -547,45 +552,29 @@ func (s *Server) handleMemoryHealth(req *MCPRequest) {
 
 	s.sendResponse(response)
 }
-
 // handleMemoryDoctor handles memory doctor diagnostic requests
 func (s *Server) handleMemoryDoctor(req *MCPRequest) {
-	var issues []string
-	
-	// Check database connectivity
-	if err := s.db.GetConnection().Ping(); err != nil {
-		issues = append(issues, fmt.Sprintf("Database connectivity issue: %v", err))
-	}
-	
-	// Check if FTS is working
-	if _, err := s.memoryService.SearchMemories("test", 1); err != nil {
-		issues = append(issues, fmt.Sprintf("FTS search issue: %v", err))
-	}
-	
-	// Check if we have any memories
-	memories, err := s.memoryService.GetAllMemories("default_project")
-	if err != nil {
-		issues = append(issues, fmt.Sprintf("Memory retrieval issue: %v", err))
-	} else if len(memories) == 0 {
-		issues = append(issues, "No memories found in database")
-	}
+	doctorRunner := doctor.NewRunner(s.app.Config, s.app.DB)
+	diagnostics := doctorRunner.RunAll()
 
 	var content strings.Builder
 	content.WriteString("tinyMem Diagnostics Report\n\n")
 
-	if len(issues) == 0 {
+	if diagnostics.HasIssues() {
+		content.WriteString(fmt.Sprintf("⚠️  Status: %d issue(s) detected\n\n", len(diagnostics.Issues)))
+		content.WriteString("Issues:\n")
+		for i, issue := range diagnostics.Issues {
+			content.WriteString(fmt.Sprintf("%d. %s\n", i+1, issue.Description))
+		}
+		if len(diagnostics.Recommendations) > 0 {
+			content.WriteString("\nRecommendations:\n")
+			for i, rec := range diagnostics.Recommendations {
+				content.WriteString(fmt.Sprintf("%d. %s\n", i+1, rec))
+			}
+		}
+	} else {
 		content.WriteString("✅ Status: All systems operational\n\n")
 		content.WriteString("No issues detected.\n")
-	} else {
-		content.WriteString(fmt.Sprintf("⚠️  Status: %d issue(s) detected\n\n", len(issues)))
-		content.WriteString("Issues:\n")
-		for i, issue := range issues {
-			content.WriteString(fmt.Sprintf("%d. %s\n", i+1, issue))
-		}
-		content.WriteString("\nRecommendations:\n")
-		content.WriteString("- Check the .tinyMem directory permissions\n")
-		content.WriteString("- Verify database file is not corrupted\n")
-		content.WriteString("- Ensure sufficient disk space is available\n")
 	}
 
 	response := map[string]interface{}{
@@ -603,9 +592,9 @@ func (s *Server) handleMemoryDoctor(req *MCPRequest) {
 
 	s.sendResponse(response)
 }
-
 // handleShutdown handles shutdown requests
 func (s *Server) handleShutdown(req *MCPRequest) {
+	s.app.Logger.Info("MCP server received shutdown request.")
 	s.cancel()
 
 	response := map[string]interface{}{
@@ -615,16 +604,18 @@ func (s *Server) handleShutdown(req *MCPRequest) {
 	}
 
 	s.sendResponse(response)
-	os.Exit(0)
+	// Do not os.Exit(0) here. Let the main goroutine handle the exit
+	// after all deferred cleanups are done.
 }
 
 // sendResponse sends a successful response
 func (s *Server) sendResponse(response map[string]interface{}) {
 	responseBytes, err := json.Marshal(response)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to marshal response: %v\n", err)
+		s.app.Logger.Error("Failed to marshal MCP response", zap.Error(err))
 		return
 	}
+	// MCP protocol communicates over stdout
 	fmt.Println(string(responseBytes))
 }
 

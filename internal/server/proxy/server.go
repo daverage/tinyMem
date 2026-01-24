@@ -6,16 +6,18 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"sync"
 	"time"
-	"tinymem/internal/config"
-	"tinymem/internal/evidence"
-	"tinymem/internal/extract"
-	"tinymem/internal/inject"
-	"tinymem/internal/llm"
-	"tinymem/internal/memory"
-	"tinymem/internal/recall"
+
+	"github.com/a-marczewski/tinymem/internal/app"
+	"github.com/a-marczewski/tinymem/internal/config"
+	"github.com/a-marczewski/tinymem/internal/evidence"
+	"github.com/a-marczewski/tinymem/internal/extract"
+	"github.com/a-marczewski/tinymem/internal/inject"
+	"github.com/a-marczewski/tinymem/internal/llm"
+	"github.com/a-marczewski/tinymem/internal/memory"
+	"github.com/a-marczewski/tinymem/internal/recall"
+	"go.uber.org/zap"
 )
 
 // ResponseCapture holds response data for extraction
@@ -27,6 +29,7 @@ type ResponseCapture struct {
 
 // Server implements the HTTP proxy server
 type Server struct {
+	app             *app.App // New: Hold the app instance
 	config          *config.Config
 	injector        *inject.MemoryInjector
 	llmClient       *llm.Client
@@ -39,20 +42,20 @@ type Server struct {
 }
 
 // NewServer creates a new proxy server
-func NewServer(
-	cfg *config.Config,
-	injector *inject.MemoryInjector,
-	llmClient *llm.Client,
-	memoryService *memory.Service,
-	evidenceService *evidence.Service,
-	recallEngine *recall.Engine,
-	extractor *extract.Extractor,
-) *Server {
+func NewServer(a *app.App) *Server {
+	// Create new instances of services using app.App's components
+	evidenceService := evidence.NewService(a.DB)
+	recallEngine := recall.NewEngine(a.Memory, evidenceService, a.Config)
+	injector := inject.NewMemoryInjector(recallEngine)
+	llmClient := llm.NewClient(a.Config)
+	extractor := extract.NewExtractor(evidenceService)
+
 	server := &Server{
-		config:          cfg,
+		app:             a, // Store the app instance
+		config:          a.Config,
 		injector:        injector,
 		llmClient:       llmClient,
-		memoryService:   memoryService,
+		memoryService:   a.Memory,
 		evidenceService: evidenceService,
 		recallEngine:    recallEngine,
 		extractor:       extractor,
@@ -72,9 +75,7 @@ func (s *Server) processResponseCaptures() {
 		if s.extractor != nil {
 			err := s.extractor.ExtractAndQueueForVerification(capture.ResponseText, s.memoryService, s.evidenceService, "default_project")
 			if err != nil {
-				// In a real implementation, we'd log this properly
-				// For now, we'll just print to stderr
-				fmt.Fprintf(os.Stderr, "Error extracting memories: %v\n", err)
+				s.app.Logger.Error("Error extracting memories from response", zap.Error(err), zap.String("model", capture.Model))
 			}
 		}
 	}
@@ -121,12 +122,14 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	// Parse the request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		s.app.Logger.Error("Unable to read request body", zap.Error(err))
 		http.Error(w, "Unable to read request body", http.StatusBadRequest)
 		return
 	}
 
 	var req llm.ChatCompletionRequest
 	if err := json.Unmarshal(body, &req); err != nil {
+		s.app.Logger.Error("Invalid JSON in request body", zap.Error(err))
 		http.Error(w, "Invalid JSON in request", http.StatusBadRequest)
 		return
 	}
@@ -149,7 +152,8 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 			MaxTokens: 2000, // Configurable
 		})
 		if err != nil {
-			// Log error but continue without memory injection
+			s.app.Logger.Warn("Failed to recall memories for prompt injection", zap.Error(err), zap.String("user_message", userMessage))
+			// Continue without memory injection if recall fails
 		} else {
 			// Format memories and prepend to the last user message
 			var memories []*memory.Memory
@@ -174,7 +178,6 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		s.handleNonStreamingRequest(w, ctx, req)
 	}
 }
-
 // handleStreamingRequest handles streaming chat completion requests
 func (s *Server) handleStreamingRequest(w http.ResponseWriter, ctx context.Context, req llm.ChatCompletionRequest) {
 	// Set headers for SSE
@@ -208,8 +211,7 @@ func (s *Server) handleStreamingRequest(w http.ResponseWriter, ctx context.Conte
 					Timestamp:    time.Now(),
 				}:
 				default:
-					// Channel is full, log the issue but don't block
-					fmt.Fprintf(os.Stderr, "Warning: Response buffer is full, skipping extraction\n")
+					s.app.Logger.Warn("Response buffer is full, skipping extraction for streaming request", zap.String("model", req.Model))
 				}
 
 				return
@@ -221,9 +223,13 @@ func (s *Server) handleStreamingRequest(w http.ResponseWriter, ctx context.Conte
 				if choice.Delta.Content != "" {
 					rollingBuffer.Write([]byte(choice.Delta.Content))
 
-					// Defensive assertion: ensure buffer doesn't exceed configured max size
+					// Log an error if buffer exceeds max size, do not panic
 					if rollingBuffer.Len() > s.config.ExtractionBufferBytes {
-						panic("rolling buffer exceeded configured max size")
+						s.app.Logger.Error("Rolling buffer exceeded configured max size",
+							zap.Int("current_size", rollingBuffer.Len()),
+							zap.Int("max_size", s.config.ExtractionBufferBytes))
+						// Optionally, truncate the buffer or handle as a fatal error
+						// For now, we'll just log and continue, as the system can still function.
 					}
 				}
 			}
@@ -232,6 +238,7 @@ func (s *Server) handleStreamingRequest(w http.ResponseWriter, ctx context.Conte
 			// Send chunk to client
 			chunkBytes, err := json.Marshal(chunk)
 			if err != nil {
+				s.app.Logger.Error("Failed to marshal streaming chunk", zap.Error(err))
 				continue
 			}
 
@@ -239,23 +246,25 @@ func (s *Server) handleStreamingRequest(w http.ResponseWriter, ctx context.Conte
 			w.(http.Flusher).Flush()
 		case err, ok := <-errChan:
 			if ok && err != nil {
-				// Send error event
-				errorMsg := fmt.Sprintf("error: %v\n", err)
+				s.app.Logger.Error("Error from LLM streaming channel", zap.Error(err))
+				// Send error event to client
+				errorMsg := fmt.Sprintf("data: {\"error\": \"%v\"}\n\n", err)
 				fmt.Fprint(w, errorMsg)
 				w.(http.Flusher).Flush()
 				return
 			}
 		case <-ctx.Done():
+			s.app.Logger.Info("Streaming request context cancelled")
 			// Request context cancelled
 			return
 		}
 	}
 }
-
 // handleNonStreamingRequest handles non-streaming chat completion requests
 func (s *Server) handleNonStreamingRequest(w http.ResponseWriter, ctx context.Context, req llm.ChatCompletionRequest) {
 	response, err := s.llmClient.ChatCompletions(ctx, req)
 	if err != nil {
+		s.app.Logger.Error("LLM ChatCompletions failed for non-streaming request", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -280,8 +289,7 @@ func (s *Server) handleNonStreamingRequest(w http.ResponseWriter, ctx context.Co
 		Timestamp:    time.Now(),
 	}:
 	default:
-		// Channel is full, log the issue but don't block
-		fmt.Fprintf(os.Stderr, "Warning: Response buffer is full, skipping extraction\n")
+		s.app.Logger.Warn("Response buffer is full, skipping extraction for non-streaming request", zap.String("model", req.Model))
 	}
 
 	// Send response back to client
