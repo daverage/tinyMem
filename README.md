@@ -282,6 +282,27 @@ Configure your LLM extension to use the `tinymem` proxy. Since the proxy forward
 
 See [QWEN.md](./QWEN.md) for detailed Qwen integration setup.
 
+## AI Agent Directives
+
+`tinyMem` is designed to be integrated with AI agents, providing them with a local, project-scoped memory system. To ensure effective and reliable interaction, AI agents should adhere to specific directives when using `tinyMem`. These directives guide the agent's reasoning process and interaction with the memory tools.
+
+**Core Directive for AI Agents:**
+
+Your primary function is to leverage `tinyMem`'s memory to provide contextually-aware answers. Before providing any code or explanation from your own knowledge, you MUST first consult `tinyMem`'s memory. Your default first action for any non-trivial query about this project is to use a `tinyMem` tool, especially `memory_query`.
+
+**Available tinyMem Memory Tools (for AI Agents):**
+
+AI agents have access to the following `tinyMem` tools:
+
+*   **`memory_query(query: str, limit: int = 10)`**: Searches the project's memory for relevant information. Use this as the first step for most context-dependent queries.
+*   **`memory_recent(count: int = 10)`**: Retrieves the most recently added or updated memory entries. Useful for quick overviews of recent activity.
+*   **`memory_write(type: str, summary: str, detail: Optional[str] = None, key: Optional[str] = None, source: Optional[str] = None)`**: Creates a new memory entry. Use this to record new facts, claims, plans, decisions, constraints, observations, or notes.
+*   **`memory_stats()`**: Provides statistics about the stored memories.
+*   **`memory_health()`**: Checks the overall health status of the memory system.
+*   **`memory_doctor()`**: Runs detailed diagnostics on the memory system.
+
+For the full, detailed AI Assistant Directives and comprehensive usage guidelines for each `tinyMem` memory tool, please refer to [GEMINI.md](./GEMINI.md).
+
 ## Example Workflow
 
 1. **Start tinyMem proxy in your project:**
