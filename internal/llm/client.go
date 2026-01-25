@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
-	"tinymem/internal/config"
+	"github.com/a-marczewski/tinymem/internal/config"
 )
 
 // Client handles communication with LLM services

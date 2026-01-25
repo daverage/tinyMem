@@ -5,8 +5,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	"tinymem/internal/evidence"
-	"tinymem/internal/memory"
+	"github.com/a-marczewski/tinymem/internal/evidence"
+	"github.com/a-marczewski/tinymem/internal/memory"
 )
 
 // Extractor handles automatic extraction of memories from text

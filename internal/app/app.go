@@ -2,10 +2,11 @@ package app
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/a-marczewski/tinymem/internal/config"
 	"github.com/a-marczewski/tinymem/internal/logging"
@@ -17,8 +18,8 @@ import (
 // App holds the core components of the application.
 type App struct {
 	Config      *config.Config
-	Logger      *zap.Logger
-	DB          *sql.DB
+	Logger      *zap.Logger 
+	DB          *storage.DB // Changed to *storage.DB
 	Memory      *memory.Service
 	ProjectPath string
 }
@@ -32,28 +33,36 @@ func NewApp() (*App, error) {
 	}
 
 	// 2. Load configuration
-	cfg, err := config.Load(projectPath)
+	cfg, err := config.LoadConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
 
 	// 3. Initialize logger
-	logPath := filepath.Join(projectPath, cfg.Logging.File)
-	logger, err := logging.NewLogger(cfg.Logging.Level, logPath)
+	// logPath now derived using cfg.TinyMemDir directly
+	logDir := filepath.Join(cfg.TinyMemDir, "logs") // Use cfg.TinyMemDir directly as it's already an absolute path
+	logFile := filepath.Join(logDir, fmt.Sprintf("tinymem-%s.log", time.Now().Format("2006-01-02")))
+
+	// Ensure log directory exists before initializing logger
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create log directory %s: %w", logDir, err)
+	}
+
+	logger, err := logging.NewLogger(cfg.LogLevel, logFile) // Use cfg.LogLevel and constructed logFile
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize logger: %w", err)
 	}
 
 	// 4. Initialize database
-	dbPath := filepath.Join(projectPath, ".tinyMem", "store.sqlite3")
-	db, err := storage.NewSQLiteDB(dbPath)
+	// storage.NewDB already handles migrations and uses cfg.DBPath
+	db, err := storage.NewDB(cfg)
 	if err != nil {
 		logger.Error("Failed to initialize database", zap.Error(err))
 		return nil, fmt.Errorf("failed to initialize database: %w", err)
 	}
 
 	// 5. Initialize memory service
-	memoryService := memory.NewService(db, logger)
+	memoryService := memory.NewService(db)
 
 	return &App{
 		Config:      cfg,
@@ -67,12 +76,22 @@ func NewApp() (*App, error) {
 // Close gracefully shuts down the application resources.
 func (a *App) Close() {
 	if a.DB != nil {
-		a.DB.Close()
-		a.Logger.Info("Database connection closed.")
+		if err := a.DB.Close(); err != nil {
+			a.Logger.Error("Failed to close database connection", zap.Error(err))
+		} else {
+			a.Logger.Info("Database connection closed.")
+		}
 	}
 	if a.Logger != nil {
-		a.Logger.Sync() // Flushes any buffered log entries
-		a.Logger.Info("Logger synced and closed.")
+		if err := a.Logger.Sync(); err != nil {
+			// Zap's Sync can return an error if the underlying writer fails
+			// For os.Stderr or regular files, it's usually safe to ignore certain errors.
+			// However, it's good practice to log unexpected errors.
+			if !strings.Contains(err.Error(), "sync /dev/stderr: invalid argument") &&
+				!strings.Contains(err.Error(), "sync <file descriptor>: bad file descriptor") {
+				fmt.Fprintf(os.Stderr, "Error syncing logger: %v\n", err)
+			}
+		}
 	}
 }
 

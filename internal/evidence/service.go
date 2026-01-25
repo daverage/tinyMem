@@ -2,8 +2,8 @@ package evidence
 
 import (
 	"time"
-	"tinymem/internal/memory"
-	"tinymem/internal/storage"
+	"github.com/a-marczewski/tinymem/internal/memory"
+	"github.com/a-marczewski/tinymem/internal/storage"
 )
 
 // Service handles evidence operations

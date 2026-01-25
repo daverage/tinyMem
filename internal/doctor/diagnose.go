@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"tinymem/internal/config"
-	"tinymem/internal/storage"
+	"github.com/a-marczewski/tinymem/internal/config"
+	"github.com/a-marczewski/tinymem/internal/storage"
 )
 
 // Diagnostics holds diagnostic information

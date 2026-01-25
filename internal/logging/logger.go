@@ -1,178 +1,100 @@
 package logging
 
 import (
+	"context"
 	"fmt"
-	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
-	"tinymem/internal/config"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
-// Level represents the logging level
-type Level int
-
-const (
-	Off Level = iota
-	Error
-	Warn
-	Info
-	Debug
-)
-
-// Logger wraps the standard logger with additional functionality
-type Logger struct {
-	logger     *log.Logger
-	level      Level
-	fileWriter io.Writer
-	config     *config.Config
+// NewLogger creates a new zap.Logger instance with file output.
+// It returns a *zap.Logger, which is now the standard logger type across the app.
+func NewLogger(levelStr, logPath string) (*zap.Logger, error) {
+	return NewLoggerWithStderr(levelStr, logPath, true)
 }
 
-// NewLogger creates a new logger instance
-func NewLogger(cfg *config.Config) (*Logger, error) {
-	return NewLoggerWithStderr(cfg, true)
-}
-
-// NewLoggerWithStderr creates a new logger instance with optional stderr output
-// When silent=true, logs only go to file (useful for MCP mode over stdio)
-func NewLoggerWithStderr(cfg *config.Config, includeStderr bool) (*Logger, error) {
-	logger := &Logger{
-		level:  parseLogLevel(cfg.LogLevel),
-		config: cfg,
+// NewLoggerWithStderr creates a new zap.Logger instance with optional stderr output.
+// When includeStderr is false, logs only go to file (useful for MCP mode over stdio).
+func NewLoggerWithStderr(levelStr, logPath string, includeStderr bool) (*zap.Logger, error) {
+	// Configure log level
+	var level zapcore.Level
+	switch strings.ToLower(levelStr) {
+	case "debug":
+		level = zap.DebugLevel
+	case "info":
+		level = zap.InfoLevel
+	case "warn":
+		level = zap.WarnLevel
+	case "error":
+		level = zap.ErrorLevel
+	case "off":
+		level = zap.FatalLevel + 1 // Effectively "off" for non-fatal levels
+	default:
+		level = zap.InfoLevel
 	}
 
-	// Set up file logging if enabled
-	if cfg.LogLevel != "off" {
-		logDir := filepath.Join(cfg.TinyMemDir, "logs")
-		logFile := filepath.Join(logDir, fmt.Sprintf("tinymem-%s.log", time.Now().Format("2006-01-02")))
+	// Configure file output
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open log file %s: %w", logPath, err)
+	}
 
-		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		if err != nil {
-			return nil, fmt.Errorf("failed to open log file: %w", err)
-		}
-
-		logger.fileWriter = file
-
-		// For MCP mode, only write to file; otherwise write to both stderr and file
-		if includeStderr {
-			logger.logger = log.New(io.MultiWriter(os.Stderr, file), "", log.LstdFlags|log.Lshortfile)
-		} else {
-			logger.logger = log.New(file, "", log.LstdFlags|log.Lshortfile)
-		}
+	// Combine outputs
+	var core zapcore.Core
+	if includeStderr {
+		// MultiWriteSyncer combines file and stderr
+		ws := zapcore.NewMultiWriteSyncer(zapcore.AddSync(logFile), zapcore.AddSync(os.Stderr))
+		core = zapcore.NewCore(
+			zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), // Use JSON encoder for structured logging
+			ws,
+			level,
+		)
 	} else {
-		if includeStderr {
-			logger.logger = log.New(os.Stderr, "", log.LstdFlags|log.Lshortfile)
-		} else {
-			logger.logger = log.New(io.Discard, "", log.LstdFlags|log.Lshortfile)
-		}
+		// Only write to file
+		core = zapcore.NewCore(
+			zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
+			zapcore.AddSync(logFile),
+			level,
+		)
 	}
 
+	logger := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zap.ErrorLevel))
 	return logger, nil
 }
 
-// parseLogLevel converts string log level to Level enum
-func parseLogLevel(levelStr string) Level {
-	switch strings.ToLower(levelStr) {
-	case "debug":
-		return Debug
-	case "info":
-		return Info
-	case "warn":
-		return Warn
-	case "error":
-		return Error
-	case "off":
-		return Off
-	default:
-		return Info // Default to info if invalid
-	}
+type loggerContextKey struct{}
+
+// ContextWithLogger returns a new context with the given logger.
+func ContextWithLogger(ctx context.Context, logger *zap.Logger) context.Context {
+	return context.WithValue(ctx, loggerContextKey{}, logger)
 }
 
-// Debug logs a debug message
-func (l *Logger) Debug(v ...interface{}) {
-	if l.level >= Debug {
-		l.logger.Print("[DEBUG] ", fmt.Sprint(v...))
-	}
+// LoggerFromContext retrieves the logger from the given context, or returns false if not found.
+func LoggerFromContext(ctx context.Context) (*zap.Logger, bool) {
+	logger, ok := ctx.Value(loggerContextKey{}).(*zap.Logger)
+	return logger, ok
 }
 
-// Debugf logs a formatted debug message
-func (l *Logger) Debugf(format string, v ...interface{}) {
-	if l.level >= Debug {
-		l.logger.Print("[DEBUG] ", fmt.Sprintf(format, v...))
+// EnsureLogFile ensures the log file and its directory exist.
+func EnsureLogFile(logPath string) error {
+	logDir := filepath.Dir(logPath)
+	if _, err := os.Stat(logDir); os.IsNotExist(err) {
+		if err := os.MkdirAll(logDir, 0755); err != nil {
+			return fmt.Errorf("failed to create log directory %s: %w", logDir, err)
+		}
 	}
-}
-
-// Info logs an info message
-func (l *Logger) Info(v ...interface{}) {
-	if l.level >= Info {
-		l.logger.Print("[INFO] ", fmt.Sprint(v...))
-	}
-}
-
-// Infof logs a formatted info message
-func (l *Logger) Infof(format string, v ...interface{}) {
-	if l.level >= Info {
-		l.logger.Print("[INFO] ", fmt.Sprintf(format, v...))
-	}
-}
-
-// Warn logs a warning message
-func (l *Logger) Warn(v ...interface{}) {
-	if l.level >= Warn {
-		l.logger.Print("[WARN] ", fmt.Sprint(v...))
-	}
-}
-
-// Warnf logs a formatted warning message
-func (l *Logger) Warnf(format string, v ...interface{}) {
-	if l.level >= Warn {
-		l.logger.Print("[WARN] ", fmt.Sprintf(format, v...))
-	}
-}
-
-// Error logs an error message
-func (l *Logger) Error(v ...interface{}) {
-	if l.level >= Error {
-		l.logger.Print("[ERROR] ", fmt.Sprint(v...))
-	}
-}
-
-// Errorf logs a formatted error message
-func (l *Logger) Errorf(format string, v ...interface{}) {
-	if l.level >= Error {
-		l.logger.Print("[ERROR] ", fmt.Sprintf(format, v...))
-	}
-}
-
-// Close closes the logger and releases resources
-func (l *Logger) Close() error {
-	if closer, ok := l.fileWriter.(io.WriteCloser); ok {
-		return closer.Close()
+	// Check if log file exists and create if not (OpenFile handles this, but good to ensure path)
+	_, err := os.Stat(logPath)
+	if os.IsNotExist(err) {
+		file, err := os.Create(logPath)
+		if err != nil {
+			return fmt.Errorf("failed to create log file %s: %w", logPath, err)
+		}
+		file.Close()
 	}
 	return nil
-}
-
-// ChangeLogLevel changes the logging level at runtime
-func (l *Logger) ChangeLogLevel(levelStr string) {
-	l.level = parseLogLevel(levelStr)
-}
-
-// GetLogLevel returns the current logging level
-func (l *Logger) GetLogLevel() string {
-	switch l.level {
-	case Debug:
-		return "debug"
-	case Info:
-		return "info"
-	case Warn:
-		return "warn"
-	case Error:
-		return "error"
-	case Off:
-		return "off"
-	default:
-		return "info"
-	}
 }

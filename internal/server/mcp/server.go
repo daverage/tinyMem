@@ -16,6 +16,8 @@ import (
 	"github.com/a-marczewski/tinymem/internal/memory"
 	"github.com/a-marczewski/tinymem/internal/recall"
 	"github.com/a-marczewski/tinymem/internal/storage"
+	"go.uber.org/zap" // Add zap import
+	"github.com/a-marczewski/tinymem/internal/doctor" // Add doctor import
 )
 
 // Server implements the Model Context Protocol server
@@ -560,18 +562,17 @@ func (s *Server) handleMemoryDoctor(req *MCPRequest) {
 	var content strings.Builder
 	content.WriteString("tinyMem Diagnostics Report\n\n")
 
-	if diagnostics.HasIssues() {
+	if len(diagnostics.Issues) > 0 { // Corrected: use len(diagnostics.Issues)
 		content.WriteString(fmt.Sprintf("⚠️  Status: %d issue(s) detected\n\n", len(diagnostics.Issues)))
 		content.WriteString("Issues:\n")
-		for i, issue := range diagnostics.Issues {
-			content.WriteString(fmt.Sprintf("%d. %s\n", i+1, issue.Description))
+		for i, issue := range diagnostics.Issues { // Corrected: issue is already a string
+			content.WriteString(fmt.Sprintf("%d. %s\n", i+1, issue))
 		}
-		if len(diagnostics.Recommendations) > 0 {
-			content.WriteString("\nRecommendations:\n")
-			for i, rec := range diagnostics.Recommendations {
-				content.WriteString(fmt.Sprintf("%d. %s\n", i+1, rec))
-			}
-		}
+		content.WriteString("\nRecommendations:\n") // Generic recommendations as Diagnostics has no Recommendations field
+		content.WriteString("- Check the .tinyMem directory permissions\n")
+		content.WriteString("- Verify database file is not corrupted\n")
+		content.WriteString("- Ensure sufficient disk space is available\n")
+		content.WriteString("- Review configuration settings\n")
 	} else {
 		content.WriteString("✅ Status: All systems operational\n\n")
 		content.WriteString("No issues detected.\n")

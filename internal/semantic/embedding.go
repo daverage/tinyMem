@@ -8,7 +8,7 @@ import (
 	"math"
 	"net/http"
 	"time"
-	"tinymem/internal/config"
+	"github.com/a-marczewski/tinymem/internal/config"
 )
 
 // EmbeddingClient handles communication with embedding services

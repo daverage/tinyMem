@@ -4,9 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"tinymem/internal/config"
-	"tinymem/internal/memory"
-	"tinymem/internal/storage"
+	"github.com/a-marczewski/tinymem/internal/config"
+	"github.com/a-marczewski/tinymem/internal/memory"
+	"github.com/a-marczewski/tinymem/internal/storage"
 )
 
 func TestMain(m *testing.M) {

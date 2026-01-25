@@ -7,18 +7,15 @@ import (
 
 	"github.com/a-marczewski/tinymem/internal/app"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 
-	"github.com/a-marczewski/tinymem/internal/config"
 	"github.com/a-marczewski/tinymem/internal/doctor"
 	"github.com/a-marczewski/tinymem/internal/evidence"
-	"github.com/a-marczewski/tinymem/internal/extract"
 	"github.com/a-marczewski/tinymem/internal/inject"
-	"github.com/a-marczewski/tinymem/internal/llm"
 	"github.com/a-marczewski/tinymem/internal/memory"
 	"github.com/a-marczewski/tinymem/internal/recall"
 	"github.com/a-marczewski/tinymem/internal/server/mcp"
 	"github.com/a-marczewski/tinymem/internal/server/proxy"
-	"github.com/a-marczewski/tinymem/internal/storage"
 )
 
 var rootCmd = &cobra.Command{
@@ -54,16 +51,9 @@ var proxyCmd = &cobra.Command{
 }
 
 func runProxyCmd(a *app.App, cmd *cobra.Command, args []string) {
-	// Set up services using the app instance
-	evidenceService := evidence.NewService(a.DB)
-	recallEngine := recall.NewEngine(a.Memory, evidenceService, a.Config) // a.Memory is already memory.Service
-	injector := inject.NewMemoryInjector(recallEngine)
-	llmClient := llm.NewClient(a.Config)
-	extractor := extract.NewExtractor(evidenceService)
-
 	// Create and start proxy server
-	proxyServer := proxy.NewServer(a.Config, injector, llmClient, a.Memory, evidenceService, recallEngine, extractor)
-	a.Logger.Info("Starting proxy server on port ", a.Config.ProxyPort)
+	proxyServer := proxy.NewServer(a) // Pass the app instance directly
+	a.Logger.Info("Starting proxy server", zap.Int("port", a.Config.ProxyPort))
 
 	if err := proxyServer.Start(); err != nil {
 		a.Logger.Error("Failed to start proxy server", zap.Error(err))
@@ -76,13 +66,8 @@ var mcpCmd = &cobra.Command{
 }
 
 func runMcpCmd(a *app.App, cmd *cobra.Command, args []string) {
-	// Set up services using the app instance
-	evidenceService := evidence.NewService(a.DB)
-	recallEngine := recall.NewEngine(a.Memory, evidenceService, a.Config) // a.Memory is already memory.Service
-	extractor := extract.NewExtractor(evidenceService)
-
 	// Create and start MCP server
-	mcpServer := mcp.NewServer(a.Config, a.DB, a.Memory, evidenceService, recallEngine, extractor)
+	mcpServer := mcp.NewServer(a) // Pass the app instance directly
 	a.Logger.Info("Starting MCP server")
 
 	if err := mcpServer.Start(); err != nil {

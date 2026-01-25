@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"tinymem/internal/storage"
+	"github.com/a-marczewski/tinymem/internal/storage"
 )
 
 // Service handles memory operations

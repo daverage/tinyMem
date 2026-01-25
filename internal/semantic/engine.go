@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"tinymem/internal/config"
-	"tinymem/internal/evidence"
-	"tinymem/internal/memory"
-	"tinymem/internal/recall"
-	"tinymem/internal/storage"
+	"github.com/a-marczewski/tinymem/internal/config"
+	"github.com/a-marczewski/tinymem/internal/evidence"
+	"github.com/a-marczewski/tinymem/internal/memory"
+	"github.com/a-marczewski/tinymem/internal/recall"
+	"github.com/a-marczewski/tinymem/internal/storage"
 )
 
 // SemanticEngine enhances recall with semantic similarity

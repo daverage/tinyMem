@@ -4,9 +4,9 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf8"
-	"tinymem/internal/config"
-	"tinymem/internal/evidence"
-	"tinymem/internal/memory"
+	"github.com/a-marczewski/tinymem/internal/config"
+	"github.com/a-marczewski/tinymem/internal/evidence"
+	"github.com/a-marczewski/tinymem/internal/memory"
 )
 
 // Engine handles memory recall operations

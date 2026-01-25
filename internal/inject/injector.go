@@ -3,8 +3,8 @@ package inject
 import (
 	"fmt"
 	"strings"
-	"tinymem/internal/memory"
-	"tinymem/internal/recall"
+	"github.com/a-marczewski/tinymem/internal/memory"
+	"github.com/a-marczewski/tinymem/internal/recall"
 )
 
 // MemoryInjector handles injecting memories into prompts
