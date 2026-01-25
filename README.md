@@ -49,6 +49,8 @@ cd tinymem
 go build -o tinymem ./cmd/tinymem
 ```
 
+Once built, the `tinymem` executable will be in your current directory. For easier access, consider moving it to a directory included in your system's PATH (e.g., `/usr/local/bin/` on macOS/Linux) or adding your project directory to your PATH environment variable.
+
 **Requirements**: Go 1.22 or later
 
 ## Quick Start
