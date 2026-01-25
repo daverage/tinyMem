@@ -51,6 +51,46 @@ go build -o tinymem ./cmd/tinymem
 
 Once built, the `tinymem` executable will be in your current directory. For easier access, consider moving it to a directory included in your system's PATH (e.g., `/usr/local/bin/` on macOS/Linux) or adding your project directory to your PATH environment variable.
 
+It's highly recommended to have the `tinymem` executable available in your system's PATH. This allows you to run `tinymem` commands from any directory without specifying the full path (e.g., `tinymem health` instead of `./tinymem health`). This is particularly important for seamless integration with IDEs and other tools that expect `tinymem` to be globally accessible.
+
+### Adding `tinymem` to your PATH
+
+To make `tinymem` easily callable from any directory:
+
+**Option 1: Move to a system PATH directory (recommended for global access)**
+
+```bash
+# For macOS/Linux users, after building or downloading:
+# Move the compiled binary to a directory already in your PATH, like /usr/local/bin/
+sudo mv tinymem /usr/local/bin/
+```
+*Note: This requires administrator/root privileges.*
+
+**Option 2: Add your project directory to your PATH (recommended for project-specific versions)**
+
+If you prefer to keep the `tinymem` binary within your project directory, you can add that directory to your PATH. This is useful if you work on multiple projects that might require different `tinymem` versions.
+
+*   **macOS/Linux (Bash/Zsh):**
+    Open your `~/.bashrc`, `~/.bash_profile`, or `~/.zshrc` file and add the following line. Replace `/path/to/your/project` with the actual absolute path to your `tinymem` executable.
+    ```bash
+    export PATH="/path/to/your/project:$PATH"
+    ```
+    After saving, run `source ~/.bashrc` (or your respective shell config file) or restart your terminal.
+
+*   **Windows (Command Prompt):**
+    Open Command Prompt as administrator and run:
+    ```cmd
+    setx PATH "%PATH%;C:\path\to\your\project"
+    ```
+    Replace `C:\path\to/your/project` with the actual absolute path. You may need to restart your command prompt or computer for changes to take effect.
+
+*   **Windows (PowerShell):**
+    Run PowerShell as administrator and execute:
+    ```powershell
+    [Environment]::SetEnvironmentVariable("Path", "$env:Path;C:\path\to\your\project", "User")
+    ```
+    Replace `C:\path\to\your\project` with the actual absolute path. Restart PowerShell for changes to apply.
+
 **Requirements**: Go 1.22 or later
 
 ## Quick Start
