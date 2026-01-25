@@ -319,6 +319,7 @@ func (s *Server) handleMemoryQuery(req *MCPRequest, args json.RawMessage) {
 	}
 
 	results, err := s.recallEngine.Recall(recall.RecallOptions{
+		ProjectID: s.app.ProjectID, // Pass projectID
 		Query:    queryReq.Query,
 		MaxItems: queryReq.Limit,
 	})
@@ -371,7 +372,7 @@ func (s *Server) handleMemoryRecent(req *MCPRequest, args json.RawMessage) {
 		recentReq.Count = 10
 	}
 
-	memories, err := s.memoryService.GetAllMemories("default_project") // In real impl, get from context
+	memories, err := s.memoryService.GetAllMemories(s.app.ProjectID) // In real impl, get from context
 	if err != nil {
 		s.sendError(req.ID, -32603, fmt.Sprintf("Failed to get recent memories: %v", err))
 		return
@@ -440,7 +441,7 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 
 	// Create new memory
 	newMemory := &memory.Memory{
-		ProjectID: "default_project", // In real impl, get from context
+		ProjectID: s.app.ProjectID, // Use s.app.ProjectID
 		Type:      memType,
 		Summary:   writeReq.Summary,
 		Detail:    writeReq.Detail,
@@ -480,7 +481,7 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 // handleMemoryStats handles memory statistics requests
 func (s *Server) handleMemoryStats(req *MCPRequest) {
 	// Get all memories to calculate stats
-	memories, err := s.memoryService.GetAllMemories("default_project") // In real impl, get from context
+	memories, err := s.memoryService.GetAllMemories(s.app.ProjectID)
 	if err != nil {
 		s.app.Logger.Error("Failed to get memory stats for MCP", zap.Error(err))
 		s.sendError(req.ID, -32603, "Failed to retrieve memory statistics")
@@ -530,7 +531,7 @@ func (s *Server) handleMemoryHealth(req *MCPRequest) {
 	}
 
 	// Check if we can perform a simple query
-	if _, err := s.memoryService.GetAllMemories("default_project"); err != nil {
+	if _, err := s.memoryService.GetAllMemories(s.app.ProjectID); err != nil {
 		s.app.Logger.Error("Memory service health check failed for MCP", zap.Error(err))
 		s.sendError(req.ID, -32603, "Memory service health check failed")
 		return
@@ -556,7 +557,7 @@ func (s *Server) handleMemoryHealth(req *MCPRequest) {
 }
 // handleMemoryDoctor handles memory doctor diagnostic requests
 func (s *Server) handleMemoryDoctor(req *MCPRequest) {
-	doctorRunner := doctor.NewRunner(s.app.Config, s.app.DB)
+	doctorRunner := doctor.NewRunner(s.app.Config, s.app.DB, s.app.ProjectID, s.app.Memory)
 	diagnostics := doctorRunner.RunAll()
 
 	var content strings.Builder

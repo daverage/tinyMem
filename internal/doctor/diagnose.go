@@ -25,15 +25,19 @@ type CheckResult struct {
 
 // Runner runs diagnostic checks
 type Runner struct {
-	config *config.Config
-	db     *storage.DB
+	config        *config.Config
+	db            *storage.DB
+	projectID     string
+	memoryService *memory.Service
 }
 
 // NewRunner creates a new diagnostic runner
-func NewRunner(cfg *config.Config, db *storage.DB) *Runner {
+func NewRunner(cfg *config.Config, db *storage.DB, projectID string, memoryService *memory.Service) *Runner {
 	return &Runner{
-		config: cfg,
-		db:     db,
+		config:        cfg,
+		db:            db,
+		projectID:     projectID,
+		memoryService: memoryService,
 	}
 }
 
@@ -47,6 +51,7 @@ func (d *Runner) RunAll() *Diagnostics {
 	results = append(results, d.checkFileSystemPermissions()...)
 	results = append(results, d.checkConfiguration()...)
 	results = append(results, d.checkStorageHealth()...)
+	results = append(results, d.checkMemoryServiceHealth()...) // NEW CHECK
 
 	// Collect issues from failed checks
 	for _, result := range results {
@@ -65,6 +70,59 @@ func (d *Runner) RunAll() *Diagnostics {
 		Issues: issues,
 		Status: status,
 	}
+}
+
+// checkMemoryServiceHealth checks the health of the memory service
+func (d *Runner) checkMemoryServiceHealth() []CheckResult {
+	var results []CheckResult
+
+	if d.memoryService == nil {
+		results = append(results, CheckResult{
+			Name:     "memory_service_initialization",
+			Status:   "fail",
+			Message:  "Memory service not initialized in doctor runner",
+			Severity: "error",
+		})
+		return results
+	}
+
+	// Try to get a few memories from the current project
+	memories, err := d.memoryService.GetAllMemories(d.projectID)
+	if err != nil {
+		results = append(results, CheckResult{
+			Name:     "memory_service_access",
+			Status:   "fail",
+			Message:  fmt.Sprintf("Failed to access memories for project '%s': %v", d.projectID, err),
+			Severity: "error",
+		})
+	} else {
+		results = append(results, CheckResult{
+			Name:     "memory_service_access",
+			Status:   "pass",
+			Message:  fmt.Sprintf("Successfully accessed %d memories for project '%s'", len(memories), d.projectID),
+			Severity: "info",
+		})
+	}
+
+	// Try a simple search
+	_, err = d.memoryService.SearchMemories(d.projectID, "test", 1)
+	if err != nil {
+		results = append(results, CheckResult{
+			Name:     "memory_service_search",
+			Status:   "fail",
+			Message:  fmt.Sprintf("Failed to perform memory search for project '%s': %v", d.projectID, err),
+			Severity: "error",
+		})
+	} else {
+		results = append(results, CheckResult{
+			Name:     "memory_service_search",
+			Status:   "pass",
+			Message:  fmt.Sprintf("Successfully performed memory search for project '%s'", d.projectID),
+			Severity: "info",
+		})
+	}
+
+	return results
 }
 
 // checkDatabaseConnectivity checks database connectivity and basic operations

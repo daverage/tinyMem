@@ -94,14 +94,14 @@ func (s *Service) UpdateMemory(memory *Memory) error {
 }
 
 // GetMemory retrieves a memory by ID
-func (s *Service) GetMemory(id int64) (*Memory, error) {
+func (s *Service) GetMemory(id int64, projectID string) (*Memory, error) {
 	query := `
 		SELECT id, project_id, type, summary, detail, key, source, created_at, updated_at, superseded_by
 		FROM memories
-		WHERE id = ? AND (superseded_by IS NULL OR superseded_by = 0)
+		WHERE id = ? AND project_id = ? AND (superseded_by IS NULL OR superseded_by = 0)
 	`
 
-	row := s.db.GetConnection().QueryRow(query, id)
+	row := s.db.GetConnection().QueryRow(query, id, projectID)
 
 	var memory Memory
 	var key, source sql.NullString
@@ -141,7 +141,7 @@ func (s *Service) GetMemory(id int64) (*Memory, error) {
 }
 
 // SearchMemories performs a full-text search on memories
-func (s *Service) SearchMemories(searchTerm string, limit int) ([]*Memory, error) {
+func (s *Service) SearchMemories(projectID string, searchTerm string, limit int) ([]*Memory, error) {
 	// Sanitize the search term to prevent SQL injection
 	searchTerm = strings.ReplaceAll(searchTerm, "\"", "")
 	searchTerm = strings.TrimSpace(searchTerm)
@@ -157,10 +157,10 @@ func (s *Service) SearchMemories(searchTerm string, limit int) ([]*Memory, error
 
 	if ftsAvailable {
 		// Use FTS5 for better search results
-		return s.searchWithFTS(searchTerm, limit)
+		return s.searchWithFTS(projectID, searchTerm, limit)
 	} else {
 		// Fall back to LIKE-based search
-		return s.searchWithLike(searchTerm, limit)
+		return s.searchWithLike(projectID, searchTerm, limit)
 	}
 }
 
@@ -179,7 +179,7 @@ func (s *Service) isFTSAvailable() (bool, error) {
 }
 
 // searchWithFTS performs a search using FTS5
-func (s *Service) searchWithFTS(searchTerm string, limit int) ([]*Memory, error) {
+func (s *Service) searchWithFTS(projectID string, searchTerm string, limit int) ([]*Memory, error) {
 	// Split search terms and join with OR for broader search
 	terms := strings.Fields(searchTerm)
 	ftsQuery := strings.Join(terms, " OR ")
@@ -189,12 +189,12 @@ func (s *Service) searchWithFTS(searchTerm string, limit int) ([]*Memory, error)
 		FROM memories m
 		JOIN memories_fts f ON m.id = f.rowid
 		WHERE f.memories_fts MATCH ?
-		  AND (m.superseded_by IS NULL OR m.superseded_by = 0)
+		  AND m.project_id = ? AND (m.superseded_by IS NULL OR m.superseded_by = 0)
 		ORDER BY m.created_at DESC
 		LIMIT ?
 	`
 
-	rows, err := s.db.GetConnection().Query(query, ftsQuery, limit)
+	rows, err := s.db.GetConnection().Query(query, ftsQuery, projectID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +240,7 @@ func (s *Service) searchWithFTS(searchTerm string, limit int) ([]*Memory, error)
 }
 
 // searchWithLike performs a search using LIKE operator as fallback
-func (s *Service) searchWithLike(searchTerm string, limit int) ([]*Memory, error) {
+func (s *Service) searchWithLike(projectID string, searchTerm string, limit int) ([]*Memory, error) {
 	// Create a search pattern with wildcards
 	searchPattern := "%" + searchTerm + "%"
 
@@ -248,12 +248,12 @@ func (s *Service) searchWithLike(searchTerm string, limit int) ([]*Memory, error
 		SELECT id, project_id, type, summary, detail, key, source, created_at, updated_at, superseded_by
 		FROM memories
 		WHERE (summary LIKE ? OR detail LIKE ?)
-		  AND (superseded_by IS NULL OR superseded_by = 0)
+		  AND project_id = ? AND (superseded_by IS NULL OR superseded_by = 0)
 		ORDER BY created_at DESC
 		LIMIT ?
 	`
 
-	rows, err := s.db.GetConnection().Query(query, searchPattern, searchPattern, limit)
+	rows, err := s.db.GetConnection().Query(query, searchPattern, searchPattern, projectID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -353,9 +353,9 @@ func (s *Service) GetAllMemories(projectID string) ([]*Memory, error) {
 }
 
 // PromoteToFact promotes a memory to fact type after verifying evidence
-func (s *Service) PromoteToFact(memoryID int64, isValidated bool) error {
+func (s *Service) PromoteToFact(memoryID int64, projectID string, isValidated bool) error {
 	// First, get the memory to verify it exists and check its current type
-	memory, err := s.GetMemory(memoryID)
+	memory, err := s.GetMemory(memoryID, projectID) // Pass projectID to GetMemory
 	if err != nil {
 		return fmt.Errorf("failed to get memory: %w", err)
 	}
@@ -373,7 +373,7 @@ func (s *Service) PromoteToFact(memoryID int64, isValidated bool) error {
 	}
 
 	// Handle supersession of conflicting memories before promoting
-	if err := s.handleConflictingMemories(memory, memoryID); err != nil {
+	if err := s.handleConflictingMemories(memory, memoryID, projectID); err != nil { // Pass projectID
 		return fmt.Errorf("failed to handle conflicting memories: %w", err)
 	}
 
@@ -381,10 +381,10 @@ func (s *Service) PromoteToFact(memoryID int64, isValidated bool) error {
 	query := `
 		UPDATE memories
 		SET type = ?, updated_at = ?
-		WHERE id = ?
+		WHERE id = ? AND project_id = ?
 	`
 
-	result, err := s.db.GetConnection().Exec(query, string(Fact), time.Now(), memoryID)
+	result, err := s.db.GetConnection().Exec(query, string(Fact), time.Now(), memoryID, projectID) // Add projectID
 	if err != nil {
 		return err
 	}
@@ -395,14 +395,13 @@ func (s *Service) PromoteToFact(memoryID int64, isValidated bool) error {
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("memory with ID %d not found", memoryID)
+		return fmt.Errorf("memory with ID %d not found in project %s", memoryID, projectID)
 	}
 
 	return nil
 }
-
 // handleConflictingMemories marks conflicting memories as superseded when promoting a new one
-func (s *Service) handleConflictingMemories(newMemory *Memory, newMemoryID int64) error {
+func (s *Service) handleConflictingMemories(newMemory *Memory, newMemoryID int64, projectID string) error {
 	// Only handle supersession for important memory types that shouldn't conflict
 	if newMemory.Type != Fact && newMemory.Type != Decision && newMemory.Type != Constraint {
 		return nil
@@ -418,14 +417,14 @@ func (s *Service) handleConflictingMemories(newMemory *Memory, newMemoryID int64
 			SELECT id FROM memories
 			WHERE project_id = ? AND key = ? AND id != ? AND superseded_by IS NULL
 		`
-		params = []interface{}{newMemory.ProjectID, *newMemory.Key, newMemoryID}
+		params = []interface{}{projectID, *newMemory.Key, newMemoryID} // Use passed projectID
 	} else {
 		// If no key, look for similar content that might be conflicting
 		conflictingQuery = `
 			SELECT id FROM memories
 			WHERE project_id = ? AND type = ? AND summary = ? AND id != ? AND superseded_by IS NULL
 		`
-		params = []interface{}{newMemory.ProjectID, string(newMemory.Type), newMemory.Summary, newMemoryID}
+		params = []interface{}{projectID, string(newMemory.Type), newMemory.Summary, newMemoryID} // Use passed projectID
 	}
 
 	rows, err := s.db.GetConnection().Query(conflictingQuery, params...)
@@ -449,7 +448,6 @@ func (s *Service) handleConflictingMemories(newMemory *Memory, newMemoryID int64
 
 	return nil
 }
-
 // MarkAsSuperseded marks a memory as superseded by another
 func (s *Service) MarkAsSuperseded(oldID, newID int64) error {
 	query := `

@@ -139,8 +139,7 @@ var statsCmd = &cobra.Command{
 }
 
 func runStatsCmd(a *app.App, cmd *cobra.Command, args []string) {
-	// Get all memories to calculate stats
-	memories, err := a.Memory.GetAllMemories("default_project") // In real impl, get from context
+	memories, err := a.Memory.GetAllMemories(a.ProjectID)
 	if err != nil {
 		a.Logger.Error("Failed to get memories for stats", zap.Error(err))
 		return
@@ -166,7 +165,7 @@ var doctorCmd = &cobra.Command{
 
 func runDoctorCmd(a *app.App, cmd *cobra.Command, args []string) {
 	// Run diagnostics
-	doctorRunner := doctor.NewRunner(a.Config, a.DB)
+	doctorRunner := doctor.NewRunner(a.Config, a.DB, a.ProjectID, a.Memory)
 	diagnostics := doctorRunner.RunAll()
 	diagnostics.PrintReport()
 }
@@ -178,7 +177,7 @@ var recentCmd = &cobra.Command{
 
 func runRecentCmd(a *app.App, cmd *cobra.Command, args []string) {
 	// Get recent memories
-	memories, err := a.Memory.GetAllMemories("default_project") // In real impl, get from context
+	memories, err := a.Memory.GetAllMemories(a.ProjectID)
 	if err != nil {
 		a.Logger.Error("Failed to get recent memories", zap.Error(err))
 		return
@@ -216,6 +215,7 @@ func runQueryCmd(a *app.App, cmd *cobra.Command, args []string) {
 	// Perform search
 	query := strings.Join(args, " ")
 	results, err := recallEngine.Recall(recall.RecallOptions{
+		ProjectID: a.ProjectID,
 		Query:    query,
 		MaxItems: 10,
 	})

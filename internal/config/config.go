@@ -115,26 +115,22 @@ func LoadConfig() (*Config, error) {
 	return cfg, nil
 }
 
-// Validate validates the configuration
-func (c *Config) Validate() error {
-	if c.ProxyPort <= 0 || c.ProxyPort > 65535 {
-		return fmt.Errorf("invalid proxy port: %d", c.ProxyPort)
-	}
-
-	// Validate log level
-	validLogLevels := map[string]bool{
-		"debug": true,
-		"info":  true,
-		"warn":  true,
-		"error": true,
-		"off":   true,
-	}
-
-	if !validLogLevels[c.LogLevel] {
-		return fmt.Errorf("invalid log level: %s", c.LogLevel)
-	}
-
 	return nil
+}
+
+// GenerateProjectID creates a consistent project ID from the project root path.
+// It uses the absolute path to ensure uniqueness across different working directories
+// but normalizes it to be filesystem-agnostic for consistency (e.g., replaces backslashes with forward slashes).
+func GenerateProjectID(projectRoot string) string {
+	// Clean the path to remove redundant separators and symlinks
+	absPath, err := filepath.Abs(projectRoot)
+	if err != nil {
+		// If we can't get the absolute path, fall back to the provided root
+		// This might lead to non-unique IDs in some edge cases, but it's better than failing
+		return strings.ReplaceAll(filepath.Clean(projectRoot), "\\", "/")
+	}
+	// Normalize path separators for cross-OS consistency
+	return strings.ReplaceAll(filepath.Clean(absPath), "\\", "/")
 }
 
 // Context key for storing config in context

@@ -73,7 +73,7 @@ func (s *Server) processResponseCaptures() {
 	for capture := range s.responseBuffer {
 		// Extract memories from the response text
 		if s.extractor != nil {
-			err := s.extractor.ExtractAndQueueForVerification(capture.ResponseText, s.memoryService, s.evidenceService, "default_project")
+			err := s.extractor.ExtractAndQueueForVerification(capture.ResponseText, s.memoryService, s.evidenceService, s.app.ProjectID)
 			if err != nil {
 				s.app.Logger.Error("Error extracting memories from response", zap.Error(err), zap.String("model", capture.Model))
 			}
@@ -147,6 +147,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if userMessage != "" {
 		// Perform recall to get relevant memories
 		recallResults, err := s.recallEngine.Recall(recall.RecallOptions{
+			ProjectID: s.app.ProjectID, // Pass projectID
 			Query:     userMessage,
 			MaxItems:  10,  // Configurable
 			MaxTokens: 2000, // Configurable

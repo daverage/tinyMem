@@ -19,9 +19,10 @@ import (
 type App struct {
 	Config      *config.Config
 	Logger      *zap.Logger 
-	DB          *storage.DB // Changed to *storage.DB
+	DB          *storage.DB
 	Memory      *memory.Service
 	ProjectPath string
+	ProjectID   string // New field for the current project's ID
 }
 
 // NewApp initializes and returns a new App instance.
@@ -64,12 +65,15 @@ func NewApp() (*App, error) {
 	// 5. Initialize memory service
 	memoryService := memory.NewService(db)
 
+	projectID := config.GenerateProjectID(projectPath) // Generate project ID
+
 	return &App{
 		Config:      cfg,
 		Logger:      logger,
 		DB:          db,
 		Memory:      memoryService,
 		ProjectPath: projectPath,
+		ProjectID:   projectID, // Store the generated project ID
 	}, nil
 }
 
