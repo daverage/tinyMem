@@ -6,25 +6,76 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/pelletier/go-toml/v2"
 )
 
 const (
-	DefaultProxyPort         = 8080
-	DefaultExtractionBufferBytes = 16384  // 16KB default
+	DefaultProxyPort             = 8080
+	DefaultExtractionBufferBytes = 16384 // 16KB default
+	DefaultLLMBaseURL            = "http://localhost:11434/v1"
+	DefaultEmbeddingModel        = "nomic-embed-text"
+	DefaultHybridWeight          = 0.5
 )
 
 // Config holds the application configuration
 type Config struct {
-	ProxyPort              int    `toml:"proxy_port"`
-	SearchEnabled          bool   `toml:"search_enabled"`
-	Streaming              bool   `toml:"streaming"`
-	LogLevel               string `toml:"log_level"`
-	DBPath                 string `toml:"db_path"`
-	ConfigPath             string `toml:"config_path"`
-	TinyMemDir             string `toml:"tiny_mem_dir"`
-	ExtractionBufferBytes  int    `toml:"extraction_buffer_bytes"`
+	ProxyPort                     int
+	LLMBaseURL                    string
+	LLMAPIKey                     string
+	EmbeddingBaseURL              string
+	EmbeddingModel                string
+	SemanticEnabled               bool
+	HybridWeight                  float64
+	EvidenceAllowCommand          bool
+	EvidenceAllowedCommands       []string
+	EvidenceCommandTimeoutSeconds int
+	SearchEnabled                 bool
+	Streaming                     bool
+	LogLevel                      string
+	LogFile                       string
+	DBPath                        string
+	ConfigPath                    string
+	TinyMemDir                    string
+	ProjectRoot                   string
+	ExtractionBufferBytes         int
+	RecallMaxItems                int
+	RecallMaxTokens               int
+}
+
+type fileConfig struct {
+	Proxy struct {
+		Port    int    `toml:"port"`
+		BaseURL string `toml:"base_url"`
+	} `toml:"proxy"`
+	Recall struct {
+		MaxItems        int     `toml:"max_items"`
+		MaxTokens       int     `toml:"max_tokens"`
+		SemanticEnabled bool    `toml:"semantic_enabled"`
+		HybridWeight    float64 `toml:"hybrid_weight"`
+	} `toml:"recall"`
+	Memory struct {
+		AutoExtract         bool `toml:"auto_extract"`
+		RequireConfirmation bool `toml:"require_confirmation"`
+	} `toml:"memory"`
+	Logging struct {
+		Level string `toml:"level"`
+		File  string `toml:"file"`
+	} `toml:"logging"`
+	Evidence struct {
+		AllowCommand          bool     `toml:"allow_command"`
+		AllowedCommands       []string `toml:"allowed_commands"`
+		CommandTimeoutSeconds int      `toml:"command_timeout_seconds"`
+	} `toml:"evidence"`
+	LLM struct {
+		BaseURL string `toml:"base_url"`
+		APIKey  string `toml:"api_key"`
+	} `toml:"llm"`
+	Embedding struct {
+		BaseURL string `toml:"base_url"`
+		Model   string `toml:"model"`
+	} `toml:"embedding"`
 }
 
 // LoadConfig loads configuration from file, environment variables, and defaults
@@ -44,16 +95,29 @@ func LoadConfig() (*Config, error) {
 
 	// Create default config
 	cfg := &Config{
-		ProxyPort:              DefaultProxyPort,
-		SearchEnabled:          true,
-		Streaming:              true,
-		LogLevel:               "info",
-		DBPath:                 filepath.Join(tinyMemDir, "store.sqlite3"),
-		ConfigPath:             configPath,
-		TinyMemDir:             tinyMemDir,
-		ExtractionBufferBytes:  DefaultExtractionBufferBytes,
+		ProxyPort:                     DefaultProxyPort,
+		LLMBaseURL:                    DefaultLLMBaseURL,
+		EmbeddingBaseURL:              "",
+		EmbeddingModel:                DefaultEmbeddingModel,
+		SemanticEnabled:               false,
+		HybridWeight:                  DefaultHybridWeight,
+		EvidenceAllowCommand:          false,
+		EvidenceAllowedCommands:       nil,
+		EvidenceCommandTimeoutSeconds: 20,
+		SearchEnabled:                 true,
+		Streaming:                     true,
+		LogLevel:                      "info",
+		LogFile:                       filepath.Join(tinyMemDir, "logs", "tinymem.log"),
+		DBPath:                        filepath.Join(tinyMemDir, "store.sqlite3"),
+		ConfigPath:                    configPath,
+		TinyMemDir:                    tinyMemDir,
+		ProjectRoot:                   projectRoot,
+		ExtractionBufferBytes:         DefaultExtractionBufferBytes,
+		RecallMaxItems:                10,
+		RecallMaxTokens:               2000,
 	}
 
+	embeddingBaseURLSet := false
 	// Try to load config from file if it exists
 	if _, err := os.Stat(configPath); err == nil {
 		fileData, err := os.ReadFile(configPath)
@@ -61,22 +125,53 @@ func LoadConfig() (*Config, error) {
 			return nil, err
 		}
 
-		var fileConfig Config
-		if err := toml.Unmarshal(fileData, &fileConfig); err != nil {
+		var parsed fileConfig
+		if err := toml.Unmarshal(fileData, &parsed); err != nil {
 			return nil, err
 		}
 
-		// Override defaults with file config values
-		if fileConfig.ProxyPort != 0 {
-			cfg.ProxyPort = fileConfig.ProxyPort
+		if parsed.Proxy.Port != 0 {
+			cfg.ProxyPort = parsed.Proxy.Port
 		}
-		if fileConfig.LogLevel != "" {
-			cfg.LogLevel = fileConfig.LogLevel
+		if parsed.Proxy.BaseURL != "" {
+			cfg.LLMBaseURL = parsed.Proxy.BaseURL
 		}
-		if fileConfig.ExtractionBufferBytes != 0 {
-			cfg.ExtractionBufferBytes = fileConfig.ExtractionBufferBytes
+		if parsed.Recall.MaxItems != 0 {
+			cfg.RecallMaxItems = parsed.Recall.MaxItems
 		}
-		// Note: We don't override TinyMemDir, DBPath, etc. as they're derived from project root
+		if parsed.Recall.MaxTokens != 0 {
+			cfg.RecallMaxTokens = parsed.Recall.MaxTokens
+		}
+		if parsed.Recall.HybridWeight != 0 {
+			cfg.HybridWeight = parsed.Recall.HybridWeight
+		}
+		cfg.SemanticEnabled = parsed.Recall.SemanticEnabled
+		if parsed.Logging.Level != "" {
+			cfg.LogLevel = parsed.Logging.Level
+		}
+		if parsed.Logging.File != "" {
+			cfg.LogFile = parsed.Logging.File
+		}
+		cfg.EvidenceAllowCommand = parsed.Evidence.AllowCommand
+		if len(parsed.Evidence.AllowedCommands) > 0 {
+			cfg.EvidenceAllowedCommands = parsed.Evidence.AllowedCommands
+		}
+		if parsed.Evidence.CommandTimeoutSeconds > 0 {
+			cfg.EvidenceCommandTimeoutSeconds = parsed.Evidence.CommandTimeoutSeconds
+		}
+		if parsed.LLM.BaseURL != "" {
+			cfg.LLMBaseURL = parsed.LLM.BaseURL
+		}
+		if parsed.LLM.APIKey != "" {
+			cfg.LLMAPIKey = parsed.LLM.APIKey
+		}
+		if parsed.Embedding.BaseURL != "" {
+			cfg.EmbeddingBaseURL = parsed.Embedding.BaseURL
+			embeddingBaseURLSet = true
+		}
+		if parsed.Embedding.Model != "" {
+			cfg.EmbeddingModel = parsed.Embedding.Model
+		}
 	}
 
 	// Apply environment variable overrides
@@ -88,6 +183,52 @@ func LoadConfig() (*Config, error) {
 
 	if level := os.Getenv("TINYMEM_LOG_LEVEL"); level != "" {
 		cfg.LogLevel = level
+	}
+	if logFile := os.Getenv("TINYMEM_LOG_FILE"); logFile != "" {
+		cfg.LogFile = logFile
+	}
+
+	if baseURL := os.Getenv("TINYMEM_LLM_BASE_URL"); baseURL != "" {
+		cfg.LLMBaseURL = baseURL
+	}
+	if apiKey := os.Getenv("TINYMEM_LLM_API_KEY"); apiKey != "" {
+		cfg.LLMAPIKey = apiKey
+	}
+	if embedBaseURL := os.Getenv("TINYMEM_EMBEDDING_BASE_URL"); embedBaseURL != "" {
+		cfg.EmbeddingBaseURL = embedBaseURL
+		embeddingBaseURLSet = true
+	}
+	if embedModel := os.Getenv("TINYMEM_EMBEDDING_MODEL"); embedModel != "" {
+		cfg.EmbeddingModel = embedModel
+	}
+	if allowCmd := os.Getenv("TINYMEM_EVIDENCE_ALLOW_COMMAND"); allowCmd != "" {
+		cfg.EvidenceAllowCommand = allowCmd == "true" || allowCmd == "1"
+	}
+	if allowed := os.Getenv("TINYMEM_EVIDENCE_ALLOWED_COMMANDS"); allowed != "" {
+		parts := strings.Split(allowed, ",")
+		var cmds []string
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if part != "" {
+				cmds = append(cmds, part)
+			}
+		}
+		if len(cmds) > 0 {
+			cfg.EvidenceAllowedCommands = cmds
+		}
+	}
+	if timeoutStr := os.Getenv("TINYMEM_EVIDENCE_COMMAND_TIMEOUT_SECONDS"); timeoutStr != "" {
+		if timeout, err := strconv.Atoi(timeoutStr); err == nil {
+			cfg.EvidenceCommandTimeoutSeconds = timeout
+		}
+	}
+	if semantic := os.Getenv("TINYMEM_SEMANTIC_ENABLED"); semantic != "" {
+		cfg.SemanticEnabled = semantic == "true" || semantic == "1"
+	}
+	if hybridWeight := os.Getenv("TINYMEM_HYBRID_WEIGHT"); hybridWeight != "" {
+		if weight, err := strconv.ParseFloat(hybridWeight, 64); err == nil {
+			cfg.HybridWeight = weight
+		}
 	}
 
 	if search := os.Getenv("TINYMEM_SEARCH_ENABLED"); search != "" {
@@ -111,11 +252,32 @@ func LoadConfig() (*Config, error) {
 			cfg.ExtractionBufferBytes = size
 		}
 	}
+	if maxItems := os.Getenv("TINYMEM_RECALL_MAX_ITEMS"); maxItems != "" {
+		if size, err := strconv.Atoi(maxItems); err == nil {
+			cfg.RecallMaxItems = size
+		}
+	}
+	if maxTokens := os.Getenv("TINYMEM_RECALL_MAX_TOKENS"); maxTokens != "" {
+		if size, err := strconv.Atoi(maxTokens); err == nil {
+			cfg.RecallMaxTokens = size
+		}
+	}
+
+	cfg.LLMBaseURL = normalizeBaseURL(cfg.LLMBaseURL)
+	if !embeddingBaseURLSet {
+		cfg.EmbeddingBaseURL = cfg.LLMBaseURL
+	}
+	cfg.EmbeddingBaseURL = normalizeBaseURL(cfg.EmbeddingBaseURL)
 
 	return cfg, nil
 }
 
-	return nil
+func normalizeBaseURL(baseURL string) string {
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return baseURL
+	}
+	return strings.TrimRight(baseURL, "/")
 }
 
 // GenerateProjectID creates a consistent project ID from the project root path.
@@ -145,6 +307,35 @@ func WithConfig(ctx context.Context, cfg *Config) context.Context {
 func FromContext(ctx context.Context) *Config {
 	if cfg, ok := ctx.Value(configContextKey{}).(*Config); ok {
 		return cfg
+	}
+	return nil
+}
+
+// Validate verifies the configuration is usable.
+func (c *Config) Validate() error {
+	if c.ProxyPort <= 0 || c.ProxyPort > 65535 {
+		return fmt.Errorf("proxy port out of range: %d", c.ProxyPort)
+	}
+	if strings.TrimSpace(c.LLMBaseURL) == "" {
+		return fmt.Errorf("LLM base URL is empty")
+	}
+	if c.RecallMaxItems < 0 {
+		return fmt.Errorf("recall max items cannot be negative")
+	}
+	if c.RecallMaxTokens < 0 {
+		return fmt.Errorf("recall max tokens cannot be negative")
+	}
+	if c.ExtractionBufferBytes <= 0 {
+		return fmt.Errorf("extraction buffer bytes must be positive")
+	}
+	if c.HybridWeight < 0 || c.HybridWeight > 1 {
+		return fmt.Errorf("hybrid weight must be between 0 and 1")
+	}
+	if c.EvidenceCommandTimeoutSeconds <= 0 {
+		return fmt.Errorf("evidence command timeout must be positive")
+	}
+	if c.EvidenceAllowCommand && len(c.EvidenceAllowedCommands) == 0 {
+		return fmt.Errorf("evidence commands enabled but no allowed commands configured")
 	}
 	return nil
 }

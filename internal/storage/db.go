@@ -3,14 +3,14 @@ package storage
 import (
 	"database/sql"
 	"fmt"
-	"log"
+
 	"github.com/a-marczewski/tinymem/internal/config"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
 const (
-	SchemaVersion = 1
+	SchemaVersion = 2
 )
 
 // DB represents the database connection
@@ -58,10 +58,13 @@ func (db *DB) migrate() error {
 			if err := db.applySchemaV1(tx); err != nil {
 				return fmt.Errorf("failed to apply schema v%d: %w", version, err)
 			}
+		case 2:
+			if err := db.applySchemaV2(tx); err != nil {
+				return fmt.Errorf("failed to apply schema v%d: %w", version, err)
+			}
 		default:
 			return fmt.Errorf("unknown schema version: %d", version)
 		}
-		log.Printf("Applied schema version %d", version)
 	}
 
 	// Commit the transaction
@@ -70,6 +73,81 @@ func (db *DB) migrate() error {
 	}
 
 	return nil
+}
+
+// applySchemaV2 enforces fact invariants at the database layer.
+func (db *DB) applySchemaV2(tx *sql.Tx) error {
+	// Fail migration if invalid facts already exist.
+	var invalidFacts int
+	if err := tx.QueryRow(`
+		SELECT COUNT(*)
+		FROM memories m
+		WHERE m.type = 'fact'
+		  AND NOT EXISTS (
+			SELECT 1 FROM evidence e WHERE e.memory_id = m.id AND e.verified = 1
+		  )
+	`).Scan(&invalidFacts); err != nil {
+		return err
+	}
+	if invalidFacts > 0 {
+		return fmt.Errorf("found %d fact(s) without verified evidence", invalidFacts)
+	}
+
+	// Block direct insertion of facts without evidence.
+	_, err := tx.Exec(`
+		CREATE TRIGGER IF NOT EXISTS memories_fact_insert_guard
+		BEFORE INSERT ON memories
+		WHEN NEW.type = 'fact'
+		BEGIN
+			SELECT RAISE(ABORT, 'fact requires verified evidence');
+		END;
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Block promotion to fact without verified evidence.
+	_, err = tx.Exec(`
+		CREATE TRIGGER IF NOT EXISTS memories_fact_update_guard
+		BEFORE UPDATE ON memories
+		WHEN NEW.type = 'fact'
+		BEGIN
+			SELECT CASE
+				WHEN (SELECT COUNT(*) FROM evidence e WHERE e.memory_id = NEW.id AND e.verified = 1) = 0
+				THEN RAISE(ABORT, 'fact requires verified evidence')
+			END;
+		END;
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Prevent removing the last verified evidence from a fact.
+	_, err = tx.Exec(`
+		CREATE TRIGGER IF NOT EXISTS evidence_fact_delete_guard
+		BEFORE DELETE ON evidence
+		WHEN (SELECT type FROM memories WHERE id = OLD.memory_id) = 'fact'
+		  AND (SELECT COUNT(*) FROM evidence e WHERE e.memory_id = OLD.memory_id AND e.verified = 1) <= 1
+		BEGIN
+			SELECT RAISE(ABORT, 'cannot remove last verified evidence for fact');
+		END;
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Prevent un-verifying the last verified evidence for a fact.
+	_, err = tx.Exec(`
+		CREATE TRIGGER IF NOT EXISTS evidence_fact_unverify_guard
+		BEFORE UPDATE OF verified ON evidence
+		WHEN (SELECT type FROM memories WHERE id = NEW.memory_id) = 'fact'
+		  AND OLD.verified = 1 AND NEW.verified = 0
+		  AND (SELECT COUNT(*) FROM evidence e WHERE e.memory_id = NEW.memory_id AND e.verified = 1) <= 1
+		BEGIN
+			SELECT RAISE(ABORT, 'fact requires at least one verified evidence');
+		END;
+	`)
+	return err
 }
 
 // applySchemaV1 applies the initial schema
@@ -132,8 +210,7 @@ func (db *DB) applySchemaV1(tx *sql.Tx) error {
 			)
 		`)
 		if err != nil {
-			// If FTS5 creation fails despite being available, log and continue
-			fmt.Printf("Warning: Could not create FTS5 table: %v\n", err)
+			// FTS5 creation failure is non-fatal; continue without FTS.
 		} else {
 			// Create the triggers to keep FTS table in sync
 			_, err = tx.Exec(`
@@ -164,9 +241,6 @@ func (db *DB) applySchemaV1(tx *sql.Tx) error {
 				return err
 			}
 		}
-	} else {
-		// FTS5 not available, continue without it
-		fmt.Printf("Warning: FTS5 not available, proceeding without full-text search\n")
 	}
 
 	// Update schema version

@@ -17,6 +17,7 @@ import (
 	"github.com/a-marczewski/tinymem/internal/llm"
 	"github.com/a-marczewski/tinymem/internal/memory"
 	"github.com/a-marczewski/tinymem/internal/recall"
+	"github.com/a-marczewski/tinymem/internal/semantic"
 	"go.uber.org/zap"
 )
 
@@ -35,7 +36,7 @@ type Server struct {
 	llmClient       *llm.Client
 	memoryService   *memory.Service
 	evidenceService *evidence.Service
-	recallEngine    *recall.Engine
+	recallEngine    recall.Recaller
 	extractor       *extract.Extractor
 	responseBuffer  chan ResponseCapture // Channel for capturing responses for extraction
 	server          *http.Server
@@ -44,8 +45,13 @@ type Server struct {
 // NewServer creates a new proxy server
 func NewServer(a *app.App) *Server {
 	// Create new instances of services using app.App's components
-	evidenceService := evidence.NewService(a.DB)
-	recallEngine := recall.NewEngine(a.Memory, evidenceService, a.Config)
+	evidenceService := evidence.NewService(a.DB, a.Config)
+	var recallEngine recall.Recaller
+	if a.Config.SemanticEnabled {
+		recallEngine = semantic.NewSemanticEngine(a.DB, a.Memory, evidenceService, a.Config)
+	} else {
+		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config)
+	}
 	injector := inject.NewMemoryInjector(recallEngine)
 	llmClient := llm.NewClient(a.Config)
 	extractor := extract.NewExtractor(evidenceService)
@@ -147,10 +153,10 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if userMessage != "" {
 		// Perform recall to get relevant memories
 		recallResults, err := s.recallEngine.Recall(recall.RecallOptions{
-			ProjectID: s.app.ProjectID, // Pass projectID
+			ProjectID: s.app.ProjectID,
 			Query:     userMessage,
-			MaxItems:  10,  // Configurable
-			MaxTokens: 2000, // Configurable
+			MaxItems:  s.config.RecallMaxItems,
+			MaxTokens: s.config.RecallMaxTokens,
 		})
 		if err != nil {
 			s.app.Logger.Warn("Failed to recall memories for prompt injection", zap.Error(err), zap.String("user_message", userMessage))
@@ -161,9 +167,9 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 			for _, result := range recallResults {
 				memories = append(memories, result.Memory)
 			}
-			
+
 			memoryText := s.injector.FormatMemoriesForSystemMessage(memories)
-			
+
 			// Add memory to the messages as a system message
 			req.Messages = append([]llm.Message{{Role: "system", Content: memoryText}}, req.Messages...)
 		}
@@ -171,7 +177,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 
 	// Forward the request to the LLM backend
 	ctx := r.Context()
-	
+
 	// Check if streaming is requested
 	if req.Stream {
 		s.handleStreamingRequest(w, ctx, req)
@@ -179,6 +185,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		s.handleNonStreamingRequest(w, ctx, req)
 	}
 }
+
 // handleStreamingRequest handles streaming chat completion requests
 func (s *Server) handleStreamingRequest(w http.ResponseWriter, ctx context.Context, req llm.ChatCompletionRequest) {
 	// Set headers for SSE
@@ -222,7 +229,7 @@ func (s *Server) handleStreamingRequest(w http.ResponseWriter, ctx context.Conte
 			responseMutex.Lock()
 			for _, choice := range chunk.Choices {
 				if choice.Delta.Content != "" {
-					rollingBuffer.Write([]byte(choice.Delta.Content))
+					_, _ = rollingBuffer.Write([]byte(choice.Delta.Content))
 
 					// Log an error if buffer exceeds max size, do not panic
 					if rollingBuffer.Len() > s.config.ExtractionBufferBytes {
@@ -261,25 +268,33 @@ func (s *Server) handleStreamingRequest(w http.ResponseWriter, ctx context.Conte
 		}
 	}
 }
+
 // handleNonStreamingRequest handles non-streaming chat completion requests
 func (s *Server) handleNonStreamingRequest(w http.ResponseWriter, ctx context.Context, req llm.ChatCompletionRequest) {
-	response, err := s.llmClient.ChatCompletions(ctx, req)
+	resp, err := s.llmClient.ChatCompletionsRaw(ctx, req)
 	if err != nil {
 		s.app.Logger.Error("LLM ChatCompletions failed for non-streaming request", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	defer resp.Body.Close()
 
-	// Store response for extraction
-	responseText := ""
-	for _, choice := range response.Choices {
-		responseText += choice.Message.Content
+	// For non-streaming responses, limit the amount of data captured for extraction.
+	rollingBuffer := NewRollingBuffer(s.config.ExtractionBufferBytes)
+
+	for key, values := range resp.Header {
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+
+	tee := io.TeeReader(resp.Body, rollingBuffer)
+	if _, err := io.Copy(w, tee); err != nil {
+		s.app.Logger.Error("Failed to proxy non-streaming response", zap.Error(err))
+		return
 	}
 
-	// For non-streaming responses, we still need to limit the amount of text sent for extraction
-	// Use a rolling buffer to ensure we don't send too much text for extraction
-	rollingBuffer := NewRollingBuffer(s.config.ExtractionBufferBytes)
-	rollingBuffer.Write([]byte(responseText))
 	finalText := rollingBuffer.String()
 
 	// Send response for extraction via channel
@@ -293,9 +308,7 @@ func (s *Server) handleNonStreamingRequest(w http.ResponseWriter, ctx context.Co
 		s.app.Logger.Warn("Response buffer is full, skipping extraction for non-streaming request", zap.String("model", req.Model))
 	}
 
-	// Send response back to client
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	// Response already forwarded to client.
 }
 
 // handleHealth handles health check requests
@@ -307,4 +320,3 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"time":   time.Now().Format(time.RFC3339),
 	})
 }
-

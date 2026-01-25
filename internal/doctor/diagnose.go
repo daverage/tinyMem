@@ -2,9 +2,16 @@ package doctor
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/a-marczewski/tinymem/internal/config"
+	"github.com/a-marczewski/tinymem/internal/memory"
 	"github.com/a-marczewski/tinymem/internal/storage"
 )
 
@@ -52,6 +59,8 @@ func (d *Runner) RunAll() *Diagnostics {
 	results = append(results, d.checkConfiguration()...)
 	results = append(results, d.checkStorageHealth()...)
 	results = append(results, d.checkMemoryServiceHealth()...) // NEW CHECK
+	results = append(results, d.checkExternalDependencies()...)
+	results = append(results, d.checkFactEvidenceIntegrity()...)
 
 	// Collect issues from failed checks
 	for _, result := range results {
@@ -70,6 +79,111 @@ func (d *Runner) RunAll() *Diagnostics {
 		Issues: issues,
 		Status: status,
 	}
+}
+
+func (d *Runner) checkExternalDependencies() []CheckResult {
+	var results []CheckResult
+
+	llmErr := checkReachable(d.config.LLMBaseURL)
+	if llmErr != nil {
+		results = append(results, CheckResult{
+			Name:     "llm_backend_reachability",
+			Status:   "fail",
+			Message:  fmt.Sprintf("LLM backend unreachable: %v", llmErr),
+			Severity: "error",
+		})
+	} else {
+		results = append(results, CheckResult{
+			Name:     "llm_backend_reachability",
+			Status:   "pass",
+			Message:  "LLM backend reachable",
+			Severity: "info",
+		})
+	}
+
+	if d.config.SemanticEnabled {
+		embedErr := checkReachable(d.config.EmbeddingBaseURL)
+		if embedErr != nil {
+			results = append(results, CheckResult{
+				Name:     "embedding_backend_reachability",
+				Status:   "fail",
+				Message:  fmt.Sprintf("Embedding backend unreachable: %v", embedErr),
+				Severity: "error",
+			})
+		} else {
+			results = append(results, CheckResult{
+				Name:     "embedding_backend_reachability",
+				Status:   "pass",
+				Message:  "Embedding backend reachable",
+				Severity: "info",
+			})
+		}
+	} else {
+		results = append(results, CheckResult{
+			Name:     "embedding_backend_reachability",
+			Status:   "pass",
+			Message:  "Embedding checks skipped (semantic disabled)",
+			Severity: "info",
+		})
+	}
+
+	if err := checkProxyListening(d.config.ProxyPort); err != nil {
+		results = append(results, CheckResult{
+			Name:     "proxy_readiness",
+			Status:   "fail",
+			Message:  fmt.Sprintf("Proxy not listening on port %d: %v", d.config.ProxyPort, err),
+			Severity: "warning",
+		})
+	} else {
+		results = append(results, CheckResult{
+			Name:     "proxy_readiness",
+			Status:   "pass",
+			Message:  fmt.Sprintf("Proxy listening on port %d", d.config.ProxyPort),
+			Severity: "info",
+		})
+	}
+
+	return results
+}
+
+func checkReachable(baseURL string) error {
+	if baseURL == "" {
+		return fmt.Errorf("base URL is empty")
+	}
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return err
+	}
+	host := parsed.Host
+	if host == "" {
+		return fmt.Errorf("invalid base URL: %s", baseURL)
+	}
+
+	if !strings.Contains(host, ":") {
+		if parsed.Scheme == "https" {
+			host = net.JoinHostPort(host, "443")
+		} else {
+			host = net.JoinHostPort(host, "80")
+		}
+	}
+
+	conn, err := net.DialTimeout("tcp", host, 2*time.Second)
+	if err != nil {
+		return err
+	}
+	return conn.Close()
+}
+
+func checkProxyListening(port int) error {
+	if port <= 0 || port > 65535 {
+		return fmt.Errorf("invalid port %s", strconv.Itoa(port))
+	}
+	address := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+	conn, err := net.DialTimeout("tcp", address, 1*time.Second)
+	if err != nil {
+		return err
+	}
+	return conn.Close()
 }
 
 // checkMemoryServiceHealth checks the health of the memory service
@@ -326,6 +440,47 @@ func (d *Runner) checkStorageHealth() []CheckResult {
 			Name:     "database_integrity",
 			Status:   "pass",
 			Message:  "Database integrity check passed",
+			Severity: "info",
+		})
+	}
+
+	return results
+}
+
+func (d *Runner) checkFactEvidenceIntegrity() []CheckResult {
+	var results []CheckResult
+
+	var invalidFacts int
+	err := d.db.GetConnection().QueryRow(`
+		SELECT COUNT(*)
+		FROM memories m
+		WHERE m.type = 'fact'
+		  AND NOT EXISTS (
+			SELECT 1 FROM evidence e WHERE e.memory_id = m.id AND e.verified = 1
+		  )
+	`).Scan(&invalidFacts)
+	if err != nil {
+		results = append(results, CheckResult{
+			Name:     "fact_evidence_integrity",
+			Status:   "fail",
+			Message:  fmt.Sprintf("Failed to validate fact evidence integrity: %v", err),
+			Severity: "error",
+		})
+		return results
+	}
+
+	if invalidFacts > 0 {
+		results = append(results, CheckResult{
+			Name:     "fact_evidence_integrity",
+			Status:   "fail",
+			Message:  fmt.Sprintf("Found %d fact(s) without verified evidence", invalidFacts),
+			Severity: "error",
+		})
+	} else {
+		results = append(results, CheckResult{
+			Name:     "fact_evidence_integrity",
+			Status:   "pass",
+			Message:  "All facts have verified evidence",
 			Severity: "info",
 		})
 	}

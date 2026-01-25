@@ -8,27 +8,27 @@ import (
 type Type string
 
 const (
-	Fact       Type = "fact"
-	Claim      Type = "claim"
-	Plan       Type = "plan"
-	Decision   Type = "decision"
-	Constraint Type = "constraint"
+	Fact        Type = "fact"
+	Claim       Type = "claim"
+	Plan        Type = "plan"
+	Decision    Type = "decision"
+	Constraint  Type = "constraint"
 	Observation Type = "observation"
-	Note       Type = "note"
+	Note        Type = "note"
 )
 
 // Memory represents a memory entry
 type Memory struct {
-	ID            int64     `json:"id"`
-	ProjectID     string    `json:"project_id"`
-	Type          Type      `json:"type"`
-	Summary       string    `json:"summary"`
-	Detail        string    `json:"detail"`
-	Key           *string   `json:"key,omitempty"`
-	Source        *string   `json:"source,omitempty"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
-	SupersededBy  *int64    `json:"superseded_by,omitempty"`
+	ID           int64     `json:"id"`
+	ProjectID    string    `json:"project_id"`
+	Type         Type      `json:"type"`
+	Summary      string    `json:"summary"`
+	Detail       string    `json:"detail"`
+	Key          *string   `json:"key,omitempty"`
+	Source       *string   `json:"source,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+	SupersededBy *int64    `json:"superseded_by,omitempty"`
 }
 
 // Evidence represents evidence for a memory
@@ -39,6 +39,12 @@ type Evidence struct {
 	Content   string    `json:"content"`
 	Verified  bool      `json:"verified"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+// EvidenceInput represents evidence input for creating a fact.
+type EvidenceInput struct {
+	Type    string `json:"type"`
+	Content string `json:"content"`
 }
 
 // Validation rules for memory types

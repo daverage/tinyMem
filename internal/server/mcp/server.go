@@ -11,13 +11,14 @@ import (
 
 	"github.com/a-marczewski/tinymem/internal/app" // Add app import
 	"github.com/a-marczewski/tinymem/internal/config"
+	"github.com/a-marczewski/tinymem/internal/doctor" // Add doctor import
 	"github.com/a-marczewski/tinymem/internal/evidence"
 	"github.com/a-marczewski/tinymem/internal/extract"
 	"github.com/a-marczewski/tinymem/internal/memory"
 	"github.com/a-marczewski/tinymem/internal/recall"
+	"github.com/a-marczewski/tinymem/internal/semantic"
 	"github.com/a-marczewski/tinymem/internal/storage"
 	"go.uber.org/zap" // Add zap import
-	"github.com/a-marczewski/tinymem/internal/doctor" // Add doctor import
 )
 
 // Server implements the Model Context Protocol server
@@ -27,7 +28,7 @@ type Server struct {
 	db              *storage.DB
 	memoryService   *memory.Service
 	evidenceService *evidence.Service
-	recallEngine    *recall.Engine
+	recallEngine    recall.Recaller
 	extractor       *extract.Extractor
 	ctx             context.Context
 	cancel          context.CancelFunc
@@ -59,8 +60,13 @@ func NewServer(a *app.App) *Server {
 
 	// Create new instances of services using app.App's components
 	// These will now receive the logger from the app.App instance automatically
-	evidenceService := evidence.NewService(a.DB)
-	recallEngine := recall.NewEngine(a.Memory, evidenceService, a.Config)
+	evidenceService := evidence.NewService(a.DB, a.Config)
+	var recallEngine recall.Recaller
+	if a.Config.SemanticEnabled {
+		recallEngine = semantic.NewSemanticEngine(a.DB, a.Memory, evidenceService, a.Config)
+	} else {
+		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config)
+	}
 	extractor := extract.NewExtractor(evidenceService)
 
 	return &Server{
@@ -216,6 +222,23 @@ func (s *Server) handleToolsList(req *MCPRequest) {
 						"type":        "string",
 						"description": "Optional source reference (file path, URL, etc.)",
 					},
+					"evidence": map[string]interface{}{
+						"type": "array",
+						"items": map[string]interface{}{
+							"type": "object",
+							"properties": map[string]interface{}{
+								"type": map[string]interface{}{
+									"type":        "string",
+									"description": "Evidence type: file_exists, grep_hit, cmd_exit0, test_pass",
+								},
+								"content": map[string]interface{}{
+									"type":        "string",
+									"description": "Evidence content (path, pattern::file, or command)",
+								},
+							},
+							"required": []string{"type", "content"},
+						},
+					},
 				},
 				"required": []string{"type", "summary"},
 			},
@@ -319,9 +342,9 @@ func (s *Server) handleMemoryQuery(req *MCPRequest, args json.RawMessage) {
 	}
 
 	results, err := s.recallEngine.Recall(recall.RecallOptions{
-		ProjectID: s.app.ProjectID, // Pass projectID
-		Query:    queryReq.Query,
-		MaxItems: queryReq.Limit,
+		ProjectID: s.app.ProjectID,
+		Query:     queryReq.Query,
+		MaxItems:  queryReq.Limit,
 	})
 	if err != nil {
 		s.sendError(req.ID, -32603, fmt.Sprintf("Query failed: %v", err))
@@ -420,13 +443,17 @@ func (s *Server) handleMemoryRecent(req *MCPRequest, args json.RawMessage) {
 // handleMemoryWrite handles memory write requests
 func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 	var writeReq struct {
-		Type    string `json:"type"`
-		Summary string `json:"summary"`
-		Detail  string `json:"detail"`
-		Key     string `json:"key"`
-		Source  string `json:"source"`
+		Type     string `json:"type"`
+		Summary  string `json:"summary"`
+		Detail   string `json:"detail"`
+		Key      string `json:"key"`
+		Source   string `json:"source"`
+		Evidence []struct {
+			Type    string `json:"type"`
+			Content string `json:"content"`
+		} `json:"evidence"`
 	}
-	
+
 	if err := json.Unmarshal(args, &writeReq); err != nil {
 		s.sendError(req.ID, -32602, "Invalid arguments for memory.write")
 		return
@@ -439,7 +466,6 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 		return
 	}
 
-	// Create new memory
 	newMemory := &memory.Memory{
 		ProjectID: s.app.ProjectID, // Use s.app.ProjectID
 		Type:      memType,
@@ -448,7 +474,7 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
-	
+
 	if writeReq.Key != "" {
 		newMemory.Key = &writeReq.Key
 	}
@@ -456,9 +482,31 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 		newMemory.Source = &writeReq.Source
 	}
 
-	if err := s.memoryService.CreateMemory(newMemory); err != nil {
-		s.sendError(req.ID, -32603, fmt.Sprintf("Failed to create memory: %v", err))
-		return
+	if memType == memory.Fact {
+		if len(writeReq.Evidence) == 0 {
+			s.sendError(req.ID, -32603, "Fact creation requires verified evidence")
+			return
+		}
+		var inputs []memory.EvidenceInput
+		for _, ev := range writeReq.Evidence {
+			inputs = append(inputs, memory.EvidenceInput{
+				Type:    ev.Type,
+				Content: ev.Content,
+			})
+		}
+
+		verify := func(evidenceType, content string) (bool, error) {
+			return evidence.VerifyEvidence(evidenceType, content, s.config)
+		}
+		if err := s.memoryService.CreateFactWithEvidence(newMemory, inputs, verify); err != nil {
+			s.sendError(req.ID, -32603, fmt.Sprintf("Failed to create fact: %v", err))
+			return
+		}
+	} else {
+		if err := s.memoryService.CreateMemory(newMemory); err != nil {
+			s.sendError(req.ID, -32603, fmt.Sprintf("Failed to create memory: %v", err))
+			return
+		}
 	}
 
 	response := map[string]interface{}{
@@ -467,7 +515,7 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 			"content": []map[string]interface{}{
 				{
 					"type": "text",
-					"text": fmt.Sprintf("Memory created successfully with ID: %s\nType: %s\nSummary: %s",
+					"text": fmt.Sprintf("Memory created successfully with ID: %d\nType: %s\nSummary: %s",
 						newMemory.ID, newMemory.Type, newMemory.Summary),
 				},
 			},
@@ -555,6 +603,7 @@ func (s *Server) handleMemoryHealth(req *MCPRequest) {
 
 	s.sendResponse(response)
 }
+
 // handleMemoryDoctor handles memory doctor diagnostic requests
 func (s *Server) handleMemoryDoctor(req *MCPRequest) {
 	doctorRunner := doctor.NewRunner(s.app.Config, s.app.DB, s.app.ProjectID, s.app.Memory)
@@ -594,6 +643,7 @@ func (s *Server) handleMemoryDoctor(req *MCPRequest) {
 
 	s.sendResponse(response)
 }
+
 // handleShutdown handles shutdown requests
 func (s *Server) handleShutdown(req *MCPRequest) {
 	s.app.Logger.Info("MCP server received shutdown request.")

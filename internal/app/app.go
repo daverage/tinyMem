@@ -18,7 +18,7 @@ import (
 // App holds the core components of the application.
 type App struct {
 	Config      *config.Config
-	Logger      *zap.Logger 
+	Logger      *zap.Logger
 	DB          *storage.DB
 	Memory      *memory.Service
 	ProjectPath string
@@ -40,9 +40,14 @@ func NewApp() (*App, error) {
 	}
 
 	// 3. Initialize logger
-	// logPath now derived using cfg.TinyMemDir directly
-	logDir := filepath.Join(cfg.TinyMemDir, "logs") // Use cfg.TinyMemDir directly as it's already an absolute path
-	logFile := filepath.Join(logDir, fmt.Sprintf("tinymem-%s.log", time.Now().Format("2006-01-02")))
+	logFile := cfg.LogFile
+	if logFile == "" {
+		logDir := filepath.Join(cfg.TinyMemDir, "logs")
+		logFile = filepath.Join(logDir, fmt.Sprintf("tinymem-%s.log", time.Now().Format("2006-01-02")))
+	} else if !filepath.IsAbs(logFile) {
+		logFile = filepath.Join(cfg.TinyMemDir, logFile)
+	}
+	logDir := filepath.Dir(logFile)
 
 	// Ensure log directory exists before initializing logger
 	if err := os.MkdirAll(logDir, 0755); err != nil {

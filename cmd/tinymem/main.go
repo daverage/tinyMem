@@ -3,7 +3,10 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/a-marczewski/tinymem/internal/app"
 	"github.com/spf13/cobra"
@@ -12,8 +15,10 @@ import (
 	"github.com/a-marczewski/tinymem/internal/doctor"
 	"github.com/a-marczewski/tinymem/internal/evidence"
 	"github.com/a-marczewski/tinymem/internal/inject"
+	"github.com/a-marczewski/tinymem/internal/logging"
 	"github.com/a-marczewski/tinymem/internal/memory"
 	"github.com/a-marczewski/tinymem/internal/recall"
+	"github.com/a-marczewski/tinymem/internal/semantic"
 	"github.com/a-marczewski/tinymem/internal/server/mcp"
 	"github.com/a-marczewski/tinymem/internal/server/proxy"
 )
@@ -66,6 +71,23 @@ var mcpCmd = &cobra.Command{
 }
 
 func runMcpCmd(a *app.App, cmd *cobra.Command, args []string) {
+	if a.Logger != nil {
+		_ = a.Logger.Sync()
+	}
+
+	logFile := a.Config.LogFile
+	if logFile == "" {
+		logDir := filepath.Join(a.Config.TinyMemDir, "logs")
+		logFile = filepath.Join(logDir, fmt.Sprintf("tinymem-%s.log", time.Now().Format("2006-01-02")))
+	} else if !filepath.IsAbs(logFile) {
+		logFile = filepath.Join(a.Config.TinyMemDir, logFile)
+	}
+	if err := os.MkdirAll(filepath.Dir(logFile), 0755); err == nil {
+		if logger, err := logging.NewLoggerWithStderr(a.Config.LogLevel, logFile, false); err == nil {
+			a.Logger = logger
+		}
+	}
+
 	// Create and start MCP server
 	mcpServer := mcp.NewServer(a) // Pass the app instance directly
 	a.Logger.Info("Starting MCP server")
@@ -83,8 +105,13 @@ var runCmd = &cobra.Command{
 
 func runRunCmd(a *app.App, cmd *cobra.Command, args []string) {
 	// Set up services using the app instance
-	evidenceService := evidence.NewService(a.DB)
-	recallEngine := recall.NewEngine(a.Memory, evidenceService, a.Config) // a.Memory is already memory.Service
+	evidenceService := evidence.NewService(a.DB, a.Config)
+	var recallEngine recall.Recaller
+	if a.Config.SemanticEnabled {
+		recallEngine = semantic.NewSemanticEngine(a.DB, a.Memory, evidenceService, a.Config)
+	} else {
+		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config)
+	}
 	injector := inject.NewMemoryInjector(recallEngine)
 
 	// Perform recall based on the command
@@ -93,14 +120,21 @@ func runRunCmd(a *app.App, cmd *cobra.Command, args []string) {
 		commandStr += fmt.Sprintf(" with arguments: %s", strings.Join(args[1:], " "))
 	}
 
-	injectedPrompt, err := injector.InjectMemoriesIntoPrompt(commandStr, 10, 2000)
+	injectedPrompt, err := injector.InjectMemoriesIntoPrompt(commandStr, a.ProjectID, a.Config.RecallMaxItems, a.Config.RecallMaxTokens)
 	if err != nil {
 		a.Logger.Warn("Failed to inject memories", zap.Error(err))
 		injectedPrompt = commandStr
 	}
 
-	fmt.Printf("Executing with memory context:\n%s\n", injectedPrompt)
-	// In a real implementation, we would execute the command here
+	cmdToRun := exec.Command(args[0], args[1:]...)
+	cmdToRun.Env = append(os.Environ(), fmt.Sprintf("TINYMEM_CONTEXT=%s", injectedPrompt))
+	cmdToRun.Stdout = os.Stdout
+	cmdToRun.Stderr = os.Stderr
+	cmdToRun.Stdin = os.Stdin
+
+	if err := cmdToRun.Run(); err != nil {
+		a.Logger.Error("Command failed", zap.Error(err))
+	}
 }
 
 var healthCmd = &cobra.Command{
@@ -209,15 +243,20 @@ var queryCmd = &cobra.Command{
 
 func runQueryCmd(a *app.App, cmd *cobra.Command, args []string) {
 	// Set up services using the app instance
-	evidenceService := evidence.NewService(a.DB)
-	recallEngine := recall.NewEngine(a.Memory, evidenceService, a.Config) // a.Memory is already memory.Service
+	evidenceService := evidence.NewService(a.DB, a.Config)
+	var recallEngine recall.Recaller
+	if a.Config.SemanticEnabled {
+		recallEngine = semantic.NewSemanticEngine(a.DB, a.Memory, evidenceService, a.Config)
+	} else {
+		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config)
+	}
 
 	// Perform search
 	query := strings.Join(args, " ")
 	results, err := recallEngine.Recall(recall.RecallOptions{
 		ProjectID: a.ProjectID,
-		Query:    query,
-		MaxItems: 10,
+		Query:     query,
+		MaxItems:  a.Config.RecallMaxItems,
 	})
 	if err != nil {
 		a.Logger.Error("Search failed", zap.Error(err))
@@ -227,7 +266,7 @@ func runQueryCmd(a *app.App, cmd *cobra.Command, args []string) {
 	fmt.Printf("Search results for '%s':\n\n", query)
 	for i, result := range results {
 		mem := result.Memory
-		fmt.Printf("[%d] (%.2f) %s: %s\n", i+1, string(mem.Type), mem.Summary)
+		fmt.Printf("[%d] (%.2f) %s: %s\n", i+1, result.Score, string(mem.Type), mem.Summary)
 		if mem.Detail != "" {
 			fmt.Printf("    Details: %s\n", mem.Detail)
 		}
@@ -267,4 +306,3 @@ func main() {
 		os.Exit(1)
 	}
 }
-

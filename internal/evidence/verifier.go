@@ -1,17 +1,21 @@
 package evidence
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
+
+	"github.com/a-marczewski/tinymem/internal/config"
 )
 
 // Verifier defines the interface for evidence verification
 type Verifier interface {
-	Verify(content string) (bool, error)
+	Verify(content string, cfg *config.Config) (bool, error)
 	GetType() string
 }
 
@@ -22,13 +26,9 @@ func (v *FileExistsVerifier) GetType() string {
 	return "file_exists"
 }
 
-func (v *FileExistsVerifier) Verify(filePath string) (bool, error) {
-	// Verify the path is safe (no traversal outside project)
-	if strings.Contains(filePath, "../") || strings.HasPrefix(filePath, "/../") {
-		return false, fmt.Errorf("unsafe path: %s", filePath)
-	}
-
-	absPath, err := filepath.Abs(filePath)
+// FileExistsVerifier is deterministic and safe (local filesystem only).
+func (v *FileExistsVerifier) Verify(filePath string, cfg *config.Config) (bool, error) {
+	absPath, err := resolveSafePath(filePath, cfg.ProjectRoot)
 	if err != nil {
 		return false, err
 	}
@@ -52,7 +52,8 @@ func (v *GrepHitVerifier) GetType() string {
 	return "grep_hit"
 }
 
-func (v *GrepHitVerifier) Verify(patternAndFile string) (bool, error) {
+// GrepHitVerifier is deterministic and safe (local filesystem only).
+func (v *GrepHitVerifier) Verify(patternAndFile string, cfg *config.Config) (bool, error) {
 	// Format: "pattern::filename" or "pattern::filename::options"
 	parts := strings.SplitN(patternAndFile, "::", 3)
 	if len(parts) < 2 {
@@ -62,12 +63,7 @@ func (v *GrepHitVerifier) Verify(patternAndFile string) (bool, error) {
 	pattern := parts[0]
 	filename := parts[1]
 
-	// Verify the filename is safe
-	if strings.Contains(filename, "../") || strings.HasPrefix(filename, "/../") {
-		return false, fmt.Errorf("unsafe path: %s", filename)
-	}
-
-	absPath, err := filepath.Abs(filename)
+	absPath, err := resolveSafePath(filename, cfg.ProjectRoot)
 	if err != nil {
 		return false, err
 	}
@@ -94,18 +90,9 @@ func (v *CmdExit0Verifier) GetType() string {
 	return "cmd_exit0"
 }
 
-func (v *CmdExit0Verifier) Verify(command string) (bool, error) {
-	// For security, only allow certain commands
-	// This is a simplified version - in production, you'd want more robust validation
-	if strings.Contains(command, "|") || strings.Contains(command, "&") || strings.Contains(command, ";") {
-		return false, fmt.Errorf("command contains unsafe characters")
-	}
-
-	cmd := exec.Command("/bin/sh", "-c", command)
-	err := cmd.Run()
-
-	// If there's no error, the command exited with 0
-	return err == nil, nil
+// CmdExit0Verifier is potentially unsafe or nondeterministic and is disabled by default.
+func (v *CmdExit0Verifier) Verify(command string, cfg *config.Config) (bool, error) {
+	return runWhitelistedCommand(command, cfg)
 }
 
 // TestPassVerifier checks if a test passes (placeholder implementation)
@@ -115,14 +102,49 @@ func (v *TestPassVerifier) GetType() string {
 	return "test_pass"
 }
 
-func (v *TestPassVerifier) Verify(testIdentifier string) (bool, error) {
-	// This is a placeholder - in a real implementation, this would run specific tests
-	// For now, we'll just return false to indicate it's not implemented
-	return false, fmt.Errorf("test_pass verifier not fully implemented: %s", testIdentifier)
+// TestPassVerifier is potentially unsafe or nondeterministic and is disabled by default.
+func (v *TestPassVerifier) Verify(testIdentifier string, cfg *config.Config) (bool, error) {
+	return runWhitelistedCommand(testIdentifier, cfg)
+}
+
+func resolveSafePath(path string, baseDir string) (string, error) {
+	cleaned := filepath.Clean(path)
+	if cleaned == "." || cleaned == "" {
+		return "", fmt.Errorf("invalid path: %s", path)
+	}
+	if baseDir == "" {
+		return "", fmt.Errorf("project root is not set")
+	}
+
+	if filepath.IsAbs(cleaned) {
+		rel, err := filepath.Rel(baseDir, cleaned)
+		if err != nil {
+			return "", err
+		}
+		if strings.HasPrefix(rel, "..") {
+			return "", fmt.Errorf("path escapes project root: %s", path)
+		}
+		return cleaned, nil
+	}
+
+	if strings.HasPrefix(cleaned, "..") {
+		return "", fmt.Errorf("unsafe relative path: %s", path)
+	}
+
+	absPath := filepath.Join(baseDir, cleaned)
+	rel, err := filepath.Rel(baseDir, absPath)
+	if err != nil {
+		return "", err
+	}
+	if strings.HasPrefix(rel, "..") {
+		return "", fmt.Errorf("path escapes project root: %s", path)
+	}
+
+	return absPath, nil
 }
 
 // VerifyEvidence verifies evidence using the appropriate verifier
-func VerifyEvidence(evidenceType, content string) (bool, error) {
+func VerifyEvidence(evidenceType, content string, cfg *config.Config) (bool, error) {
 	var verifier Verifier
 
 	switch evidenceType {
@@ -138,5 +160,45 @@ func VerifyEvidence(evidenceType, content string) (bool, error) {
 		return false, fmt.Errorf("unknown evidence type: %s", evidenceType)
 	}
 
-	return verifier.Verify(content)
+	return verifier.Verify(content, cfg)
+}
+
+func runWhitelistedCommand(command string, cfg *config.Config) (bool, error) {
+	if !cfg.EvidenceAllowCommand {
+		return false, fmt.Errorf("command evidence is disabled by policy")
+	}
+	if strings.TrimSpace(command) == "" {
+		return false, fmt.Errorf("command is empty")
+	}
+	if strings.ContainsAny(command, "|&;><`$") || strings.Contains(command, "\n") || strings.Contains(command, "\r") {
+		return false, fmt.Errorf("command contains unsafe characters")
+	}
+
+	parts := strings.Fields(command)
+	if len(parts) == 0 {
+		return false, fmt.Errorf("command is empty")
+	}
+
+	allowed := false
+	cmdBase := filepath.Base(parts[0])
+	for _, allowedCmd := range cfg.EvidenceAllowedCommands {
+		if cmdBase == allowedCmd {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		return false, fmt.Errorf("command not in allowlist: %s", cmdBase)
+	}
+
+	timeout := time.Duration(cfg.EvidenceCommandTimeoutSeconds) * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, parts[0], parts[1:]...)
+	cmd.Dir = cfg.ProjectRoot
+	if err := cmd.Run(); err != nil {
+		return false, err
+	}
+	return true, nil
 }

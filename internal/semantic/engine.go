@@ -4,12 +4,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"github.com/a-marczewski/tinymem/internal/config"
 	"github.com/a-marczewski/tinymem/internal/evidence"
 	"github.com/a-marczewski/tinymem/internal/memory"
 	"github.com/a-marczewski/tinymem/internal/recall"
 	"github.com/a-marczewski/tinymem/internal/storage"
+	"sort"
 )
 
 // SemanticEngine enhances recall with semantic similarity
@@ -52,7 +52,7 @@ func (s *SemanticEngine) SemanticRecall(options recall.RecallOptions) ([]recall.
 	}
 
 	// Get all memories for comparison (in a real system, you'd want to filter first)
-	allMemories, err := s.memoryService.GetAllMemories("default_project") // In real impl, get from context
+	allMemories, err := s.memoryService.GetAllMemories(options.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,8 @@ func (s *SemanticEngine) SemanticRecall(options recall.RecallOptions) ([]recall.
 
 		// Combine scores with configurable weights
 		// Using equal weights for simplicity; in practice, these could be tuned
-		combinedScore := 0.5*normalizeScore(lexicalScore) + 0.5*semanticScore
+		lexicalWeight := 1.0 - s.config.HybridWeight
+		combinedScore := lexicalWeight*normalizeScore(lexicalScore) + s.config.HybridWeight*semanticScore
 
 		combinedResults = append(combinedResults, recall.RecallResult{
 			Memory: result.Memory,
@@ -123,6 +124,9 @@ func (s *SemanticEngine) SemanticRecall(options recall.RecallOptions) ([]recall.
 
 	// Sort by combined score
 	sort.Slice(combinedResults, func(i, j int) bool {
+		if combinedResults[i].Score == combinedResults[j].Score {
+			return combinedResults[i].Memory.ID < combinedResults[j].Memory.ID
+		}
 		return combinedResults[i].Score > combinedResults[j].Score
 	})
 
@@ -156,6 +160,11 @@ func (s *SemanticEngine) SemanticRecall(options recall.RecallOptions) ([]recall.
 	return finalResults, nil
 }
 
+// Recall implements recall.Recaller using semantic recall when enabled.
+func (s *SemanticEngine) Recall(options recall.RecallOptions) ([]recall.RecallResult, error) {
+	return s.SemanticRecall(options)
+}
+
 // getOrCreateEmbedding gets an existing embedding or creates a new one
 func (s *SemanticEngine) getOrCreateEmbedding(memoryID int64, text string) ([]float32, error) {
 	// Try to get from database first
@@ -181,7 +190,7 @@ func (s *SemanticEngine) getOrCreateEmbedding(memoryID int64, text string) ([]fl
 // getEmbeddingFromDB retrieves an embedding from the database
 func (s *SemanticEngine) getEmbeddingFromDB(memoryID int64) ([]float32, error) {
 	query := `SELECT embedding_data FROM embeddings WHERE memory_id = ?`
-	
+
 	var embeddingJSON string
 	err := s.db.GetConnection().QueryRow(query, memoryID).Scan(&embeddingJSON)
 	if err != nil {

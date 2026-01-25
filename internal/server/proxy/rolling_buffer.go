@@ -14,12 +14,12 @@ func NewRollingBuffer(max int) *RollingBuffer {
 	}
 }
 
-// Write adds bytes to the buffer, keeping only the most recent up to max capacity
-func (r *RollingBuffer) Write(p []byte) {
+// Write adds bytes to the buffer, keeping only the most recent up to max capacity.
+func (r *RollingBuffer) Write(p []byte) (int, error) {
 	if len(p) >= r.max {
 		// If the incoming data is larger than or equal to max, keep only the tail
 		r.buf = append(r.buf[:0], p[len(p)-r.max:]...)
-		return
+		return len(p), nil
 	}
 
 	r.buf = append(r.buf, p...)
@@ -27,6 +27,7 @@ func (r *RollingBuffer) Write(p []byte) {
 		// Trim the buffer to keep only the most recent bytes
 		r.buf = r.buf[len(r.buf)-r.max:]
 	}
+	return len(p), nil
 }
 
 // Bytes returns the current contents of the buffer

@@ -2,11 +2,11 @@ package extract
 
 import (
 	"fmt"
+	"github.com/a-marczewski/tinymem/internal/evidence"
+	"github.com/a-marczewski/tinymem/internal/memory"
 	"regexp"
 	"strings"
 	"time"
-	"github.com/a-marczewski/tinymem/internal/evidence"
-	"github.com/a-marczewski/tinymem/internal/memory"
 )
 
 // Extractor handles automatic extraction of memories from text
@@ -329,7 +329,7 @@ func (e *Extractor) ExtractAndQueueForVerification(responseText string, memorySe
 
 			if isValidated {
 				// Promote the claim to a fact if it has valid evidence
-				err = memoryService.PromoteToFact(mem.ID, true)
+				err = memoryService.PromoteToFact(mem.ID, projectID, true)
 				if err != nil {
 					// Log error but continue processing other memories
 					continue

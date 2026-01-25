@@ -5,11 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/a-marczewski/tinymem/internal/config"
 	"io"
 	"net/http"
 	"strings"
 	"time"
-	"github.com/a-marczewski/tinymem/internal/config"
 )
 
 // Client handles communication with LLM services
@@ -60,19 +60,21 @@ type StreamChunk struct {
 
 // StreamChoice represents a choice in a streaming response
 type StreamChoice struct {
-	Index        int      `json:"index"`
-	Delta        Message  `json:"delta"`
-	FinishReason *string  `json:"finish_reason,omitempty"`
+	Index        int     `json:"index"`
+	Delta        Message `json:"delta"`
+	FinishReason *string `json:"finish_reason,omitempty"`
 }
 
 // NewClient creates a new LLM client
 func NewClient(cfg *config.Config) *Client {
-	// In a real implementation, this would come from config
-	baseURL := "http://localhost:11434/api" // Default Ollama API URL
+	baseURL := cfg.LLMBaseURL
+	if baseURL == "" {
+		baseURL = config.DefaultLLMBaseURL
+	}
 
 	return &Client{
 		baseURL: baseURL,
-		apiKey:  "", // In real implementation, get from config or env
+		apiKey:  cfg.LLMAPIKey,
 		httpClient: &http.Client{
 			Timeout: 120 * time.Second,
 		},
@@ -97,7 +99,7 @@ func (c *Client) ChatCompletions(ctx context.Context, req ChatCompletionRequest)
 		return nil, err
 	}
 
-	request, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/chat/completions", strings.NewReader(string(jsonData)))
+	request, err := http.NewRequestWithContext(ctx, "POST", chatCompletionURL(c.baseURL), strings.NewReader(string(jsonData)))
 	if err != nil {
 		return nil, err
 	}
@@ -126,6 +128,37 @@ func (c *Client) ChatCompletions(ctx context.Context, req ChatCompletionRequest)
 	return &response, nil
 }
 
+// ChatCompletionsRaw sends a chat completion request and returns the raw HTTP response.
+func (c *Client) ChatCompletionsRaw(ctx context.Context, req ChatCompletionRequest) (*http.Response, error) {
+	jsonData, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+
+	request, err := http.NewRequestWithContext(ctx, "POST", chatCompletionURL(c.baseURL), strings.NewReader(string(jsonData)))
+	if err != nil {
+		return nil, err
+	}
+
+	request.Header.Set("Content-Type", "application/json")
+	if c.apiKey != "" {
+		request.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+
+	resp, err := c.httpClient.Do(request)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return nil, fmt.Errorf("request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return resp, nil
+}
+
 // StreamChatCompletions sends a streaming chat completion request
 func (c *Client) StreamChatCompletions(ctx context.Context, req ChatCompletionRequest) (<-chan StreamChunk, <-chan error) {
 	req.Stream = true
@@ -147,7 +180,7 @@ func (c *Client) StreamChatCompletions(ctx context.Context, req ChatCompletionRe
 		defer close(chunkChan)
 		defer close(errChan)
 
-		request, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/chat/completions", strings.NewReader(string(jsonData)))
+		request, err := http.NewRequestWithContext(ctx, "POST", chatCompletionURL(c.baseURL), strings.NewReader(string(jsonData)))
 		if err != nil {
 			errChan <- err
 			return
@@ -175,12 +208,13 @@ func (c *Client) StreamChatCompletions(ctx context.Context, req ChatCompletionRe
 		}
 
 		scanner := bufio.NewScanner(resp.Body)
+		scanner.Buffer(make([]byte, 0, 64*1024), 2*1024*1024)
 		for scanner.Scan() {
 			line := scanner.Text()
 
 			if strings.HasPrefix(line, "data: ") {
 				data := strings.TrimPrefix(line, "data: ")
-				
+
 				// Skip [DONE] marker
 				if data == "[DONE]" {
 					break
@@ -246,4 +280,14 @@ func (c *Client) ConvertStreamToText(ctx context.Context, chunks <-chan StreamCh
 	}()
 
 	return textChan, errChan
+}
+
+func chatCompletionURL(baseURL string) string {
+	if strings.HasSuffix(baseURL, "/v1") {
+		return baseURL + "/chat/completions"
+	}
+	if strings.HasSuffix(baseURL, "/api") {
+		return baseURL + "/chat"
+	}
+	return baseURL + "/v1/chat/completions"
 }

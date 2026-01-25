@@ -2,18 +2,21 @@ package evidence
 
 import (
 	"time"
+
+	"github.com/a-marczewski/tinymem/internal/config"
 	"github.com/a-marczewski/tinymem/internal/memory"
 	"github.com/a-marczewski/tinymem/internal/storage"
 )
 
 // Service handles evidence operations
 type Service struct {
-	db *storage.DB
+	db     *storage.DB
+	config *config.Config
 }
 
 // NewService creates a new evidence service
-func NewService(db *storage.DB) *Service {
-	return &Service{db: db}
+func NewService(db *storage.DB, cfg *config.Config) *Service {
+	return &Service{db: db, config: cfg}
 }
 
 // AddEvidence adds evidence for a memory
@@ -75,7 +78,7 @@ func (s *Service) VerifyEvidenceForMemory(memoryID int64) (bool, error) {
 		}
 
 		// Verify the evidence
-		verified, err := VerifyEvidence(evidenceType, content)
+		verified, err := VerifyEvidence(evidenceType, content, s.config)
 		if err != nil {
 			// Log the error but continue checking other evidence
 			continue

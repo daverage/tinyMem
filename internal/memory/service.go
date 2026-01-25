@@ -3,14 +3,19 @@ package memory
 import (
 	"database/sql"
 	"fmt"
+	"github.com/a-marczewski/tinymem/internal/storage"
 	"strings"
 	"time"
-	"github.com/a-marczewski/tinymem/internal/storage"
 )
 
 // Service handles memory operations
 type Service struct {
 	db *storage.DB
+}
+
+type dbExecutor interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+	Query(query string, args ...interface{}) (*sql.Rows, error)
 }
 
 // NewService creates a new memory service
@@ -400,8 +405,90 @@ func (s *Service) PromoteToFact(memoryID int64, projectID string, isValidated bo
 
 	return nil
 }
+
+// CreateFactWithEvidence creates a fact only when evidence is verified.
+func (s *Service) CreateFactWithEvidence(mem *Memory, evidences []EvidenceInput, verify func(string, string) (bool, error)) error {
+	if mem.Type != Fact {
+		return fmt.Errorf("memory type must be fact")
+	}
+	if len(evidences) == 0 {
+		return fmt.Errorf("facts require verified evidence")
+	}
+
+	tx, err := s.db.GetConnection().Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	query := `
+		INSERT INTO memories (project_id, type, summary, detail, key, source, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		RETURNING id
+	`
+
+	now := time.Now()
+	row := tx.QueryRow(query,
+		mem.ProjectID,
+		string(Claim),
+		mem.Summary,
+		mem.Detail,
+		mem.Key,
+		mem.Source,
+		now,
+		now,
+	)
+
+	if err := row.Scan(&mem.ID); err != nil {
+		return err
+	}
+
+	for _, ev := range evidences {
+		verified, err := verify(ev.Type, ev.Content)
+		if err != nil || !verified {
+			if err == nil {
+				err = fmt.Errorf("evidence verification failed for type %s", ev.Type)
+			}
+			return err
+		}
+
+		insertEvidence := `
+			INSERT INTO evidence (memory_id, type, content, verified, created_at)
+			VALUES (?, ?, ?, ?, ?)
+		`
+		if _, err := tx.Exec(insertEvidence, mem.ID, ev.Type, ev.Content, true, now); err != nil {
+			return err
+		}
+	}
+
+	mem.Type = Fact
+	if err := s.handleConflictingMemoriesWithExecutor(tx, mem, mem.ID, mem.ProjectID); err != nil {
+		return err
+	}
+
+	update := `
+		UPDATE memories
+		SET type = ?, updated_at = ?
+		WHERE id = ? AND project_id = ?
+	`
+	if _, err := tx.Exec(update, string(Fact), now, mem.ID, mem.ProjectID); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	mem.CreatedAt = now
+	mem.UpdatedAt = now
+	return nil
+}
+
 // handleConflictingMemories marks conflicting memories as superseded when promoting a new one
 func (s *Service) handleConflictingMemories(newMemory *Memory, newMemoryID int64, projectID string) error {
+	return s.handleConflictingMemoriesWithExecutor(s.db.GetConnection(), newMemory, newMemoryID, projectID)
+}
+
+func (s *Service) handleConflictingMemoriesWithExecutor(executor dbExecutor, newMemory *Memory, newMemoryID int64, projectID string) error {
 	// Only handle supersession for important memory types that shouldn't conflict
 	if newMemory.Type != Fact && newMemory.Type != Decision && newMemory.Type != Constraint {
 		return nil
@@ -427,7 +514,7 @@ func (s *Service) handleConflictingMemories(newMemory *Memory, newMemoryID int64
 		params = []interface{}{projectID, string(newMemory.Type), newMemory.Summary, newMemoryID} // Use passed projectID
 	}
 
-	rows, err := s.db.GetConnection().Query(conflictingQuery, params...)
+	rows, err := executor.Query(conflictingQuery, params...)
 	if err != nil {
 		return err
 	}
@@ -441,22 +528,27 @@ func (s *Service) handleConflictingMemories(newMemory *Memory, newMemoryID int64
 		}
 
 		// Mark the conflicting memory as superseded
-		if err := s.MarkAsSuperseded(conflictingID, newMemoryID); err != nil {
+		if err := s.markAsSupersededWithExecutor(executor, conflictingID, newMemoryID); err != nil {
 			return fmt.Errorf("failed to mark conflicting memory as superseded: %w", err)
 		}
 	}
 
 	return nil
 }
+
 // MarkAsSuperseded marks a memory as superseded by another
 func (s *Service) MarkAsSuperseded(oldID, newID int64) error {
+	return s.markAsSupersededWithExecutor(s.db.GetConnection(), oldID, newID)
+}
+
+func (s *Service) markAsSupersededWithExecutor(executor dbExecutor, oldID, newID int64) error {
 	query := `
 		UPDATE memories
 		SET superseded_by = ?
 		WHERE id = ?
 	`
 
-	result, err := s.db.GetConnection().Exec(query, newID, oldID)
+	result, err := executor.Exec(query, newID, oldID)
 	if err != nil {
 		return err
 	}

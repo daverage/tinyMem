@@ -7,7 +7,9 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"strings"
 	"time"
+
 	"github.com/a-marczewski/tinymem/internal/config"
 )
 
@@ -33,16 +35,16 @@ type EmbeddingResponse struct {
 
 // NewEmbeddingClient creates a new embedding client
 func NewEmbeddingClient(cfg *config.Config) *EmbeddingClient {
-	// For now, using a default embedding service URL
-	// In a real implementation, this would come from config
-	baseURL := "http://localhost:11434/api" // Default Ollama API URL
-
+	baseURL := cfg.EmbeddingBaseURL
+	if baseURL == "" {
+		baseURL = config.DefaultLLMBaseURL
+	}
 	return &EmbeddingClient{
 		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		model: "nomic-embed-text", // Default embedding model
+		model: cfg.EmbeddingModel,
 	}
 }
 
@@ -59,7 +61,7 @@ func (c *EmbeddingClient) GenerateEmbedding(text string) ([]float32, error) {
 	}
 
 	resp, err := c.httpClient.Post(
-		c.baseURL+"/embeddings", // This should be the actual embedding endpoint
+		embeddingURL(c.baseURL),
 		"application/json",
 		bytes.NewBuffer(jsonData),
 	)
@@ -83,6 +85,16 @@ func (c *EmbeddingClient) GenerateEmbedding(text string) ([]float32, error) {
 	}
 
 	return embeddingResp.Data[0].Embedding, nil
+}
+
+func embeddingURL(baseURL string) string {
+	if strings.HasSuffix(baseURL, "/v1") {
+		return baseURL + "/embeddings"
+	}
+	if strings.HasSuffix(baseURL, "/api") {
+		return baseURL + "/embeddings"
+	}
+	return baseURL + "/v1/embeddings"
 }
 
 // CosineSimilarity calculates cosine similarity between two vectors
