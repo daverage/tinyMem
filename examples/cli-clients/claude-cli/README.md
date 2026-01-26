@@ -37,6 +37,31 @@ If you are using the interactive REPL of Claude Code, you can configure network 
 3.  This will open a settings interface. Look for `network.httpProxyPort` and set it to `8080` (or your `tinyMem` proxy port).
 4.  Save and exit the configuration.
 
+## MCP Integration (for supported Claude CLI versions)
+
+Some versions or variants of Claude CLI might support MCP integration through a JSON configuration file, similar to Claude Desktop/Cursor. If your CLI uses a `claude_config.json` or similar file, you can configure `tinyMem` as an MCP server.
+
+**Example `claude_config.json`:**
+```json
+{
+  "mcpServers": {
+    "tinymem": {
+      "command": "tinymem",
+      "args": ["mcp"],
+      "env": {
+        "TINYMEM_LOG_LEVEL": "info",
+        "TINYMEM_COVE_ENABLED": "true"
+      }
+    }
+  }
+}
+```
+**How to use:**
+1.  Find your Claude CLI's configuration directory.
+2.  Locate the JSON configuration file for MCP servers.
+3.  Add the `tinymem` server configuration to the `mcpServers` object.
+4.  Ensure `tinymem` is in your system's PATH, or provide the absolute path to the executable in the `command` field.
+
 ## Considerations
 
 *   **`NO_PROXY`:** Be aware that Claude Code has had reported issues honoring the `NO_PROXY` environment variable. If you experience issues, you might need to adjust your `NO_PROXY` settings or temporarily clear proxy environment variables when interacting with services that shouldn't go through `tinyMem`.

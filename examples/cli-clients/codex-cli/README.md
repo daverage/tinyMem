@@ -92,3 +92,22 @@ export OPENAI_BASE_URL="http://localhost:8080/v1"
 # unset OPENAI_BASE_URL
 ```
 **Note:** When using `OPENAI_BASE_URL`, `tinyMem` will typically expect the `api_key` in your client to be a dummy value (e.g., `sk-xxxxxxxxxxxxxxxxxxxxxxxx`).
+
+## 3. MCP Integration (for supported Codex CLI versions)
+
+Some versions of a `codex` CLI might support registering an external MCP server directly from the command line.
+
+**Example command:**
+```bash
+codex mcp add tinymem \
+    --env TINYMEM_LOG_LEVEL=info \
+    --env TINYMEM_COVE_ENABLED=true \
+    --env TINYMEM_COVE_CONFIDENCE_THRESHOLD=0.6 \
+    --env TINYMEM_COVE_MAX_CANDIDATES=20 \
+    -- tinymem mcp
+```
+**How to use:**
+1.  Run this command once to register `tinyMem` as an MCP server named `tinymem`. The `codex` CLI will store this configuration.
+2.  The `codex` CLI will then be able to use `tinyMem`'s MCP tools (like `memory_query`, `memory_write`, etc.).
+3.  The `--` separates the `codex mcp add` arguments from the actual command that `codex` will execute to start the MCP server (`tinymem mcp`).
+4.  Ensure that `tinymem` is in your system's PATH.

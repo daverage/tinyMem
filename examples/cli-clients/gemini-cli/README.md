@@ -84,3 +84,27 @@ except Exception as e:
 # print(response.text)
 ```
 Choose the method that best suits your setup. The `HttpOptions` method is generally more explicit and reliable for programmatic configuration.
+
+## 3. MCP Integration (for supported Gemini CLI versions)
+
+If you are using a Gemini CLI that supports MCP (Meta-Code Protocol), you can configure it to use `tinyMem` as an MCP server. This is typically done in a `settings.json` file used by the Gemini CLI.
+
+**Example `settings.json`:**
+```json
+{
+  "mcpServers": {
+    "tinymem": {
+      "command": "tinymem",
+      "args": ["mcp"],
+      "env": {
+        "TINYMEM_LOG_LEVEL": "info"
+      }
+    }
+  }
+}
+```
+**How to use:**
+1.  Locate the `settings.json` file for your Gemini CLI.
+2.  Add the `tinymem` server configuration to the `mcpServers` object.
+3.  Ensure `tinymem` is in your system's PATH, or provide the absolute path to the executable in the `command` field.
+4.  Once configured, the Gemini CLI will be able to access `tinyMem`'s memory tools (e.g., `memory_query`, `memory_write`).
