@@ -20,9 +20,20 @@ type DB struct {
 
 // NewDB creates a new database connection
 func NewDB(cfg *config.Config) (*DB, error) {
-	db, err := sql.Open("sqlite3", cfg.DBPath+"?_busy_timeout=10000&_journal_mode=WAL")
+	db, err := sql.Open("sqlite3", cfg.DBPath+"?_busy_timeout=10000&_journal_mode=WAL&_foreign_keys=on")
 	if err != nil {
 		return nil, err
+	}
+
+	// Enable FTS5 extension if available
+	_, err = db.Exec("SELECT fts5_status();")
+	if err != nil {
+		// FTS5 not available, try to load it
+		_, loadErr := db.Exec("SELECT load_extension('fts5');")
+		if loadErr != nil {
+			// If we can't load the extension, we'll continue without FTS5
+			// The application should gracefully degrade to using LIKE-based search
+		}
 	}
 
 	database := &DB{conn: db}

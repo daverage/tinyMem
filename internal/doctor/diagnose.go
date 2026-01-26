@@ -112,13 +112,14 @@ func (d *Runner) checkExternalDependencies() []CheckResult {
 	// This is a simplified approach - in a real implementation, we'd need to pass the server mode
 
 	// Check LLM backend reachability (relevant for both proxy and MCP when using LLM features)
+	// For memory-only operations, LLM backend is not required, so we'll downgrade this to a warning
 	llmErr := checkReachable(d.config.LLMBaseURL)
 	if llmErr != nil {
 		results = append(results, CheckResult{
 			Name:     "llm_backend_reachability",
 			Status:   "fail",
-			Message:  fmt.Sprintf("LLM backend unreachable: %v", llmErr),
-			Severity: "error",
+			Message:  fmt.Sprintf("LLM backend unreachable: %v (not critical for memory-only operations)", llmErr),
+			Severity: "warning", // Downgrade to warning since LLM isn't always required
 		})
 	} else {
 		results = append(results, CheckResult{
@@ -175,21 +176,42 @@ func (d *Runner) checkExternalDependencies() []CheckResult {
 			})
 		}
 	} else {
-		// For proxy mode and standalone mode, treat proxy readiness as more critical
-		if err := checkProxyListening(d.config.ProxyPort); err != nil {
-			results = append(results, CheckResult{
-				Name:     "proxy_readiness",
-				Status:   "fail",
-				Message:  fmt.Sprintf("Proxy not listening on port %d: %v", d.config.ProxyPort, err),
-				Severity: "error", // Keep as error for proxy mode
-			})
+		// For proxy mode, check if we're actually supposed to be running in proxy mode
+		// For standalone mode, the proxy not running might be expected
+		if d.serverMode == ProxyMode {
+			// In proxy mode, the proxy should be running
+			if err := checkProxyListening(d.config.ProxyPort); err != nil {
+				results = append(results, CheckResult{
+					Name:     "proxy_readiness",
+					Status:   "fail",
+					Message:  fmt.Sprintf("Proxy not listening on port %d: %v", d.config.ProxyPort, err),
+					Severity: "error", // Keep as error for proxy mode
+				})
+			} else {
+				results = append(results, CheckResult{
+					Name:     "proxy_readiness",
+					Status:   "pass",
+					Message:  fmt.Sprintf("Proxy listening on port %d", d.config.ProxyPort),
+					Severity: "info",
+				})
+			}
 		} else {
-			results = append(results, CheckResult{
-				Name:     "proxy_readiness",
-				Status:   "pass",
-				Message:  fmt.Sprintf("Proxy listening on port %d", d.config.ProxyPort),
-				Severity: "info",
-			})
+			// In standalone mode, proxy not running is expected
+			if err := checkProxyListening(d.config.ProxyPort); err != nil {
+				results = append(results, CheckResult{
+					Name:     "proxy_readiness",
+					Status:   "pass", // Consider this a pass in standalone mode
+					Message:  fmt.Sprintf("Proxy not listening on port %d (expected in standalone mode)", d.config.ProxyPort),
+					Severity: "info",
+				})
+			} else {
+				results = append(results, CheckResult{
+					Name:     "proxy_readiness",
+					Status:   "pass",
+					Message:  fmt.Sprintf("Proxy listening on port %d", d.config.ProxyPort),
+					Severity: "info",
+				})
+			}
 		}
 	}
 
@@ -490,6 +512,23 @@ func (d *Runner) checkStorageHealth() []CheckResult {
 			Name:     "database_integrity",
 			Status:   "pass",
 			Message:  "Database integrity check passed",
+			Severity: "info",
+		})
+	}
+
+	// Check for FTS5 extension availability (important for search functionality)
+	if _, err := d.db.GetConnection().Exec("CREATE VIRTUAL TABLE IF NOT EXISTS fts5_test USING fts5(content); DROP TABLE fts5_test;"); err != nil {
+		results = append(results, CheckResult{
+			Name:     "fts5_extension_availability",
+			Status:   "fail",
+			Message:  fmt.Sprintf("FTS5 extension not available: %v", err),
+			Severity: "error",
+		})
+	} else {
+		results = append(results, CheckResult{
+			Name:     "fts5_extension_availability",
+			Status:   "pass",
+			Message:  "FTS5 extension is available",
 			Severity: "info",
 		})
 	}

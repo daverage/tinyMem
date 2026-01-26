@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/a-marczewski/tinymem/internal/config"
+	"github.com/a-marczewski/tinymem/internal/doctor"
 	"github.com/a-marczewski/tinymem/internal/logging"
 	"github.com/a-marczewski/tinymem/internal/memory"
 	"github.com/a-marczewski/tinymem/internal/storage"
@@ -23,6 +24,7 @@ type App struct {
 	Memory      *memory.Service
 	ProjectPath string
 	ProjectID   string // New field for the current project's ID
+	ServerMode  doctor.ServerMode // Track the server mode
 }
 
 // NewApp initializes and returns a new App instance.
@@ -79,6 +81,7 @@ func NewApp() (*App, error) {
 		Memory:      memoryService,
 		ProjectPath: projectPath,
 		ProjectID:   projectID, // Store the generated project ID
+		ServerMode:  doctor.StandaloneMode, // Default to standalone mode
 	}, nil
 }
 

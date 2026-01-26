@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -85,6 +87,9 @@ var proxyCmd = &cobra.Command{
 }
 
 func runProxyCmd(a *app.App, cmd *cobra.Command, args []string) {
+	// Set the server mode to ProxyMode
+	a.ServerMode = doctor.ProxyMode
+
 	// Create and start proxy server
 	proxyServer := proxy.NewServer(a) // Pass the app instance directly
 	a.Logger.Info("Starting proxy server", zap.Int("port", a.Config.ProxyPort))
@@ -100,6 +105,9 @@ var mcpCmd = &cobra.Command{
 }
 
 func runMcpCmd(a *app.App, cmd *cobra.Command, args []string) {
+	// Set the server mode to MCPMode
+	a.ServerMode = doctor.MCPMode
+
 	if a.Logger != nil {
 		_ = a.Logger.Sync()
 	}
@@ -172,7 +180,7 @@ var healthCmd = &cobra.Command{
 }
 
 func runHealthCmd(a *app.App, cmd *cobra.Command, args []string) {
-	a.Logger.Info("Checking health...")
+	a.Logger.Info("Checking health...", zap.String("mode", string(a.ServerMode)))
 
 	// Check database connectivity
 	if err := a.DB.GetConnection().Ping(); err != nil {
@@ -192,8 +200,43 @@ func runHealthCmd(a *app.App, cmd *cobra.Command, args []string) {
 		fmt.Println("✅ Database query: OK")
 	}
 
+	// Mode-specific health checks
+	switch a.ServerMode {
+	case doctor.MCPMode:
+		// For MCP mode, check if we can access memories
+		if _, err := a.Memory.GetAllMemories(a.ProjectID); err != nil {
+			a.Logger.Error("Memory service health check failed", zap.Error(err))
+			fmt.Printf("❌ Memory service: %v\n", err)
+		} else {
+			a.Logger.Info("Memory service health check passed")
+			fmt.Println("✅ Memory service: OK")
+		}
+	case doctor.ProxyMode:
+		// For proxy mode, check if proxy is listening (attempt to connect to proxy port)
+		if err := checkProxyListening(a.Config.ProxyPort); err != nil {
+			a.Logger.Warn("Proxy not listening", zap.Error(err), zap.Int("port", a.Config.ProxyPort))
+			fmt.Printf("! Proxy not listening on port %d: %v\n", a.Config.ProxyPort, err)
+		} else {
+			a.Logger.Info("Proxy is listening", zap.Int("port", a.Config.ProxyPort))
+			fmt.Printf("✅ Proxy listening on port %d\n", a.Config.ProxyPort)
+		}
+	}
+
 	a.Logger.Info("Health check complete.")
 	fmt.Println("Health check complete.")
+}
+
+// Helper function to check if proxy is listening on a port
+func checkProxyListening(port int) error {
+	if port <= 0 || port > 65535 {
+		return fmt.Errorf("invalid port %d", port)
+	}
+	address := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+	conn, err := net.DialTimeout("tcp", address, 1*time.Second)
+	if err != nil {
+		return err
+	}
+	return conn.Close()
 }
 
 var statsCmd = &cobra.Command{
@@ -205,6 +248,7 @@ func runStatsCmd(a *app.App, cmd *cobra.Command, args []string) {
 	memories, err := a.Memory.GetAllMemories(a.ProjectID)
 	if err != nil {
 		a.Logger.Error("Failed to get memories for stats", zap.Error(err))
+		fmt.Printf("❌ Error retrieving memories: %v\n", err)
 		return
 	}
 
@@ -219,6 +263,16 @@ func runStatsCmd(a *app.App, cmd *cobra.Command, args []string) {
 	for memType, count := range typeCounts {
 		fmt.Printf("  %s: %d\n", string(memType), count)
 	}
+
+	// Mode-specific stats
+	switch a.ServerMode {
+	case doctor.MCPMode:
+		fmt.Println("\nMode: MCP (Model Context Protocol)")
+	case doctor.ProxyMode:
+		fmt.Println("\nMode: Proxy")
+		// Additional proxy-specific stats could be added here
+		fmt.Printf("Proxy Port: %d\n", a.Config.ProxyPort)
+	}
 }
 
 var doctorCmd = &cobra.Command{
@@ -227,8 +281,9 @@ var doctorCmd = &cobra.Command{
 }
 
 func runDoctorCmd(a *app.App, cmd *cobra.Command, args []string) {
-	// Run diagnostics
-	doctorRunner := doctor.NewRunnerWithMode(a.Config, a.DB, a.ProjectID, a.Memory, doctor.StandaloneMode)
+	// Use the server mode from the app instance
+	// This allows the doctor command to behave appropriately based on how tinyMem was started
+	doctorRunner := doctor.NewRunnerWithMode(a.Config, a.DB, a.ProjectID, a.Memory, a.ServerMode)
 	diagnostics := doctorRunner.RunAll()
 	diagnostics.PrintReport()
 }
@@ -243,6 +298,7 @@ func runRecentCmd(a *app.App, cmd *cobra.Command, args []string) {
 	memories, err := a.Memory.GetAllMemories(a.ProjectID)
 	if err != nil {
 		a.Logger.Error("Failed to get recent memories", zap.Error(err))
+		fmt.Printf("❌ Error retrieving memories: %v\n", err)
 		return
 	}
 
@@ -261,6 +317,14 @@ func runRecentCmd(a *app.App, cmd *cobra.Command, args []string) {
 		}
 		fmt.Printf("    Date: %s\n", mem.CreatedAt.Format("2006-01-02 15:04:05"))
 		fmt.Println()
+	}
+
+	// Mode-specific info
+	switch a.ServerMode {
+	case doctor.MCPMode:
+		fmt.Println("Mode: MCP (Model Context Protocol)")
+	case doctor.ProxyMode:
+		fmt.Println("Mode: Proxy")
 	}
 }
 
@@ -289,6 +353,7 @@ func runQueryCmd(a *app.App, cmd *cobra.Command, args []string) {
 	})
 	if err != nil {
 		a.Logger.Error("Search failed", zap.Error(err))
+		fmt.Printf("❌ Search failed: %v\n", err)
 		return
 	}
 
@@ -301,6 +366,14 @@ func runQueryCmd(a *app.App, cmd *cobra.Command, args []string) {
 		}
 		fmt.Printf("    Date: %s\n", mem.CreatedAt.Format("2006-01-02 15:04:05"))
 		fmt.Println()
+	}
+
+	// Mode-specific info
+	switch a.ServerMode {
+	case doctor.MCPMode:
+		fmt.Println("Mode: MCP (Model Context Protocol)")
+	case doctor.ProxyMode:
+		fmt.Println("Mode: Proxy")
 	}
 }
 
