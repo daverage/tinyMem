@@ -101,9 +101,6 @@ Some versions of a `codex` CLI might support registering an external MCP server 
 ```bash
 codex mcp add tinymem \
     --env TINYMEM_LOG_LEVEL=info \
-    --env TINYMEM_COVE_ENABLED=true \
-    --env TINYMEM_COVE_CONFIDENCE_THRESHOLD=0.6 \
-    --env TINYMEM_COVE_MAX_CANDIDATES=20 \
     -- tinymem mcp
 ```
 **How to use:**

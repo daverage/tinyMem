@@ -60,7 +60,7 @@ Add to `.tinyMem/config.toml`:
 
 ```toml
 [cove]
-enabled = true                    # Enable CoVe filtering (default: false)
+enabled = true                    # Enable CoVe filtering (default: true)
 confidence_threshold = 0.6        # Minimum confidence to keep (default: 0.6)
 max_candidates = 20               # Max candidates per batch (default: 20)
 timeout_seconds = 30              # LLM call timeout (default: 30)
@@ -112,7 +112,7 @@ timeout_seconds = 60              # Longer timeout = more patience
 recall_filter_enabled = true      # Enable recall filtering
 ```
 
-### Disabled (Default)
+### Disabled
 ```toml
 [cove]
 enabled = false                   # CoVe completely disabled

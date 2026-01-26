@@ -267,8 +267,8 @@ auto_extract = true
 require_confirmation = false
 
 [cove]
-# Chain-of-Verification quality filter (disabled by default)
-enabled = false
+# Chain-of-Verification quality filter (enabled by default)
+enabled = true
 confidence_threshold = 0.6      # Min confidence to keep (0.0-1.0)
 max_candidates = 20             # Max candidates per batch
 timeout_seconds = 30            # LLM call timeout

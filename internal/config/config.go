@@ -134,8 +134,8 @@ func LoadConfig() (*Config, error) {
 		ExtractionBufferBytes:         DefaultExtractionBufferBytes,
 		RecallMaxItems:                10,
 		RecallMaxTokens:               2000,
-		// CoVe defaults (disabled by default for safety)
-		CoVeEnabled:              false,
+		// CoVe defaults (enabled by default)
+		CoVeEnabled:              true,
 		CoVeConfidenceThreshold:  DefaultCoVeConfidenceThreshold,
 		CoVeMaxCandidates:        DefaultCoVeMaxCandidates,
 		CoVeTimeoutSeconds:       DefaultCoVeTimeoutSeconds,

@@ -49,8 +49,7 @@ Some versions or variants of Claude CLI might support MCP integration through a 
       "command": "tinymem",
       "args": ["mcp"],
       "env": {
-        "TINYMEM_LOG_LEVEL": "info",
-        "TINYMEM_COVE_ENABLED": "true"
+        "TINYMEM_LOG_LEVEL": "info"
       }
     }
   }
