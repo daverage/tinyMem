@@ -96,10 +96,12 @@ echo '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-1
    # Ensure sufficient space for database
    ```
 
-4. **Rebuild from source:**
+4. **Rebuild from source (FTS5 enabled by default):**
    ```bash
-   go build -o tinymem ./cmd/tinymem
+   go build -tags fts5 -o tinymem ./cmd/tinymem
    ```
+
+   To skip the FTS5 build (for compatibility or minimal binary size), prefix the command with `TINYMEM_DISABLE_FTS5=1`.
 
 ### Error: "Tool not found: memory.query"
 

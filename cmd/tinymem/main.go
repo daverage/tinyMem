@@ -41,6 +41,7 @@ func init() {
 	rootCmd.AddCommand(doctorCmd)
 	rootCmd.AddCommand(recentCmd)
 	rootCmd.AddCommand(queryCmd)
+	rootCmd.AddCommand(contractCmd)
 	rootCmd.AddCommand(completionCmd)
 }
 
@@ -377,6 +378,18 @@ func runQueryCmd(a *app.App, cmd *cobra.Command, args []string) {
 	}
 }
 
+var contractCmd = &cobra.Command{
+	Use:   "addContract",
+	Short: "Add the MANDATORY TINYMEM CONTROL PROTOCOL to agent markdown files",
+}
+
+func runContractCmd(a *app.App, cmd *cobra.Command, args []string) {
+	if err := memory.AddContract(); err != nil {
+		a.Logger.Error("Failed to add contract", zap.Error(err))
+		fmt.Printf("❌ Failed to add contract: %v\n", err)
+	}
+}
+
 // newAppRunner creates a Cobra Run function closure with the app.App instance.
 func newAppRunner(a *app.App, runFunc func(*app.App, *cobra.Command, []string)) func(*cobra.Command, []string) {
 	return func(cmd *cobra.Command, args []string) {
@@ -402,6 +415,7 @@ func main() {
 	doctorCmd.Run = newAppRunner(appInstance, runDoctorCmd)
 	recentCmd.Run = newAppRunner(appInstance, runRecentCmd)
 	queryCmd.Run = newAppRunner(appInstance, runQueryCmd)
+	contractCmd.Run = newAppRunner(appInstance, runContractCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		appInstance.Logger.Error("Root command execution failed", zap.Error(err))

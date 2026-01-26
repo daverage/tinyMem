@@ -62,7 +62,14 @@ See [Adding `tinymem` to your PATH](#adding-tinymem-to-your-path) for detailed i
 ```bash
 git clone https://github.com/andrzejmarczewski/tinyMem.git
 cd tinymem
-go build -o tinymem ./cmd/tinymem
+# FTS5 support is enabled by default for the best search experience
+go build -tags fts5 -o tinymem ./cmd/tinymem
+```
+
+If you need a build without FTS5 (smaller binary or compatibility reasons), run the command with `TINYMEM_DISABLE_FTS5=1`:
+
+```bash
+TINYMEM_DISABLE_FTS5=1 go build -o tinymem ./cmd/tinymem
 ```
 
 Once built, the `tinymem` executable will be in your current directory. For easier access, consider moving it to a directory included in your system's PATH (e.g., `/usr/local/bin/` on macOS/Linux) or adding your project directory to your PATH environment variable.
@@ -352,6 +359,12 @@ export TINYMEM_COVE_ENABLED=false
 See [COVE.md](./COVE.md) for detailed documentation, configuration examples, and performance considerations.
 
 ## IDE Integration
+
+### Agent Setup for MCP Usage
+
+When using tinyMem as an MCP server for AI agents, ensure that your agents follow the MANDATORY TINYMEM CONTROL PROTOCOL.
+
+Include the contract content from [AGENT_CONTRACT.md](AGENT_CONTRACT.md) in your agent's system prompt to ensure proper interaction with tinyMem.
 
 ### Claude Desktop / Cursor (MCP)
 
@@ -739,8 +752,11 @@ Violating any invariant is a bug, not a feature gap.
 ### Build
 
 ```bash
-go build -o tinymem ./cmd/tinymem
+# Build with the default FTS5 search support
+go build -tags fts5 -o tinymem ./cmd/tinymem
 ```
+
+To skip FTS5 (for example, when targeting constrained environments) set `TINYMEM_DISABLE_FTS5=1` before running the command.
 
 ### Test
 
@@ -750,35 +766,35 @@ go test ./...
 
 ### Cross-Platform Build
 
-You can build `tinymem` for different operating systems and architectures by setting the `GOOS` (target operating system) and `GOARCH` (target architecture) environment variables before running the `go build` command.
+You can build `tinymem` for different operating systems and architectures by setting the `GOOS` (target operating system) and `GOARCH` (target architecture) environment variables before running the `go build` command. Each command below enables FTS5 by passing `-tags fts5`, mirroring the defaults used in `build.sh`. Add `TINYMEM_DISABLE_FTS5=1` if you need a non-FTS5 build.
 
 Here are some common examples:
 
 **For Linux:**
 ```bash
 # For AMD64 (most common desktops and servers)
-GOOS=linux GOARCH=amd64 go build -o tinymem-linux-amd64 ./cmd/tinymem
+GOOS=linux GOARCH=amd64 go build -tags fts5 -o tinymem-linux-amd64 ./cmd/tinymem
 
 # For ARM64 (e.g., Raspberry Pi, some cloud instances)
-GOOS=linux GOARCH=arm64 go build -o tinymem-linux-arm64 ./cmd/tinymem
+GOOS=linux GOARCH=arm64 go build -tags fts5 -o tinymem-linux-arm64 ./cmd/tinymem
 ```
 
 **For macOS:**
 ```bash
 # For Apple Silicon (M1, M2, etc.)
-GOOS=darwin GOARCH=arm64 go build -o tinymem-darwin-arm64 ./cmd/tinymem
+GOOS=darwin GOARCH=arm64 go build -tags fts5 -o tinymem-darwin-arm64 ./cmd/tinymem
 
 # For Intel-based Macs
-GOOS=darwin GOARCH=amd64 go build -o tinymem-darwin-amd64 ./cmd/tinymem
+GOOS=darwin GOARCH=amd64 go build -tags fts5 -o tinymem-darwin-amd64 ./cmd/tinymem
 ```
 
 **For Windows:**
 ```bash
 # For AMD64
-GOOS=windows GOARCH=amd64 go build -o tinymem-windows-amd64.exe ./cmd/tinymem
+GOOS=windows GOARCH=amd64 go build -tags fts5 -o tinymem-windows-amd64.exe ./cmd/tinymem
 
 # For ARM64
-GOOS=windows GOARCH=arm64 go build -o tinymem-windows-arm64.exe ./cmd/tinymem
+GOOS=windows GOARCH=arm64 go build -tags fts5 -o tinymem-windows-arm64.exe ./cmd/tinymem
 ```
 
 The output binary will be named according to the `-o` flag in the command. You can then move this binary to the target machine and run it.
