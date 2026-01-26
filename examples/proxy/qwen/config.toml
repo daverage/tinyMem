@@ -1,0 +1,22 @@
+# Example config.toml for connecting tinyMem to a Qwen model
+
+# This file should be placed in your project's .tinyMem/ directory
+# (e.g., /path/to/your-project/.tinyMem/config.toml)
+
+# This example assumes you are running a Qwen model locally using Ollama,
+# which provides an OpenAI-compatible API.
+
+# 1. Install Ollama: https://ollama.ai/
+# 2. Pull a Qwen model: `ollama pull qwen`
+# 3. Make sure Ollama is running.
+
+[proxy]
+# The port on which the tinyMem proxy server will run.
+port = 8080
+
+# The base URL of your local LLM provider.
+# This is the default API endpoint for Ollama.
+base_url = "http://localhost:11434/v1"
+
+# All other tinyMem settings can also be configured in this file.
+# For a full list of options, see the main README.md file.

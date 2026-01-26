@@ -1,0 +1,23 @@
+// Example settings for connecting a VS Code extension (like Continue) to tinyMem.
+//
+// How to use:
+// 1. Open your VS Code settings.json file.
+//    - You can open it by pressing Ctrl+Shift+P (or Cmd+Shift+P on Mac)
+//      and searching for "Preferences: Open User Settings (JSON)".
+//
+// 2. Add or merge the following settings into your settings.json file.
+//    This example assumes you are using the "Continue" extension (continue.dev).
+//    The settings for other extensions will be similar.
+//
+// 3. Make sure the tinyMem proxy is running (`tinymem proxy`).
+
+{
+  // This tells the Continue extension to send its requests to the tinyMem proxy
+  // instead of directly to the LLM provider.
+  "continue.apiBase": "http://localhost:8080/v1",
+
+  // Since tinyMem is forwarding the request to your actual LLM backend
+  // (which is configured in tinyMem's config.toml), you can often
+  // use a dummy API key here in your editor's settings.
+  "continue.apiKey": "dummy"
+}

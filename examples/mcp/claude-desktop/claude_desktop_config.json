@@ -1,0 +1,27 @@
+// Example configuration for integrating tinyMem with Cursor or Claude Desktop
+//
+// How to use:
+// 1. Locate your claude_desktop_config.json file.
+//    - macOS: ~/Library/Application Support/Claude/claude_desktop_config.json
+//    - Windows: %APPDATA%\Claude\claude_desktop_config.json
+//    - Linux: ~/.config/Claude/claude_desktop_config.json
+//
+// 2. Merge the "mcpServers" object from this example into your existing config file.
+//
+// 3. IMPORTANT: Replace "/path/to/tinymem" with the absolute path to your
+//    tinymem executable file. You can find the path by running `which tinymem`
+//    (on macOS/Linux) or `where tinymem` (on Windows) in your terminal.
+//
+// 4. Restart Cursor / Claude Desktop.
+
+{
+  "mcpServers": {
+    "tinymem": {
+      "command": "/path/to/tinymem",
+      "args": [
+        "mcp"
+      ],
+      "env": {}
+    }
+  }
+}
