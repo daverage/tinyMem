@@ -28,6 +28,8 @@ This approach prevents language models from hallucinating institutional knowledg
 
 ## Installation
 
+For a simpler, step-by-step guide aimed at less technical users, please see the [Quick Start Guide for Beginners](QUICK_START_GUIDE.md).
+
 ### Download Pre-built Binary
 
 Download the latest release for your platform from the [releases page](https://github.com/andrzejmarczewski/tinyMem/releases).
