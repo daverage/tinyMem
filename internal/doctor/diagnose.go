@@ -30,12 +30,22 @@ type CheckResult struct {
 	Severity string `json:"severity"` // "info", "warning", "error"
 }
 
+// ServerMode represents the mode in which tinyMem is running
+type ServerMode string
+
+const (
+	ProxyMode ServerMode = "proxy"
+	MCPMode   ServerMode = "mcp"
+	StandaloneMode ServerMode = "standalone"
+)
+
 // Runner runs diagnostic checks
 type Runner struct {
 	config        *config.Config
 	db            *storage.DB
 	projectID     string
 	memoryService *memory.Service
+	serverMode    ServerMode
 }
 
 // NewRunner creates a new diagnostic runner
@@ -45,6 +55,18 @@ func NewRunner(cfg *config.Config, db *storage.DB, projectID string, memoryServi
 		db:            db,
 		projectID:     projectID,
 		memoryService: memoryService,
+		serverMode:    StandaloneMode, // Default to standalone mode
+	}
+}
+
+// NewRunnerWithMode creates a new diagnostic runner with a specific server mode
+func NewRunnerWithMode(cfg *config.Config, db *storage.DB, projectID string, memoryService *memory.Service, mode ServerMode) *Runner {
+	return &Runner{
+		config:        cfg,
+		db:            db,
+		projectID:     projectID,
+		memoryService: memoryService,
+		serverMode:    mode,
 	}
 }
 
@@ -84,6 +106,12 @@ func (d *Runner) RunAll() *Diagnostics {
 func (d *Runner) checkExternalDependencies() []CheckResult {
 	var results []CheckResult
 
+	// Check if we're running in proxy mode by checking if the command is "proxy"
+	// For now, we'll assume that if we're running doctor from the context of an MCP server,
+	// we should skip the proxy-specific checks
+	// This is a simplified approach - in a real implementation, we'd need to pass the server mode
+
+	// Check LLM backend reachability (relevant for both proxy and MCP when using LLM features)
 	llmErr := checkReachable(d.config.LLMBaseURL)
 	if llmErr != nil {
 		results = append(results, CheckResult{
@@ -127,20 +155,42 @@ func (d *Runner) checkExternalDependencies() []CheckResult {
 		})
 	}
 
-	if err := checkProxyListening(d.config.ProxyPort); err != nil {
-		results = append(results, CheckResult{
-			Name:     "proxy_readiness",
-			Status:   "fail",
-			Message:  fmt.Sprintf("Proxy not listening on port %d: %v", d.config.ProxyPort, err),
-			Severity: "warning",
-		})
+	// Check proxy readiness based on server mode
+	// For MCP mode, this check is not critical since MCP doesn't operate as an HTTP proxy
+	if d.serverMode == MCPMode {
+		// For MCP mode, only log if proxy is not available but don't treat as a critical error
+		if err := checkProxyListening(d.config.ProxyPort); err != nil {
+			results = append(results, CheckResult{
+				Name:     "proxy_readiness",
+				Status:   "fail", // Still mark as fail but with warning severity for MCP mode
+				Message:  fmt.Sprintf("Proxy not listening on port %d: %v (not critical in MCP mode)", d.config.ProxyPort, err),
+				Severity: "warning", // Downgrade to warning for MCP mode
+			})
+		} else {
+			results = append(results, CheckResult{
+				Name:     "proxy_readiness",
+				Status:   "pass",
+				Message:  fmt.Sprintf("Proxy listening on port %d", d.config.ProxyPort),
+				Severity: "info",
+			})
+		}
 	} else {
-		results = append(results, CheckResult{
-			Name:     "proxy_readiness",
-			Status:   "pass",
-			Message:  fmt.Sprintf("Proxy listening on port %d", d.config.ProxyPort),
-			Severity: "info",
-		})
+		// For proxy mode and standalone mode, treat proxy readiness as more critical
+		if err := checkProxyListening(d.config.ProxyPort); err != nil {
+			results = append(results, CheckResult{
+				Name:     "proxy_readiness",
+				Status:   "fail",
+				Message:  fmt.Sprintf("Proxy not listening on port %d: %v", d.config.ProxyPort, err),
+				Severity: "error", // Keep as error for proxy mode
+			})
+		} else {
+			results = append(results, CheckResult{
+				Name:     "proxy_readiness",
+				Status:   "pass",
+				Message:  fmt.Sprintf("Proxy listening on port %d", d.config.ProxyPort),
+				Severity: "info",
+			})
+		}
 	}
 
 	return results

@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "tinymem": {
+      "command": "tinymem",
+      "args": [
+        "mcp"
+      ],
+      "timeout": 30000,
+      "trust": false
+    }
+  },
+  "$version": 2
+}

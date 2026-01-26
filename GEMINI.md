@@ -49,6 +49,34 @@ To integrate tinyMem with your IDE:
 2. Ensure that tinyMem is started before beginning your coding session.
 3. Use designated shortcuts or commands to invoke tinyMem features while coding.
 
+### MCP (Model Context Protocol) Integration
+
+tinyMem can be integrated with Gemini and other AI assistants using the Model Context Protocol (MCP). To configure MCP integration:
+
+1. Start tinyMem in MCP mode:
+   ```bash
+   ./tinymem mcp
+   ```
+
+2. Configure your Gemini environment to use tinyMem as an MCP server by adding the following to your project configuration:
+
+   **For Gemini (in `.gemini/CONFIG.md` or project configuration):**
+
+   ```json
+   {
+     "mcpServers": {
+       "tinymem": {
+         "command": "/path/to/tinymem",
+         "args": ["mcp"],
+         "env": {}
+       }
+     }
+   }
+   ```
+
+3. Use the absolute path to your tinymem executable.
+4. Restart your Gemini environment after updating the configuration.
+
 ## Architecture
 
 tinyMem is built with the following components:

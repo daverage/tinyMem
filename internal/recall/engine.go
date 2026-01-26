@@ -1,9 +1,11 @@
 package recall
 
 import (
+	"fmt"
 	"github.com/a-marczewski/tinymem/internal/config"
 	"github.com/a-marczewski/tinymem/internal/evidence"
 	"github.com/a-marczewski/tinymem/internal/memory"
+	"go.uber.org/zap"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -14,14 +16,16 @@ type Engine struct {
 	memoryService   *memory.Service
 	evidenceService *evidence.Service
 	config          *config.Config
+	logger          *zap.Logger
 }
 
 // NewEngine creates a new recall engine
-func NewEngine(memoryService *memory.Service, evidenceService *evidence.Service, cfg *config.Config) *Engine {
+func NewEngine(memoryService *memory.Service, evidenceService *evidence.Service, cfg *config.Config, logger *zap.Logger) *Engine {
 	return &Engine{
 		memoryService:   memoryService,
 		evidenceService: evidenceService,
 		config:          cfg,
+		logger:          logger,
 	}
 }
 
@@ -94,7 +98,30 @@ func (e *Engine) Recall(options RecallOptions) ([]RecallResult, error) {
 			return results[i].Memory.CreatedAt.After(results[j].Memory.CreatedAt)
 		})
 
-		return applyLimits(results, options), nil
+		finalResults := e.applyLimits(results, options)
+
+		// Log recall metrics if enabled
+		if e.config.MetricsEnabled {
+			totalTokens := 0
+			for _, result := range finalResults {
+				totalTokens += result.Tokens
+			}
+
+			var memoryIDs []string
+			for _, result := range finalResults {
+				memoryIDs = append(memoryIDs, fmt.Sprintf("%d(%s)", result.Memory.ID, result.Memory.Type))
+			}
+
+			e.logger.Info("Recall metrics",
+				zap.String("project_id", options.ProjectID),
+				zap.String("query", options.Query),
+				zap.Int("total_memories", len(finalResults)),
+				zap.Int("total_tokens", totalTokens),
+				zap.Strings("memory_ids_and_types", memoryIDs),
+			)
+		}
+
+		return finalResults, nil
 	}
 
 	// Perform FTS search
@@ -154,18 +181,98 @@ func (e *Engine) Recall(options RecallOptions) ([]RecallResult, error) {
 		return results[i].Score > results[j].Score
 	})
 
-	return applyLimits(results, options), nil
+	finalResults := e.applyLimits(results, options)
+
+	// Log recall metrics if enabled
+	if e.config.MetricsEnabled {
+		totalTokens := 0
+		for _, result := range finalResults {
+			totalTokens += result.Tokens
+		}
+
+		var memoryIDs []string
+		for _, result := range finalResults {
+			memoryIDs = append(memoryIDs, fmt.Sprintf("%d(%s)", result.Memory.ID, result.Memory.Type))
+		}
+
+		e.logger.Info("Recall metrics",
+			zap.String("project_id", options.ProjectID),
+			zap.String("query", options.Query),
+			zap.Int("total_memories", len(finalResults)),
+			zap.Int("total_tokens", totalTokens),
+			zap.Strings("memory_ids_and_types", memoryIDs),
+		)
+	}
+
+	return finalResults, nil
 }
 
-func applyLimits(results []RecallResult, options RecallOptions) []RecallResult {
+func (e *Engine) applyLimits(results []RecallResult, options RecallOptions) []RecallResult {
 	if len(results) == 0 {
 		return results
 	}
 
+	// Separate results by recall tier
+	var alwaysResults, contextualResults, opportunisticResults []RecallResult
+
+	for _, result := range results {
+		switch result.Memory.RecallTier {
+		case memory.Always:
+			alwaysResults = append(alwaysResults, result)
+		case memory.Contextual:
+			contextualResults = append(contextualResults, result)
+		case memory.Opportunistic:
+			opportunisticResults = append(opportunisticResults, result)
+		default:
+			// Default to opportunistic for unknown tiers
+			opportunisticResults = append(opportunisticResults, result)
+		}
+	}
+
+	// Log tier counts if metrics are enabled
+	if e.config.MetricsEnabled {
+		e.logger.Info("Recall tier breakdown",
+			zap.String("project_id", options.ProjectID),
+			zap.String("query", options.Query),
+			zap.Int("always_count", len(alwaysResults)),
+			zap.Int("contextual_count", len(contextualResults)),
+			zap.Int("opportunistic_count", len(opportunisticResults)),
+		)
+	}
+
+	// Process results in tier order: Always -> Contextual -> Opportunistic
 	limited := make([]RecallResult, 0, len(results))
 	totalTokens := 0
 
-	for _, result := range results {
+	// Add always results first, prioritizing verified > asserted > tentative within each tier
+	alwaysResults = sortByTruthState(alwaysResults)
+	for _, result := range alwaysResults {
+		if options.MaxTokens > 0 && totalTokens+result.Tokens > options.MaxTokens {
+			continue
+		}
+		limited = append(limited, result)
+		totalTokens += result.Tokens
+		if options.MaxItems > 0 && len(limited) >= options.MaxItems {
+			return limited
+		}
+	}
+
+	// Add contextual results next (until token budget is exhausted), prioritizing verified > asserted > tentative
+	contextualResults = sortByTruthState(contextualResults)
+	for _, result := range contextualResults {
+		if options.MaxTokens > 0 && totalTokens+result.Tokens > options.MaxTokens {
+			continue
+		}
+		limited = append(limited, result)
+		totalTokens += result.Tokens
+		if options.MaxItems > 0 && len(limited) >= options.MaxItems {
+			return limited
+		}
+	}
+
+	// Only add opportunistic results if there's still space and budget, prioritizing verified > asserted > tentative
+	opportunisticResults = sortByTruthState(opportunisticResults)
+	for _, result := range opportunisticResults {
 		if options.MaxTokens > 0 && totalTokens+result.Tokens > options.MaxTokens {
 			continue
 		}
@@ -176,7 +283,127 @@ func applyLimits(results []RecallResult, options RecallOptions) []RecallResult {
 		}
 	}
 
+	// Apply truth-state-based filtering if token or item limits are tight
+	// This trims tentative items first when budget is constrained
+	if options.MaxTokens > 0 || options.MaxItems > 0 {
+		limited = e.trimByTruthState(limited, options)
+	}
+
 	return limited
+}
+
+// sortByTruthState sorts results by truth state: Verified > Asserted > Tentative
+func sortByTruthState(results []RecallResult) []RecallResult {
+	// Create a copy to avoid modifying the original slice
+	sorted := make([]RecallResult, len(results))
+	copy(sorted, results)
+
+	// Sort by truth state priority
+	sort.Slice(sorted, func(i, j int) bool {
+		// Define priority: Verified (highest) > Asserted > Tentative (lowest)
+		priorityI := getTruthStatePriority(sorted[i].Memory.TruthState)
+		priorityJ := getTruthStatePriority(sorted[j].Memory.TruthState)
+
+		// Higher priority comes first
+		if priorityI != priorityJ {
+			return priorityI > priorityJ
+		}
+
+		// If priorities are equal, maintain original order (stable sort)
+		return sorted[i].Memory.ID < sorted[j].Memory.ID
+	})
+
+	return sorted
+}
+
+// getTruthStatePriority returns a numeric priority for truth states
+func getTruthStatePriority(state memory.TruthState) int {
+	switch state {
+	case memory.Verified:
+		return 3
+	case memory.Asserted:
+		return 2
+	case memory.Tentative:
+		return 1
+	default:
+		return 0 // Lowest priority for unknown states
+	}
+}
+
+// trimByTruthState removes lower-priority items when limits are tight, preferring verified > asserted > tentative
+func (e *Engine) trimByTruthState(results []RecallResult, options RecallOptions) []RecallResult {
+	if len(results) == 0 {
+		return results
+	}
+
+	// If we're already within limits, no need to trim
+	totalTokens := 0
+	for _, result := range results {
+		totalTokens += result.Tokens
+	}
+
+	if options.MaxItems > 0 && len(results) <= options.MaxItems && options.MaxTokens > 0 && totalTokens <= options.MaxTokens {
+		return results
+	}
+
+	// Separate results by truth state
+	var verifiedResults, assertedResults, tentativeResults []RecallResult
+
+	for _, result := range results {
+		switch result.Memory.TruthState {
+		case memory.Verified:
+			verifiedResults = append(verifiedResults, result)
+		case memory.Asserted:
+			assertedResults = append(assertedResults, result)
+		case memory.Tentative:
+			tentativeResults = append(tentativeResults, result)
+		default:
+			// Treat unknown states as tentative
+			tentativeResults = append(tentativeResults, result)
+		}
+	}
+
+	// Build final results by prioritizing verified, then asserted, then tentative
+	finalResults := make([]RecallResult, 0, len(results))
+	totalTokens = 0
+
+	// Add verified results first
+	for _, result := range verifiedResults {
+		if options.MaxTokens > 0 && totalTokens+result.Tokens > options.MaxTokens {
+			continue
+		}
+		finalResults = append(finalResults, result)
+		totalTokens += result.Tokens
+		if options.MaxItems > 0 && len(finalResults) >= options.MaxItems {
+			return finalResults
+		}
+	}
+
+	// Add asserted results next
+	for _, result := range assertedResults {
+		if options.MaxTokens > 0 && totalTokens+result.Tokens > options.MaxTokens {
+			continue
+		}
+		finalResults = append(finalResults, result)
+		totalTokens += result.Tokens
+		if options.MaxItems > 0 && len(finalResults) >= options.MaxItems {
+			return finalResults
+		}
+	}
+
+	// Add tentative results last (and only if there's still room)
+	for _, result := range tentativeResults {
+		if options.MaxTokens > 0 && totalTokens+result.Tokens > options.MaxTokens {
+			continue
+		}
+		finalResults = append(finalResults, result)
+		totalTokens += result.Tokens
+		if options.MaxItems > 0 && len(finalResults) >= options.MaxItems {
+			break
+		}
+	}
+
+	return finalResults
 }
 
 // calculateRelevanceScore calculates a relevance score based on how well the memory matches the query
@@ -210,6 +437,13 @@ func calculateRelevanceScore(mem *memory.Memory, query string) float64 {
 	// Boost constraints and decisions since they're often important
 	if mem.Type == memory.Constraint || mem.Type == memory.Decision {
 		score *= 1.5
+	}
+
+	// Boost verified memories
+	if mem.TruthState == memory.Verified {
+		score *= 1.5
+	} else if mem.TruthState == memory.Asserted {
+		score *= 1.2
 	}
 
 	// Normalize score based on query length to prevent longer queries from getting unfairly high scores

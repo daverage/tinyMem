@@ -1,6 +1,5 @@
 # Compiled binaries
 /tinymem
-*.exe
 
 # OS-specific files
 .DS_Store
@@ -9,3 +8,4 @@
 .tinyMem/
 .gemini/
 .claude/
+tasks.md

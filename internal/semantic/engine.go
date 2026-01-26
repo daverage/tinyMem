@@ -9,6 +9,7 @@ import (
 	"github.com/a-marczewski/tinymem/internal/memory"
 	"github.com/a-marczewski/tinymem/internal/recall"
 	"github.com/a-marczewski/tinymem/internal/storage"
+	"go.uber.org/zap"
 	"sort"
 )
 
@@ -19,6 +20,7 @@ type SemanticEngine struct {
 	memoryService   *memory.Service
 	evidenceService *evidence.Service
 	config          *config.Config
+	logger          *zap.Logger
 }
 
 // NewSemanticEngine creates a new semantic recall engine
@@ -27,6 +29,7 @@ func NewSemanticEngine(
 	memoryService *memory.Service,
 	evidenceService *evidence.Service,
 	cfg *config.Config,
+	logger *zap.Logger,
 ) *SemanticEngine {
 	return &SemanticEngine{
 		db:              db,
@@ -34,6 +37,7 @@ func NewSemanticEngine(
 		memoryService:   memoryService,
 		evidenceService: evidenceService,
 		config:          cfg,
+		logger:          logger,
 	}
 }
 
@@ -157,6 +161,27 @@ func (s *SemanticEngine) SemanticRecall(options recall.RecallOptions) ([]recall.
 		}
 	}
 
+	// Log recall metrics if enabled
+	if s.config.MetricsEnabled {
+		totalTokens := 0
+		for _, result := range finalResults {
+			totalTokens += result.Tokens
+		}
+
+		var memoryIDs []string
+		for _, result := range finalResults {
+			memoryIDs = append(memoryIDs, fmt.Sprintf("%d(%s)", result.Memory.ID, result.Memory.Type))
+		}
+
+		s.logger.Info("Recall metrics",
+			zap.String("project_id", options.ProjectID),
+			zap.String("query", options.Query),
+			zap.Int("total_memories", len(finalResults)),
+			zap.Int("total_tokens", totalTokens),
+			zap.Strings("memory_ids_and_types", memoryIDs),
+		)
+	}
+
 	return finalResults, nil
 }
 
@@ -228,7 +253,7 @@ func (s *SemanticEngine) storeEmbeddingInDB(memoryID int64, embedding []float32)
 // fallbackLexicalRecall performs lexical recall as a fallback
 func (s *SemanticEngine) fallbackLexicalRecall(options recall.RecallOptions) ([]recall.RecallResult, error) {
 	// Create a basic recall engine for fallback
-	basicRecall := recall.NewEngine(s.memoryService, s.evidenceService, s.config)
+	basicRecall := recall.NewEngine(s.memoryService, s.evidenceService, s.config, s.logger)
 	return basicRecall.Recall(options)
 }
 

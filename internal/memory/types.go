@@ -17,18 +17,38 @@ const (
 	Note        Type = "note"
 )
 
+// RecallTier represents the recall tier of a memory
+type RecallTier string
+
+const (
+	Always       RecallTier = "always"
+	Contextual   RecallTier = "contextual"
+	Opportunistic RecallTier = "opportunistic"
+)
+
+// TruthState represents the truth state of a memory
+type TruthState string
+
+const (
+	Tentative TruthState = "tentative"
+	Asserted  TruthState = "asserted"
+	Verified  TruthState = "verified"
+)
+
 // Memory represents a memory entry
 type Memory struct {
-	ID           int64     `json:"id"`
-	ProjectID    string    `json:"project_id"`
-	Type         Type      `json:"type"`
-	Summary      string    `json:"summary"`
-	Detail       string    `json:"detail"`
-	Key          *string   `json:"key,omitempty"`
-	Source       *string   `json:"source,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
-	SupersededBy *int64    `json:"superseded_by,omitempty"`
+	ID           int64      `json:"id"`
+	ProjectID    string     `json:"project_id"`
+	Type         Type       `json:"type"`
+	Summary      string     `json:"summary"`
+	Detail       string     `json:"detail"`
+	Key          *string    `json:"key,omitempty"`
+	Source       *string    `json:"source,omitempty"`
+	RecallTier   RecallTier `json:"recall_tier"`
+	TruthState   TruthState `json:"truth_state"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+	SupersededBy *int64     `json:"superseded_by,omitempty"`
 }
 
 // Evidence represents evidence for a memory

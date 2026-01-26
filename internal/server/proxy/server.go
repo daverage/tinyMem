@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/a-marczewski/tinymem/internal/app"
 	"github.com/a-marczewski/tinymem/internal/config"
@@ -49,9 +51,9 @@ func NewServer(a *app.App) *Server {
 	evidenceService := evidence.NewService(a.DB, a.Config)
 	var recallEngine recall.Recaller
 	if a.Config.SemanticEnabled {
-		recallEngine = semantic.NewSemanticEngine(a.DB, a.Memory, evidenceService, a.Config)
+		recallEngine = semantic.NewSemanticEngine(a.DB, a.Memory, evidenceService, a.Config, a.Logger)
 	} else {
-		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config)
+		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config, a.Logger)
 	}
 	injector := inject.NewMemoryInjector(recallEngine)
 	llmClient := llm.NewClient(a.Config)
@@ -232,6 +234,15 @@ func (s *Server) handleStreamingRequest(w http.ResponseWriter, ctx context.Conte
 				// Get the final content from the rolling buffer for extraction
 				finalContent := rollingBuffer.String()
 
+				// Log response token count if metrics are enabled
+				if s.config.MetricsEnabled {
+					tokenCount := estimateTokenCount(finalContent)
+					s.app.Logger.Info("Response metrics",
+						zap.String("model", req.Model),
+						zap.Int("response_tokens", tokenCount),
+					)
+				}
+
 				// Send the final content to the processing channel for extraction
 				select {
 				case s.responseBuffer <- ResponseCapture{
@@ -318,6 +329,15 @@ func (s *Server) handleNonStreamingRequest(w http.ResponseWriter, ctx context.Co
 
 	finalText := rollingBuffer.String()
 
+	// Log response token count if metrics are enabled
+	if s.config.MetricsEnabled {
+		tokenCount := estimateTokenCount(finalText)
+		s.app.Logger.Info("Response metrics",
+			zap.String("model", req.Model),
+			zap.Int("response_tokens", tokenCount),
+		)
+	}
+
 	// Send response for extraction via channel
 	select {
 	case s.responseBuffer <- ResponseCapture{
@@ -340,4 +360,30 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"status": "healthy",
 		"time":   time.Now().Format(time.RFC3339),
 	})
+}
+
+// estimateTokenCount provides a conservative estimate of token count
+// This overestimates to ensure we stay within budget
+func estimateTokenCount(text string) int {
+	if text == "" {
+		return 0
+	}
+
+	// Conservative approach: count characters and divide by a small number
+	// This ensures we never underestimate
+	charCount := utf8.RuneCountInString(text)
+
+	// Divide by 3 to overestimate (typical ratio is ~4 chars per token)
+	// This is a conservative approach to ensure we stay within budget
+	conservativeEstimate := charCount / 3
+
+	// Also count words as a secondary measure and take the higher estimate
+	words := strings.Fields(text)
+	wordBasedEstimate := len(words) * 2 // Multiply by 2 to be conservative
+
+	// Return the higher of the two estimates to ensure safety
+	if conservativeEstimate > wordBasedEstimate {
+		return conservativeEstimate
+	}
+	return wordBasedEstimate
 }

@@ -25,6 +25,9 @@ This approach prevents language models from hallucinating institutional knowledg
 - **Dual Integration Mode**: Operates as HTTP proxy or MCP server for IDE integration
 - **Token Budget Control**: Deterministic prompt injection with configurable limits
 - **Hybrid Search**: Combines FTS (lexical) with optional semantic search
+- **Recall Tiers**: Memories are categorized into recall tiers (always, contextual, opportunistic) for efficient token usage
+- **Truth State Management**: Memories have truth states (tentative, asserted, verified) for better context prioritization
+- **Comprehensive Metrics**: Built-in instrumentation for monitoring token usage and recall effectiveness
 
 ## Installation
 
@@ -163,21 +166,38 @@ tinymem mcp                            # Start MCP server
 # Utilities
 tinymem run -- your-command            # Run command with memory context
 tinymem version                        # Show version
+tinymem completion [bash|zsh|fish|powershell]  # Generate shell completion script
 ```
 
 ### Memory Types
 
 tinyMem categorizes all memory entries into typed buckets:
 
-| Type | Description | Evidence Required | Auto-Promoted |
-|------|-------------|-------------------|---------------|
-| **fact** | Verified truth about the codebase | Yes | No |
-| **claim** | Model assertion not yet verified | No | No |
-| **plan** | Intended future action | No | No |
-| **decision** | Confirmed choice or direction | Yes (confirmation) | No |
-| **constraint** | Hard requirement or limitation | Yes | No |
-| **observation** | Neutral context or state | No | Yes (low priority) |
-| **note** | General information | No | Yes (lowest priority) |
+| Type | Description | Evidence Required | Auto-Promoted | Default Recall Tier | Default Truth State |
+|------|-------------|-------------------|---------------|---------------------|---------------------|
+| **fact** | Verified truth about the codebase | Yes | No | Always | Verified |
+| **claim** | Model assertion not yet verified | No | No | Contextual | Tentative |
+| **plan** | Intended future action | No | No | Opportunistic | Tentative |
+| **decision** | Confirmed choice or direction | Yes (confirmation) | No | Contextual | Asserted |
+| **constraint** | Hard requirement or limitation | Yes | No | Always | Asserted |
+| **observation** | Neutral context or state | No | Yes (low priority) | Opportunistic | Tentative |
+| **note** | General information | No | Yes (lowest priority) | Opportunistic | Tentative |
+
+### Recall Tiers
+
+Memory entries are assigned recall tiers that determine their inclusion priority during prompt injection:
+
+- **Always**: High-priority memories (facts, constraints) that are always included when relevant
+- **Contextual**: Medium-priority memories (decisions, claims) included based on relevance and token budget
+- **Opportunistic**: Low-priority memories (observations, notes) only included if space permits
+
+### Truth States
+
+Memory entries have truth states that indicate their reliability level:
+
+- **Verified**: Confirmed with evidence (facts that have passed verification)
+- **Asserted**: Confirmed importance (decisions and constraints)
+- **Tentative**: Unverified or lower-confidence information (claims, observations, notes)
 
 ### Evidence System
 
@@ -215,6 +235,8 @@ Evidence types:
 │  │     - FTS search (BM25)           │  │
 │  │     - Optional semantic search    │  │
 │  │     - Token budget enforcement    │  │
+│  │     - Recall tier prioritization  │  │
+│  │     - Truth state filtering       │  │
 │  │     - Optional CoVe filtering     │  │
 │  └───────────────────────────────────┘  │
 │                  ↓                       │
@@ -223,6 +245,7 @@ Evidence types:
 │  │     - Bounded system message      │  │
 │  │     - Type annotations            │  │
 │  │     - Evidence markers            │  │
+│  │     - Tier and truth state info   │  │
 │  └───────────────────────────────────┘  │
 └──────────┬──────────────────────────────┘
            │
@@ -239,6 +262,7 @@ Evidence types:
     │     - CoVe filter (opt.) │◄─ Quality gate
     │     - Validate evidence  │
     │     - Store safely       │
+    │     - Apply truth states │
     └──────────────────────────┘
            ↓
     ┌──────────────────┐
@@ -278,6 +302,9 @@ recall_filter_enabled = false   # Enable recall filtering
 [logging]
 level = "info"  # off, error, warn, info, debug
 file = ".tinyMem/logs/tinymem.log"
+
+[metrics]
+enabled = false  # Enable comprehensive metrics and logging (off by default)
 ```
 
 ### Environment Variables
@@ -286,6 +313,7 @@ file = ".tinyMem/logs/tinymem.log"
 TINYMEM_PROXY_PORT=8080
 TINYMEM_LLM_BASE_URL=http://localhost:11434/v1
 TINYMEM_LOG_LEVEL=debug
+TINYMEM_METRICS_ENABLED=false  # Enable comprehensive metrics and logging
 
 # CoVe settings (optional)
 TINYMEM_COVE_ENABLED=true
@@ -373,13 +401,47 @@ Configure your LLM extension to use the `tinymem` proxy. Since the proxy forward
 ```json
 {
   "continue.apiBase": "http://localhost:8080/v1",
-  "continue.apiKey": "dummy" 
+  "continue.apiKey": "dummy"
 }
 ```
 
 ### Qwen Code CLI
 
 See [QWEN.md](./QWEN.md) for detailed Qwen integration setup.
+
+### Qwen and Gemini MCP Configuration
+
+For Qwen and Gemini, you can configure MCP integration by adding the following to your respective configuration files:
+
+**For Qwen (in `.qwen/QWEN.md` or project configuration):**
+
+```json
+{
+  "mcpServers": {
+    "tinymem": {
+      "command": "/path/to/tinymem",
+      "args": ["mcp"],
+      "env": {}
+    }
+  }
+}
+```
+
+**For Gemini (in `.gemini/CONFIG.md` or project configuration):**
+
+```json
+{
+  "mcpServers": {
+    "tinymem": {
+      "command": "/path/to/tinymem",
+      "args": ["mcp"],
+      "env": {}
+    }
+  }
+}
+```
+
+**Important**: Use the absolute path to your tinymem executable. After updating the configuration, restart your respective application.
 
 ## AI Agent Directives
 
@@ -612,6 +674,8 @@ Semantic search gracefully degrades to FTS-only if unavailable.
 When a prompt arrives, tinyMem:
 - Searches memories using FTS (BM25 ranking)
 - Optionally combines with semantic similarity
+- Applies recall tier prioritization (Always → Contextual → Opportunistic)
+- Filters by truth state (Verified → Asserted → Tentative)
 - Prioritizes constraints and decisions
 - Enforces token budget
 
@@ -620,25 +684,37 @@ Selected memories are formatted into a bounded system message:
 ```
 [tinyMem Context]
 
-CONSTRAINT: API keys must be stored in environment variables
+[ALWAYS] CONSTRAINT: API keys must be stored in environment variables
 (evidence: .env.example exists, grep confirms pattern)
+(truth state: asserted)
 
-FACT: Authentication uses JWT tokens
+[CONTEXTUAL] FACT: Authentication uses JWT tokens
 (evidence: auth.go:42, test suite passes)
+(truth state: verified)
 
-CLAIM: Frontend uses React 18
+[OPPORTUNISTIC] CLAIM: Frontend uses React 18
 (no evidence verification yet)
+(truth state: tentative)
+
 ```
 
 ### 3. Extraction Phase
 After the LLM responds:
 - Parse output for claims, plans, decisions
 - **Optional: CoVe filtering** - Assign confidence scores and filter low-quality candidates
+- Apply recall tiers and truth states
 - Default to non-fact types (never auto-promote to facts)
 - Verify evidence for fact promotion (independent of CoVe)
 - Store with timestamps and supersession tracking
 
 **Note:** CoVe filtering is disabled by default and operates transparently when enabled. It reduces hallucinated extractions but never participates in fact promotion—only evidence verification can promote claims to facts.
+
+### 4. Metrics and Monitoring
+When enabled, tinyMem provides comprehensive metrics:
+- Per-request recall statistics (total memories, token counts, memory IDs and types)
+- Tier-based breakdowns (always, contextual, opportunistic counts)
+- Response token counts
+- Token delta measurements for optimization
 
 ## Invariants (Truth Discipline)
 
@@ -652,6 +728,9 @@ These guarantees hold everywhere in tinyMem:
 6. **Project-Scoped**: All state lives in `.tinyMem/`
 7. **Single Executable**: No dependencies beyond SQLite (embedded)
 8. **CoVe Safety**: When enabled, CoVe filters quality but never changes types, creates facts, or overrides evidence verification
+9. **Tiered Recall**: Memories are prioritized by recall tier (Always → Contextual → Opportunistic)
+10. **Truth State Management**: Memories are filtered by reliability (Verified → Asserted → Tentative)
+11. **Metrics Transparency**: Comprehensive logging available when enabled for performance monitoring
 
 Violating any invariant is a bug, not a feature gap.
 

@@ -39,6 +39,35 @@ func init() {
 	rootCmd.AddCommand(doctorCmd)
 	rootCmd.AddCommand(recentCmd)
 	rootCmd.AddCommand(queryCmd)
+	rootCmd.AddCommand(completionCmd)
+}
+
+var completionCmd = &cobra.Command{
+	Use:   "completion [bash|zsh|fish|powershell]",
+	Short: "Generate the autocompletion script for the specified shell",
+	Long: `Generate the autocompletion script for tinyMem for the specified shell.
+See each command's help for details on how to use the generated script.
+	`,
+	DisableFlagsInUseLine: true,
+	ValidArgs:             []string{"bash", "zsh", "fish", "powershell"},
+	Args:                  cobra.ExactValidArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		var err error
+		switch args[0] {
+		case "bash":
+			err = cmd.Root().GenBashCompletion(os.Stdout)
+		case "zsh":
+			err = cmd.Root().GenZshCompletion(os.Stdout)
+		case "fish":
+			err = cmd.Root().GenFishCompletion(os.Stdout, true)
+		case "powershell":
+			err = cmd.Root().GenPowerShellCompletionWithDesc(os.Stdout)
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error generating completion script: %v\n", err)
+			os.Exit(1)
+		}
+	},
 }
 
 var versionCmd = &cobra.Command{
@@ -108,9 +137,9 @@ func runRunCmd(a *app.App, cmd *cobra.Command, args []string) {
 	evidenceService := evidence.NewService(a.DB, a.Config)
 	var recallEngine recall.Recaller
 	if a.Config.SemanticEnabled {
-		recallEngine = semantic.NewSemanticEngine(a.DB, a.Memory, evidenceService, a.Config)
+		recallEngine = semantic.NewSemanticEngine(a.DB, a.Memory, evidenceService, a.Config, a.Logger)
 	} else {
-		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config)
+		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config, a.Logger)
 	}
 	injector := inject.NewMemoryInjector(recallEngine)
 
@@ -199,7 +228,7 @@ var doctorCmd = &cobra.Command{
 
 func runDoctorCmd(a *app.App, cmd *cobra.Command, args []string) {
 	// Run diagnostics
-	doctorRunner := doctor.NewRunner(a.Config, a.DB, a.ProjectID, a.Memory)
+	doctorRunner := doctor.NewRunnerWithMode(a.Config, a.DB, a.ProjectID, a.Memory, doctor.StandaloneMode)
 	diagnostics := doctorRunner.RunAll()
 	diagnostics.PrintReport()
 }
@@ -246,9 +275,9 @@ func runQueryCmd(a *app.App, cmd *cobra.Command, args []string) {
 	evidenceService := evidence.NewService(a.DB, a.Config)
 	var recallEngine recall.Recaller
 	if a.Config.SemanticEnabled {
-		recallEngine = semantic.NewSemanticEngine(a.DB, a.Memory, evidenceService, a.Config)
+		recallEngine = semantic.NewSemanticEngine(a.DB, a.Memory, evidenceService, a.Config, a.Logger)
 	} else {
-		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config)
+		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config, a.Logger)
 	}
 
 	// Perform search

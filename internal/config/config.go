@@ -46,6 +46,8 @@ type Config struct {
 	ExtractionBufferBytes         int
 	RecallMaxItems                int
 	RecallMaxTokens               int
+	// Metrics configuration
+	MetricsEnabled                 bool
 	// CoVe (Chain-of-Verification) configuration
 	CoVeEnabled              bool
 	CoVeConfidenceThreshold  float64
@@ -87,6 +89,9 @@ type fileConfig struct {
 		BaseURL string `toml:"base_url"`
 		Model   string `toml:"model"`
 	} `toml:"embedding"`
+	Metrics struct {
+		Enabled bool `toml:"enabled"`
+	} `toml:"metrics"`
 	CoVe struct {
 		Enabled              bool    `toml:"enabled"`
 		ConfidenceThreshold  float64 `toml:"confidence_threshold"`
@@ -134,6 +139,7 @@ func LoadConfig() (*Config, error) {
 		ExtractionBufferBytes:         DefaultExtractionBufferBytes,
 		RecallMaxItems:                10,
 		RecallMaxTokens:               2000,
+		MetricsEnabled:                false,
 		// CoVe defaults (enabled by default)
 		CoVeEnabled:              true,
 		CoVeConfidenceThreshold:  DefaultCoVeConfidenceThreshold,
@@ -198,6 +204,8 @@ func LoadConfig() (*Config, error) {
 		if parsed.Embedding.Model != "" {
 			cfg.EmbeddingModel = parsed.Embedding.Model
 		}
+		// Metrics configuration
+		cfg.MetricsEnabled = parsed.Metrics.Enabled
 		// CoVe configuration
 		cfg.CoVeEnabled = parsed.CoVe.Enabled
 		if parsed.CoVe.ConfidenceThreshold > 0 {
@@ -302,6 +310,11 @@ func LoadConfig() (*Config, error) {
 		if size, err := strconv.Atoi(maxTokens); err == nil {
 			cfg.RecallMaxTokens = size
 		}
+	}
+
+	// Metrics environment variable overrides
+	if metricsEnabled := os.Getenv("TINYMEM_METRICS_ENABLED"); metricsEnabled != "" {
+		cfg.MetricsEnabled = metricsEnabled == "true" || metricsEnabled == "1"
 	}
 
 	// CoVe environment variable overrides

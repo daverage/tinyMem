@@ -97,7 +97,8 @@ func (a *App) Close() {
 			// For os.Stderr or regular files, it's usually safe to ignore certain errors.
 			// However, it's good practice to log unexpected errors.
 			if !strings.Contains(err.Error(), "sync /dev/stderr: invalid argument") &&
-				!strings.Contains(err.Error(), "sync <file descriptor>: bad file descriptor") {
+				!strings.Contains(err.Error(), "sync <file descriptor>: bad file descriptor") &&
+				!strings.Contains(err.Error(), "sync /dev/stderr: inappropriate ioctl for device") {
 				fmt.Fprintf(os.Stderr, "Error syncing logger: %v\n", err)
 			}
 		}

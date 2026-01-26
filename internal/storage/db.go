@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	SchemaVersion = 2
+	SchemaVersion = 4
 )
 
 // DB represents the database connection
@@ -60,6 +60,14 @@ func (db *DB) migrate() error {
 			}
 		case 2:
 			if err := db.applySchemaV2(tx); err != nil {
+				return fmt.Errorf("failed to apply schema v%d: %w", version, err)
+			}
+		case 3:
+			if err := db.applySchemaV3(tx); err != nil {
+				return fmt.Errorf("failed to apply schema v%d: %w", version, err)
+			}
+		case 4:
+			if err := db.applySchemaV4(tx); err != nil {
 				return fmt.Errorf("failed to apply schema v%d: %w", version, err)
 			}
 		default:
@@ -150,6 +158,144 @@ func (db *DB) applySchemaV2(tx *sql.Tx) error {
 	return err
 }
 
+// applySchemaV3 adds the recall_tier column to memories table.
+func (db *DB) applySchemaV3(tx *sql.Tx) error {
+	// Check if recall_tier column already exists
+	var exists int
+	err := tx.QueryRow(`
+		SELECT COUNT(*)
+		FROM pragma_table_info('memories')
+		WHERE name='recall_tier'
+	`).Scan(&exists)
+	if err != nil {
+		return err
+	}
+
+	if exists == 0 {
+		// Add the recall_tier column with a default value
+		_, err = tx.Exec(`
+			ALTER TABLE memories
+			ADD COLUMN recall_tier TEXT NOT NULL DEFAULT 'opportunistic'
+		`)
+		if err != nil {
+			return err
+		}
+
+		// Update existing records to have appropriate recall_tier values based on their type
+		_, err = tx.Exec(`
+			UPDATE memories
+			SET recall_tier = 'always'
+			WHERE type IN ('fact', 'constraint')
+		`)
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.Exec(`
+			UPDATE memories
+			SET recall_tier = 'contextual'
+			WHERE type IN ('decision', 'claim')
+		`)
+		if err != nil {
+			return err
+		}
+
+		// For 'observation', 'note', and 'plan', leave as 'opportunistic' (the default)
+	}
+
+	// Update FTS5 table to include recall_tier in content sync
+	// Drop and recreate the FTS triggers to account for the new column
+	_, err = tx.Exec(`DROP TRIGGER IF EXISTS memories_ai`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`DROP TRIGGER IF EXISTS memories_ad`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`DROP TRIGGER IF EXISTS memories_au`)
+	if err != nil {
+		return err
+	}
+
+	// Recreate the triggers to keep FTS table in sync (only summary and detail are indexed)
+	_, err = tx.Exec(`
+		CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+			INSERT INTO memories_fts(rowid, summary, detail) VALUES (new.id, new.summary, new.detail);
+		END;
+	`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`
+		CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+			DELETE FROM memories_fts WHERE rowid = old.id;
+		END;
+	`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`
+		CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+			DELETE FROM memories_fts WHERE rowid = old.id;
+			INSERT INTO memories_fts(rowid, summary, detail) VALUES (new.id, new.summary, new.detail);
+		END;
+	`)
+	return err
+}
+
+// applySchemaV4 adds the truth_state column to memories table.
+func (db *DB) applySchemaV4(tx *sql.Tx) error {
+	// Check if truth_state column already exists
+	var exists int
+	err := tx.QueryRow(`
+		SELECT COUNT(*)
+		FROM pragma_table_info('memories')
+		WHERE name='truth_state'
+	`).Scan(&exists)
+	if err != nil {
+		return err
+	}
+
+	if exists == 0 {
+		// Add the truth_state column with a default value
+		_, err = tx.Exec(`
+			ALTER TABLE memories
+			ADD COLUMN truth_state TEXT NOT NULL DEFAULT 'tentative'
+		`)
+		if err != nil {
+			return err
+		}
+
+		// Update existing records to have appropriate truth_state values based on their type
+		_, err = tx.Exec(`
+			UPDATE memories
+			SET truth_state = 'verified'
+			WHERE type = 'fact'
+		`)
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.Exec(`
+			UPDATE memories
+			SET truth_state = 'asserted'
+			WHERE type IN ('decision', 'constraint')
+		`)
+		if err != nil {
+			return err
+		}
+
+		// For other types, leave as 'tentative' (the default)
+	}
+
+	return nil
+}
+
 // applySchemaV1 applies the initial schema
 func (db *DB) applySchemaV1(tx *sql.Tx) error {
 	// Create memories table
@@ -162,6 +308,8 @@ func (db *DB) applySchemaV1(tx *sql.Tx) error {
 			detail TEXT,
 			key TEXT,
 			source TEXT,
+			recall_tier TEXT NOT NULL DEFAULT 'opportunistic',
+			truth_state TEXT NOT NULL DEFAULT 'tentative',
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			superseded_by INTEGER REFERENCES memories(id),

@@ -63,9 +63,9 @@ func NewServer(a *app.App) *Server {
 	evidenceService := evidence.NewService(a.DB, a.Config)
 	var recallEngine recall.Recaller
 	if a.Config.SemanticEnabled {
-		recallEngine = semantic.NewSemanticEngine(a.DB, a.Memory, evidenceService, a.Config)
+		recallEngine = semantic.NewSemanticEngine(a.DB, a.Memory, evidenceService, a.Config, a.Logger)
 	} else {
-		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config)
+		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config, a.Logger)
 	}
 	extractor := extract.NewExtractor(evidenceService)
 
@@ -620,7 +620,7 @@ func (s *Server) handleMemoryHealth(req *MCPRequest) {
 
 // handleMemoryDoctor handles memory doctor diagnostic requests
 func (s *Server) handleMemoryDoctor(req *MCPRequest) {
-	doctorRunner := doctor.NewRunner(s.app.Config, s.app.DB, s.app.ProjectID, s.app.Memory)
+	doctorRunner := doctor.NewRunnerWithMode(s.app.Config, s.app.DB, s.app.ProjectID, s.app.Memory, doctor.MCPMode)
 	diagnostics := doctorRunner.RunAll()
 
 	var content strings.Builder
