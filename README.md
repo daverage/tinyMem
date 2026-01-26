@@ -17,6 +17,7 @@ This approach prevents language models from hallucinating institutional knowledg
 ## Key Features
 
 - **Evidence-Based Truth System**: All memory entries are typed (fact, claim, plan, decision, constraint, observation, note). Only claims with verified evidence become facts.
+- **Chain-of-Verification (CoVe)**: Optional LLM-based quality filter that reduces hallucinated memory candidates before storage (disabled by default).
 - **Local Execution**: Runs entirely on your machine as a single executable. No cloud dependencies.
 - **Project-Scoped**: All state lives in `.tinyMem/` directory within your project
 - **Streaming First**: Responses stream immediately—no buffering delays
@@ -202,6 +203,7 @@ Evidence types:
 │  │     - FTS search (BM25)           │  │
 │  │     - Optional semantic search    │  │
 │  │     - Token budget enforcement    │  │
+│  │     - Optional CoVe filtering     │  │
 │  └───────────────────────────────────┘  │
 │                  ↓                       │
 │  ┌───────────────────────────────────┐  │
@@ -218,13 +220,14 @@ Evidence types:
     └──────┬───────┘
            │
            ↓ (streaming response)
-    ┌──────────────────┐
-    │  3. Extraction   │
-    │     - Parse response
-    │     - Extract claims
-    │     - Validate evidence
-    │     - Store safely
-    └──────────────────┘
+    ┌──────────────────────────┐
+    │  3. Extraction           │
+    │     - Parse response     │
+    │     - Extract claims     │
+    │     - CoVe filter (opt.) │◄─ Quality gate
+    │     - Validate evidence  │
+    │     - Store safely       │
+    └──────────────────────────┘
            ↓
     ┌──────────────────┐
     │  SQLite Storage  │
@@ -251,6 +254,15 @@ hybrid_weight = 0.5  # Balance between FTS and semantic
 auto_extract = true
 require_confirmation = false
 
+[cove]
+# Chain-of-Verification quality filter (disabled by default)
+enabled = false
+confidence_threshold = 0.6      # Min confidence to keep (0.0-1.0)
+max_candidates = 20             # Max candidates per batch
+timeout_seconds = 30            # LLM call timeout
+model = ""                      # Empty = use default LLM
+recall_filter_enabled = false   # Enable recall filtering
+
 [logging]
 level = "info"  # off, error, warn, info, debug
 file = ".tinyMem/logs/tinymem.log"
@@ -262,7 +274,29 @@ file = ".tinyMem/logs/tinymem.log"
 TINYMEM_PROXY_PORT=8080
 TINYMEM_LLM_BASE_URL=http://localhost:11434/v1
 TINYMEM_LOG_LEVEL=debug
+
+# CoVe settings (optional)
+TINYMEM_COVE_ENABLED=true
+TINYMEM_COVE_CONFIDENCE_THRESHOLD=0.7
+TINYMEM_COVE_MAX_CANDIDATES=20
 ```
+
+### Chain-of-Verification (CoVe)
+
+CoVe is an optional quality filter that evaluates memory candidates before storage. When enabled, it:
+
+- Assigns confidence scores (0.0-1.0) to each candidate based on specificity and certainty
+- Filters out low-confidence, speculative, or hallucinated extractions
+- Operates transparently with fail-safe fallback (errors don't block storage)
+- **Never** participates in fact promotion (evidence verification is separate)
+
+Enable CoVe when you want higher memory quality at the cost of an additional LLM call per extraction:
+
+```bash
+export TINYMEM_COVE_ENABLED=true
+```
+
+See [COVE.md](./COVE.md) for detailed documentation, configuration examples, and performance considerations.
 
 ## IDE Integration
 
@@ -303,7 +337,7 @@ Available MCP tools:
 - `memory_query` - Search memories using full-text or semantic search
 - `memory_recent` - Retrieve the most recent memories
 - `memory_write` - Create a new memory entry with optional evidence
-- `memory_stats` - Get statistics about stored memories
+- `memory_stats` - Get statistics about stored memories (includes CoVe metrics when enabled)
 - `memory_health` - Check the health status of the memory system
 - `memory_doctor` - Run diagnostics on the memory system
 
@@ -324,24 +358,78 @@ See [QWEN.md](./QWEN.md) for detailed Qwen integration setup.
 
 ## AI Agent Directives
 
-`tinyMem` is designed to be integrated with AI agents, providing them with a local, project-scoped memory system. To ensure effective and reliable interaction, AI agents should adhere to specific directives when using `tinyMem`. These directives guide the agent's reasoning process and interaction with the memory tools.
+`tinyMem` is designed to be integrated with AI agents, providing them with a local, project-scoped memory system. To ensure effective and reliable interaction, AI agents should adhere to specific directives when using `tinyMem`.
 
-**Core Directive for AI Agents:**
+### Core Principle: Memory-First Reasoning
 
-Your primary function is to leverage `tinyMem`'s memory to provide contextually-aware answers. Before providing any code or explanation from your own knowledge, you MUST first consult `tinyMem`'s memory. Your default first action for any non-trivial query about this project is to use a `tinyMem` tool, especially `memory_query`.
+**Your primary function is to leverage `tinyMem`'s memory to provide contextually-aware answers.** Before providing any code or explanation from your general knowledge, you MUST first consult `tinyMem`'s memory using `memory_query`.
 
-**Available tinyMem Memory Tools (for AI Agents):**
+### Available Memory Tools
 
-AI agents have access to the following `tinyMem` tools:
+- **`memory_query(query: str, limit: int = 10)`** - Search project memory (use this FIRST)
+- **`memory_recent(count: int = 10)`** - Get recent memory entries
+- **`memory_write(type: str, summary: str, ...)`** - Create new memory entries
+- **`memory_stats()`** - View memory statistics (includes CoVe metrics when enabled)
+- **`memory_health()`** - Check system health
+- **`memory_doctor()`** - Run detailed diagnostics
 
-*   **`memory_query(query: str, limit: int = 10)`**: Searches the project's memory for relevant information. Use this as the first step for most context-dependent queries.
-*   **`memory_recent(count: int = 10)`**: Retrieves the most recently added or updated memory entries. Useful for quick overviews of recent activity.
-*   **`memory_write(type: str, summary: str, detail: Optional[str] = None, key: Optional[str] = None, source: Optional[str] = None)`**: Creates a new memory entry. Use this to record new facts, claims, plans, decisions, constraints, observations, or notes.
-*   **`memory_stats()`**: Provides statistics about the stored memories.
-*   **`memory_health()`**: Checks the overall health status of the memory system.
-*   **`memory_doctor()`**: Runs detailed diagnostics on the memory system.
+### Quick Example
 
-For the full, detailed AI Assistant Directives and comprehensive usage guidelines for each `tinyMem` memory tool, please refer to [GEMINI.md](./GEMINI.md).
+**User asks:** "How should we implement authentication?"
+
+**Wrong approach (❌):**
+```
+You respond with general JWT/OAuth advice from your training...
+```
+
+**Correct approach (✅):**
+```python
+# Step 1: Query memory FIRST
+memory_query(query='authentication implementation')
+
+# Step 2: Synthesize from results
+# Found: DECISION - "Use OAuth2 with Google/GitHub"
+# Found: CONSTRAINT - "Must support enterprise SSO"
+
+# Step 3: Answer based on memory
+"Based on project decisions, you've chosen OAuth2 with
+Google and GitHub providers, with plans to add enterprise
+SSO. Would you like me to outline the implementation?"
+```
+
+### Complete Directives
+
+For comprehensive AI Assistant Directives including:
+- Mandatory reasoning process for every query
+- Detailed tool usage guidelines
+- Chain-of-Verification (CoVe) transparency
+- Memory type best practices
+- Complete workflow examples
+- Critical reminders and error patterns
+
+**See the full directives in [claude.md](./claude.md)**
+
+### Adding Directives to Your AI Assistant
+
+Pick the directive file that matches your model and paste its contents verbatim into your system prompt or project instructions (do not summarize or paraphrase).
+
+**Choose the correct file:**
+- **Claude:** `claude.md`
+- **Gemini:** `GEMINI.md`
+- **Qwen:** `QWEN.md`
+- **Custom/other agents:** `AGENT.md`
+
+This ensures the assistant:
+1. Always queries memory before providing project-specific answers
+2. Understands all memory types and tools
+3. Knows when to create new memories
+4. Recognizes CoVe's transparent operation
+5. Follows evidence-based truth discipline
+
+**Concrete examples:**
+- **Claude Desktop/Cursor:** Paste `claude.md` into project instructions or `.clinerules`
+- **Continue (VS Code):** Paste the matching file into the system message or a context file
+- **Custom agents:** Prepend the matching file to the system prompt at initialization
 
 ## Example Workflow
 
@@ -520,9 +608,12 @@ CLAIM: Frontend uses React 18
 ### 3. Extraction Phase
 After the LLM responds:
 - Parse output for claims, plans, decisions
-- Default to non-fact types
-- Verify evidence for fact promotion
+- **Optional: CoVe filtering** - Assign confidence scores and filter low-quality candidates
+- Default to non-fact types (never auto-promote to facts)
+- Verify evidence for fact promotion (independent of CoVe)
 - Store with timestamps and supersession tracking
+
+**Note:** CoVe filtering is disabled by default and operates transparently when enabled. It reduces hallucinated extractions but never participates in fact promotion—only evidence verification can promote claims to facts.
 
 ## Invariants (Truth Discipline)
 
@@ -530,11 +621,12 @@ These guarantees hold everywhere in tinyMem:
 
 1. **Memory ≠ Gospel**: Model output never auto-promoted to truth
 2. **Typed Memory**: All entries have explicit types
-3. **Evidence Required**: No evidence → not a fact
+3. **Evidence Required**: No evidence → not a fact (CoVe cannot bypass this)
 4. **Bounded Injection**: Prompt injection is deterministic and token-limited
 5. **Streaming Mandatory**: No response buffering (where supported)
 6. **Project-Scoped**: All state lives in `.tinyMem/`
 7. **Single Executable**: No dependencies beyond SQLite (embedded)
+8. **CoVe Safety**: When enabled, CoVe filters quality but never changes types, creates facts, or overrides evidence verification
 
 Violating any invariant is a bug, not a feature gap.
 
@@ -610,10 +702,11 @@ Language models are powerful but have limited context windows and no persistent 
 - Depend on cloud services
 - Trust model output uncritically
 - Add latency through buffering
+- Lack quality filtering for hallucinated extractions
 
-tinyMem takes a different approach: treat the model as a conversational partner, but verify everything it claims against reality. This gives small models (7B-13B) the behavior of much larger models with long-term memory, while reducing token costs for all models through smart context injection.
+tinyMem takes a different approach: treat the model as a conversational partner, but verify everything it claims against reality. Optional Chain-of-Verification (CoVe) filtering reduces hallucinated extractions before they pollute the memory system. This gives small models (7B-13B) the behavior of much larger models with long-term memory, while reducing token costs for all models through smart context injection.
 
-The result: better model performance, lower costs, and guaranteed truth discipline—all running locally with zero configuration.
+The result: better model performance, lower costs, higher memory quality, and guaranteed truth discipline—all running locally with zero configuration.
 
 ---
 

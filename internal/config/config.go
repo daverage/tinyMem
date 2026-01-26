@@ -12,11 +12,15 @@ import (
 )
 
 const (
-	DefaultProxyPort             = 8080
-	DefaultExtractionBufferBytes = 16384 // 16KB default
-	DefaultLLMBaseURL            = "http://localhost:11434/v1"
-	DefaultEmbeddingModel        = "nomic-embed-text"
-	DefaultHybridWeight          = 0.5
+	DefaultProxyPort                = 8080
+	DefaultExtractionBufferBytes    = 16384 // 16KB default
+	DefaultLLMBaseURL               = "http://localhost:11434/v1"
+	DefaultEmbeddingModel           = "nomic-embed-text"
+	DefaultHybridWeight             = 0.5
+	DefaultCoVeConfidenceThreshold  = 0.6
+	DefaultCoVeMaxCandidates        = 20
+	DefaultCoVeTimeoutSeconds       = 30
+	DefaultCoVeModel                = "" // Empty = use default LLM
 )
 
 // Config holds the application configuration
@@ -42,6 +46,13 @@ type Config struct {
 	ExtractionBufferBytes         int
 	RecallMaxItems                int
 	RecallMaxTokens               int
+	// CoVe (Chain-of-Verification) configuration
+	CoVeEnabled              bool
+	CoVeConfidenceThreshold  float64
+	CoVeMaxCandidates        int
+	CoVeTimeoutSeconds       int
+	CoVeModel                string
+	CoVeRecallFilterEnabled  bool
 }
 
 type fileConfig struct {
@@ -76,6 +87,14 @@ type fileConfig struct {
 		BaseURL string `toml:"base_url"`
 		Model   string `toml:"model"`
 	} `toml:"embedding"`
+	CoVe struct {
+		Enabled              bool    `toml:"enabled"`
+		ConfidenceThreshold  float64 `toml:"confidence_threshold"`
+		MaxCandidates        int     `toml:"max_candidates"`
+		TimeoutSeconds       int     `toml:"timeout_seconds"`
+		Model                string  `toml:"model"`
+		RecallFilterEnabled  bool    `toml:"recall_filter_enabled"`
+	} `toml:"cove"`
 }
 
 // LoadConfig loads configuration from file, environment variables, and defaults
@@ -115,6 +134,13 @@ func LoadConfig() (*Config, error) {
 		ExtractionBufferBytes:         DefaultExtractionBufferBytes,
 		RecallMaxItems:                10,
 		RecallMaxTokens:               2000,
+		// CoVe defaults (disabled by default for safety)
+		CoVeEnabled:              false,
+		CoVeConfidenceThreshold:  DefaultCoVeConfidenceThreshold,
+		CoVeMaxCandidates:        DefaultCoVeMaxCandidates,
+		CoVeTimeoutSeconds:       DefaultCoVeTimeoutSeconds,
+		CoVeModel:                DefaultCoVeModel,
+		CoVeRecallFilterEnabled:  false,
 	}
 
 	embeddingBaseURLSet := false
@@ -172,6 +198,21 @@ func LoadConfig() (*Config, error) {
 		if parsed.Embedding.Model != "" {
 			cfg.EmbeddingModel = parsed.Embedding.Model
 		}
+		// CoVe configuration
+		cfg.CoVeEnabled = parsed.CoVe.Enabled
+		if parsed.CoVe.ConfidenceThreshold > 0 {
+			cfg.CoVeConfidenceThreshold = parsed.CoVe.ConfidenceThreshold
+		}
+		if parsed.CoVe.MaxCandidates > 0 {
+			cfg.CoVeMaxCandidates = parsed.CoVe.MaxCandidates
+		}
+		if parsed.CoVe.TimeoutSeconds > 0 {
+			cfg.CoVeTimeoutSeconds = parsed.CoVe.TimeoutSeconds
+		}
+		if parsed.CoVe.Model != "" {
+			cfg.CoVeModel = parsed.CoVe.Model
+		}
+		cfg.CoVeRecallFilterEnabled = parsed.CoVe.RecallFilterEnabled
 	}
 
 	// Apply environment variable overrides
@@ -263,6 +304,32 @@ func LoadConfig() (*Config, error) {
 		}
 	}
 
+	// CoVe environment variable overrides
+	if coveEnabled := os.Getenv("TINYMEM_COVE_ENABLED"); coveEnabled != "" {
+		cfg.CoVeEnabled = coveEnabled == "true" || coveEnabled == "1"
+	}
+	if coveThreshold := os.Getenv("TINYMEM_COVE_CONFIDENCE_THRESHOLD"); coveThreshold != "" {
+		if threshold, err := strconv.ParseFloat(coveThreshold, 64); err == nil {
+			cfg.CoVeConfidenceThreshold = threshold
+		}
+	}
+	if coveMaxCandidates := os.Getenv("TINYMEM_COVE_MAX_CANDIDATES"); coveMaxCandidates != "" {
+		if max, err := strconv.Atoi(coveMaxCandidates); err == nil {
+			cfg.CoVeMaxCandidates = max
+		}
+	}
+	if coveTimeout := os.Getenv("TINYMEM_COVE_TIMEOUT_SECONDS"); coveTimeout != "" {
+		if timeout, err := strconv.Atoi(coveTimeout); err == nil {
+			cfg.CoVeTimeoutSeconds = timeout
+		}
+	}
+	if coveModel := os.Getenv("TINYMEM_COVE_MODEL"); coveModel != "" {
+		cfg.CoVeModel = coveModel
+	}
+	if coveRecallFilter := os.Getenv("TINYMEM_COVE_RECALL_FILTER_ENABLED"); coveRecallFilter != "" {
+		cfg.CoVeRecallFilterEnabled = coveRecallFilter == "true" || coveRecallFilter == "1"
+	}
+
 	cfg.LLMBaseURL = normalizeBaseURL(cfg.LLMBaseURL)
 	if !embeddingBaseURLSet {
 		cfg.EmbeddingBaseURL = cfg.LLMBaseURL
@@ -336,6 +403,16 @@ func (c *Config) Validate() error {
 	}
 	if c.EvidenceAllowCommand && len(c.EvidenceAllowedCommands) == 0 {
 		return fmt.Errorf("evidence commands enabled but no allowed commands configured")
+	}
+	// CoVe validation
+	if c.CoVeConfidenceThreshold < 0 || c.CoVeConfidenceThreshold > 1 {
+		return fmt.Errorf("CoVe confidence threshold must be between 0 and 1")
+	}
+	if c.CoVeMaxCandidates < 0 {
+		return fmt.Errorf("CoVe max candidates cannot be negative")
+	}
+	if c.CoVeTimeoutSeconds <= 0 {
+		return fmt.Errorf("CoVe timeout must be positive")
 	}
 	return nil
 }

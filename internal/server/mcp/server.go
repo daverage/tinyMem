@@ -553,6 +553,20 @@ func (s *Server) handleMemoryStats(req *MCPRequest) {
 		content.WriteString(fmt.Sprintf("\nLast updated: %s\n", memories[0].UpdatedAt.Format(time.RFC3339)))
 	}
 
+	// Add CoVe statistics if available
+	if coveStats := s.extractor.GetCoVeStats(); coveStats != nil {
+		content.WriteString("\n\nCoVe (Chain-of-Verification) Statistics:\n")
+		content.WriteString(fmt.Sprintf("  Candidates evaluated: %d\n", coveStats.CandidatesEvaluated))
+		content.WriteString(fmt.Sprintf("  Candidates discarded: %d\n", coveStats.CandidatesDiscarded))
+		if coveStats.CandidatesEvaluated > 0 {
+			content.WriteString(fmt.Sprintf("  Average confidence: %.2f\n", coveStats.AvgConfidence))
+			discardRate := float64(coveStats.CandidatesDiscarded) / float64(coveStats.CandidatesEvaluated) * 100
+			content.WriteString(fmt.Sprintf("  Discard rate: %.1f%%\n", discardRate))
+		}
+		content.WriteString(fmt.Sprintf("  Errors: %d\n", coveStats.CoVeErrors))
+		content.WriteString(fmt.Sprintf("  Last updated: %s\n", coveStats.LastUpdated.Format(time.RFC3339)))
+	}
+
 	response := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"result": map[string]interface{}{

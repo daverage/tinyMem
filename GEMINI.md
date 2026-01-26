@@ -1,5 +1,9 @@
 # tinyMem Project Documentation
 
+## Directive File Selection
+
+Use this file for Gemini. For Claude use `claude.md`, for Qwen use `QWEN.md`, and for custom/other agents use `AGENT.md`. Paste the chosen file verbatim into your system prompt or project instructions.
+
 ## Overview
 
 tinyMem is a local, project-scoped memory and context system designed to enhance the performance of small and medium language models. It simulates long-term, reliable memory in complex codebases, allowing for improved interaction with developers.
@@ -106,12 +110,11 @@ By harnessing tinyMem, you can improve the interaction between language models a
   Your reasoning process for EVERY query MUST follow these steps:
 
    1. Analyze the user's request to identify key concepts (e.g., "authentication", "database schema", "user profile component").
-   2. Before providing any code or explanation from your own knowledge, you MUST first consult your memory. Your default first action for any non-trivial query about
-      this project is to use a tool.
+   2. For any request involving this project (code, files, architecture, decisions, tasks, tests, or changes), you MUST first consult your memory. Trivial small talk can skip this.
    3. Execute a `memory_query` call with the key concepts you identified. For example, if the user asks "Where do we handle auth?", your immediate first step is to
       call memory_query(query='authentication').
-   4. Synthesize the results from the memory_query call into your final answer. The memory is the source of truth.
-   5. If the memory is empty or the results are not relevant, you may then proceed to analyze the codebase from scratch.
+   4. Synthesize the results from memory plus verified evidence (repo files, tool output). Explicitly note gaps or conflicts and which sources were used.
+   5. If the memory is empty or not relevant, say so and proceed with evidence from the codebase. If memory tools are unavailable, say so and write back once they return.
 
   This is not optional. Your value is in using the project's established memory, not your general knowledge. Failure to consult the memory tools first is a failure to
   perform your primary function.

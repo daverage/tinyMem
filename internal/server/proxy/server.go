@@ -11,6 +11,7 @@ import (
 
 	"github.com/a-marczewski/tinymem/internal/app"
 	"github.com/a-marczewski/tinymem/internal/config"
+	"github.com/a-marczewski/tinymem/internal/cove"
 	"github.com/a-marczewski/tinymem/internal/evidence"
 	"github.com/a-marczewski/tinymem/internal/extract"
 	"github.com/a-marczewski/tinymem/internal/inject"
@@ -55,6 +56,26 @@ func NewServer(a *app.App) *Server {
 	injector := inject.NewMemoryInjector(recallEngine)
 	llmClient := llm.NewClient(a.Config)
 	extractor := extract.NewExtractor(evidenceService)
+
+	// Create CoVe verifier if enabled (safely disabled by default)
+	if a.Config.CoVeEnabled {
+		coveVerifier := cove.NewVerifier(a.Config, llmClient)
+		extractor.SetCoVeVerifier(coveVerifier)
+
+		// Also set CoVe verifier for recall filtering if enabled
+		if a.Config.CoVeRecallFilterEnabled {
+			injector.SetCoVeVerifier(coveVerifier)
+			a.Logger.Info("CoVe enabled (extraction + recall filtering)",
+				zap.Float64("confidence_threshold", a.Config.CoVeConfidenceThreshold),
+				zap.Int("max_candidates", a.Config.CoVeMaxCandidates),
+			)
+		} else {
+			a.Logger.Info("CoVe enabled (extraction only)",
+				zap.Float64("confidence_threshold", a.Config.CoVeConfidenceThreshold),
+				zap.Int("max_candidates", a.Config.CoVeMaxCandidates),
+			)
+		}
+	}
 
 	server := &Server{
 		app:             a, // Store the app instance

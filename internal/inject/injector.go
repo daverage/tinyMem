@@ -1,22 +1,32 @@
 package inject
 
 import (
+	"context"
 	"fmt"
+	"github.com/a-marczewski/tinymem/internal/cove"
 	"github.com/a-marczewski/tinymem/internal/memory"
 	"github.com/a-marczewski/tinymem/internal/recall"
+	"strconv"
 	"strings"
 )
 
 // MemoryInjector handles injecting memories into prompts
 type MemoryInjector struct {
 	recallEngine recall.Recaller
+	coveVerifier *cove.Verifier
 }
 
 // NewMemoryInjector creates a new memory injector
 func NewMemoryInjector(recallEngine recall.Recaller) *MemoryInjector {
 	return &MemoryInjector{
 		recallEngine: recallEngine,
+		coveVerifier: nil, // Can be set later via SetCoVeVerifier
 	}
+}
+
+// SetCoVeVerifier sets the CoVe verifier for recall filtering
+func (mi *MemoryInjector) SetCoVeVerifier(verifier *cove.Verifier) {
+	mi.coveVerifier = verifier
 }
 
 // InjectMemoriesIntoPrompt injects relevant memories into a prompt
@@ -34,6 +44,29 @@ func (mi *MemoryInjector) InjectMemoriesIntoPrompt(prompt string, projectID stri
 
 	if len(results) == 0 {
 		// No relevant memories found, return original prompt
+		return prompt, nil
+	}
+
+	// COVE INTEGRATION POINT 2: Optional recall filtering (advisory only)
+	// This can only remove memories, never add new ones
+	// IMPORTANT: This is bounded (already limited by recall), fail-safe, and optional
+	if mi.coveVerifier != nil {
+		// Convert recall results to CoVe format
+		recallMemories := recallResultsToCoVeMemories(results)
+
+		// Apply CoVe recall filtering (bounded, fail-safe)
+		ctx := context.Background()
+		filteredMemories, err := mi.coveVerifier.FilterRecall(ctx, recallMemories, prompt)
+		if err != nil {
+			// CoVe errors are non-fatal - continue with unfiltered
+		} else {
+			// Filter results based on CoVe decisions
+			results = filterRecallResultsByCoVe(results, filteredMemories)
+		}
+	}
+
+	if len(results) == 0 {
+		// All memories filtered out, return original prompt
 		return prompt, nil
 	}
 
@@ -120,4 +153,40 @@ func labelForType(memType memory.Type) string {
 	default:
 		return "UNKNOWN"
 	}
+}
+
+// recallResultsToCoVeMemories converts recall results to CoVe format
+func recallResultsToCoVeMemories(results []recall.RecallResult) []cove.RecallMemory {
+	memories := make([]cove.RecallMemory, 0, len(results))
+
+	for i, result := range results {
+		mem := result.Memory
+		memories = append(memories, cove.RecallMemory{
+			ID:      strconv.Itoa(i), // Use index as temporary ID
+			Type:    string(mem.Type),
+			Summary: mem.Summary,
+			Detail:  mem.Detail,
+		})
+	}
+
+	return memories
+}
+
+// filterRecallResultsByCoVe filters recall results based on CoVe decisions
+func filterRecallResultsByCoVe(results []recall.RecallResult, filtered []cove.RecallMemory) []recall.RecallResult {
+	// Build a set of accepted IDs
+	acceptedIDs := make(map[string]bool)
+	for _, mem := range filtered {
+		acceptedIDs[mem.ID] = true
+	}
+
+	// Filter results based on accepted IDs
+	filteredResults := make([]recall.RecallResult, 0, len(filtered))
+	for i, result := range results {
+		if acceptedIDs[strconv.Itoa(i)] {
+			filteredResults = append(filteredResults, result)
+		}
+	}
+
+	return filteredResults
 }

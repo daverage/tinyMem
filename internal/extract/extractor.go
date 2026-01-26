@@ -2,9 +2,11 @@ package extract
 
 import (
 	"fmt"
+	"github.com/a-marczewski/tinymem/internal/cove"
 	"github.com/a-marczewski/tinymem/internal/evidence"
 	"github.com/a-marczewski/tinymem/internal/memory"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -12,13 +14,29 @@ import (
 // Extractor handles automatic extraction of memories from text
 type Extractor struct {
 	evidenceService *evidence.Service
+	coveVerifier    *cove.Verifier
 }
 
 // NewExtractor creates a new memory extractor
 func NewExtractor(evidenceService *evidence.Service) *Extractor {
 	return &Extractor{
 		evidenceService: evidenceService,
+		coveVerifier:    nil, // Can be set later via SetCoVeVerifier
 	}
+}
+
+// SetCoVeVerifier sets the CoVe verifier for candidate filtering
+func (e *Extractor) SetCoVeVerifier(verifier *cove.Verifier) {
+	e.coveVerifier = verifier
+}
+
+// GetCoVeStats returns CoVe statistics if available
+func (e *Extractor) GetCoVeStats() *cove.Stats {
+	if e.coveVerifier == nil {
+		return nil
+	}
+	stats := e.coveVerifier.GetStats()
+	return &stats
 }
 
 // WantsFactMetadata is metadata indicating a memory wants to be promoted to fact
@@ -310,6 +328,23 @@ func (e *Extractor) ExtractAndQueueForVerification(responseText string, memorySe
 		return fmt.Errorf("failed to extract memories: %w", err)
 	}
 
+	// COVE INTEGRATION POINT 1: Filter candidates before storage
+	// This is a probabilistic filter that reduces hallucinated claims
+	// IMPORTANT: CoVe can NEVER create facts or bypass evidence requirements
+	if e.coveVerifier != nil {
+		// Convert memories to CoVe candidates
+		candidates := memoriesToCandidates(memories)
+
+		// Apply CoVe verification (bounded, fail-safe)
+		verifiedCandidates, err := e.coveVerifier.VerifyCandidates(candidates)
+		if err != nil {
+			// CoVe errors are non-fatal - continue with unfiltered memories
+		} else {
+			// Filter memories based on CoVe results
+			memories = filterMemoriesByCoVe(memories, verifiedCandidates)
+		}
+	}
+
 	// Validate and store the extracted memories
 	if err := e.ValidateAndStoreMemories(memories, memoryService); err != nil {
 		return fmt.Errorf("failed to store memories: %w", err)
@@ -317,6 +352,7 @@ func (e *Extractor) ExtractAndQueueForVerification(responseText string, memorySe
 
 	// After storing, check if any of the stored memories should be promoted to facts
 	// This would typically happen for claims that have supporting evidence
+	// NOTE: CoVe is NOT involved in fact promotion - only evidence verification matters
 	for _, mem := range memories {
 		// Check if this is a claim that might be eligible for fact promotion
 		if mem.Type == memory.Claim {
@@ -347,4 +383,40 @@ func truncateString(str string, maxLen int) string {
 		return str
 	}
 	return str[:maxLen] + "..."
+}
+
+// memoriesToCandidates converts memory.Memory objects to cove.CandidateMemory for verification
+func memoriesToCandidates(memories []*memory.Memory) []cove.CandidateMemory {
+	candidates := make([]cove.CandidateMemory, 0, len(memories))
+
+	for i, mem := range memories {
+		// Generate temporary ID for tracking (we'll use index since memories don't have IDs yet)
+		candidates = append(candidates, cove.CandidateMemory{
+			ID:      strconv.Itoa(i),
+			Type:    string(mem.Type),
+			Summary: mem.Summary,
+			Detail:  mem.Detail,
+		})
+	}
+
+	return candidates
+}
+
+// filterMemoriesByCoVe filters memories based on CoVe verification results
+func filterMemoriesByCoVe(memories []*memory.Memory, verified []cove.CandidateMemory) []*memory.Memory {
+	// Build a set of accepted IDs
+	acceptedIDs := make(map[string]bool)
+	for _, candidate := range verified {
+		acceptedIDs[candidate.ID] = true
+	}
+
+	// Filter memories based on accepted IDs
+	filtered := make([]*memory.Memory, 0, len(verified))
+	for i, mem := range memories {
+		if acceptedIDs[strconv.Itoa(i)] {
+			filtered = append(filtered, mem)
+		}
+	}
+
+	return filtered
 }
