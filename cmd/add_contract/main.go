@@ -47,6 +47,7 @@ func memory_addContract() {
 }
 
 func getContractContent() string {
+	bt := "`" // backtick for markdown code spans
 	return `
 
 ---
@@ -75,16 +76,16 @@ You must follow these steps sequentially. Do not skip steps.
 
 #### Step 0: Identify Concepts
 Extract **2–6 project-specific nouns** from the user request.
-*   **Valid:** \`auth middleware\`, \`SQLite FTS\`, \`proxy port\`, \`CLI flags\`, \`user schema\`
-*   **Invalid:** \`implementation\`, \`logic\`, \`details\`, \`code\`, \`help\`
+*   **Valid:** ` + bt + `auth middleware` + bt + `, ` + bt + `SQLite FTS` + bt + `, ` + bt + `proxy port` + bt + `, ` + bt + `CLI flags` + bt + `, ` + bt + `user schema` + bt + `
+*   **Invalid:** ` + bt + `implementation` + bt + `, ` + bt + `logic` + bt + `, ` + bt + `details` + bt + `, ` + bt + `code` + bt + `, ` + bt + `help` + bt + `
 
 These concepts define your search parameters.
 
 #### Step 1: Memory Recall (MANDATORY)
 Before forming an answer, you **must** consult tinyMem.
-*   **Action:** Call \`memory_query(query="...")\` using the concepts from Step 0.
-*   **Broad Context:** If a project-wide view is needed, call \`memory_query(query="")\`.
-*   **Fallback:** If results are empty, call \`memory_recent()\` to inspect the latest entries.
+*   **Action:** Call ` + bt + `memory_query(query="...")` + bt + ` using the concepts from Step 0.
+*   **Broad Context:** If a project-wide view is needed, call ` + bt + `memory_query(query="")` + bt + `.
+*   **Fallback:** If results are empty, call ` + bt + `memory_recent()` + bt + ` to inspect the latest entries.
 
 **CRITICAL:** If no memory tool is called, you are **not allowed** to answer.
 
@@ -104,12 +105,12 @@ Construct your response only after Steps 0–2 are complete.
 #### Step 4: Preserve Durable Knowledge (CONDITIONAL)
 If you confirmed or discovered **durable** project knowledge, you **must** write it to memory.
 *   **What to write:** Facts, decisions, constraints, non-obvious conclusions, architectural patterns.
-*   **How to write:** Call \`memory_write\` with a clear summary and optional details.
+*   **How to write:** Call ` + bt + `memory_write` + bt + ` with a clear summary and optional details.
 *   **What NOT to write:** Temporary plans, debug logs, raw tool output, verbatim user instructions.
 
 #### Step 5: Memory Health (CONDITIONAL)
 If the user asks about memory state, connectivity, or scope:
-*   **Action:** Call \`memory_health\` before replying.
+*   **Action:** Call ` + bt + `memory_health` + bt + ` before replying.
 *   **Constraint:** Never guess the status of the memory database.
 
 ---
@@ -124,7 +125,7 @@ If the user asks about memory state, connectivity, or scope:
 #### The Enforcement Invariant
 For any project-related request:
 
-> **A valid response must be preceded by at least one successful tinyMem memory call (\`memory_query\` or \`memory_recent\`) in the same generation run.**
+> **A valid response must be preceded by at least one successful tinyMem memory call (` + bt + `memory_query` + bt + ` or ` + bt + `memory_recent` + bt + `) in the same generation run.**
 
 If this invariant is violated, the response is structurally invalid.
 

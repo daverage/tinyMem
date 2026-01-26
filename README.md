@@ -62,14 +62,21 @@ See [Adding `tinymem` to your PATH](#adding-tinymem-to-your-path) for detailed i
 ```bash
 git clone https://github.com/andrzejmarczewski/tinyMem.git
 cd tinymem
-# FTS5 support is enabled by default for the best search experience
+# Build with all features (FTS5 enabled by default)
+make
+```
+
+Or use `go build` directly with tags:
+```bash
 go build -tags fts5 -o tinymem ./cmd/tinymem
 ```
 
-If you need a build without FTS5 (smaller binary or compatibility reasons), run the command with `TINYMEM_DISABLE_FTS5=1`:
+If you need a build without FTS5 (smaller binary or compatibility reasons):
 
 ```bash
-TINYMEM_DISABLE_FTS5=1 go build -o tinymem ./cmd/tinymem
+make build-minimal
+# or
+go build -o tinymem ./cmd/tinymem
 ```
 
 Once built, the `tinymem` executable will be in your current directory. For easier access, consider moving it to a directory included in your system's PATH (e.g., `/usr/local/bin/` on macOS/Linux) or adding your project directory to your PATH environment variable.
@@ -161,10 +168,12 @@ Configure your IDE (Cursor, VS Code, etc.) to use tinyMem as an MCP server. See 
 tinymem health          # Check system health
 tinymem doctor          # Run detailed diagnostics
 tinymem stats           # Show memory statistics
+tinymem dashboard       # Show memory state snapshot
 
 # Memory operations
 tinymem query "authentication flow"    # Search memories
 tinymem recent                         # Show recent memories
+tinymem write --type note --summary "My note"  # Write a new memory
 
 # Server modes
 tinymem proxy                          # Start HTTP proxy server
@@ -173,8 +182,31 @@ tinymem mcp                            # Start MCP server
 # Utilities
 tinymem run -- your-command            # Run command with memory context
 tinymem version                        # Show version
+tinymem addContract                    # Add tinyMem protocol to agent config files
 tinymem completion [bash|zsh|fish|powershell]  # Generate shell completion script
 ```
+
+### Writing Memories via CLI
+
+The `write` command allows you to add memories directly from the command line:
+
+```bash
+# Write a simple note
+tinymem write --type note --summary "API refactoring complete"
+
+# Write a decision with detail
+tinymem write --type decision --summary "Use PostgreSQL for production" \
+  --detail "SQLite for dev, PostgreSQL for prod due to concurrency needs" \
+  --source "architecture review"
+
+# Write a claim
+tinymem write --type claim --summary "Frontend uses React 18" \
+  --key "frontend-framework"
+```
+
+Available types: `claim`, `plan`, `decision`, `constraint`, `observation`, `note`
+
+Note: `fact` type cannot be created directly via CLI as facts require verified evidence. Use `claim` instead, or use the MCP interface with evidence.
 
 ### Memory Types
 
@@ -752,11 +784,17 @@ Violating any invariant is a bug, not a feature gap.
 ### Build
 
 ```bash
-# Build with the default FTS5 search support
-go build -tags fts5 -o tinymem ./cmd/tinymem
+# Build with all features (FTS5 enabled by default)
+make
+
+# Or build without FTS5 for minimal binary
+make build-minimal
 ```
 
-To skip FTS5 (for example, when targeting constrained environments) set `TINYMEM_DISABLE_FTS5=1` before running the command.
+Alternatively, use `go build` directly:
+```bash
+go build -tags fts5 -o tinymem ./cmd/tinymem
+```
 
 ### Test
 

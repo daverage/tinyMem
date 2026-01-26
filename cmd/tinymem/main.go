@@ -43,6 +43,8 @@ func init() {
 	rootCmd.AddCommand(queryCmd)
 	rootCmd.AddCommand(contractCmd)
 	rootCmd.AddCommand(completionCmd)
+	rootCmd.AddCommand(dashboardCmd)
+	rootCmd.AddCommand(writeCmd)
 }
 
 var completionCmd = &cobra.Command{
@@ -378,6 +380,90 @@ func runQueryCmd(a *app.App, cmd *cobra.Command, args []string) {
 	}
 }
 
+var writeCmd = &cobra.Command{
+	Use:   "write",
+	Short: "Write a new memory",
+	Long: `Write a new memory to the tinyMem database.
+
+Memory types: fact, claim, plan, decision, constraint, observation, note
+Note: Facts require evidence and cannot be created directly via CLI.
+
+Examples:
+  tinymem write --type claim --summary "API uses REST" --detail "Based on endpoint patterns"
+  tinymem write --type decision --summary "Use SQLite for storage" --source "architecture review"
+  tinymem write --type note --summary "TODO: Add unit tests"`,
+}
+
+var writeType string
+var writeSummary string
+var writeDetail string
+var writeKey string
+var writeSource string
+
+func init() {
+	writeCmd.Flags().StringVarP(&writeType, "type", "t", "note", "Memory type: claim, plan, decision, constraint, observation, note (fact requires evidence)")
+	writeCmd.Flags().StringVarP(&writeSummary, "summary", "s", "", "Brief summary of the memory (required)")
+	writeCmd.Flags().StringVarP(&writeDetail, "detail", "d", "", "Detailed description")
+	writeCmd.Flags().StringVarP(&writeKey, "key", "k", "", "Optional unique key for the memory")
+	writeCmd.Flags().StringVar(&writeSource, "source", "", "Source of the memory")
+	_ = writeCmd.MarkFlagRequired("summary")
+}
+
+func runWriteCmd(a *app.App, cmd *cobra.Command, args []string) {
+	// Validate memory type
+	memType := memory.Type(writeType)
+	if !memType.IsValid() {
+		fmt.Printf("❌ Invalid memory type: %s\n", writeType)
+		fmt.Println("Valid types: fact, claim, plan, decision, constraint, observation, note")
+		return
+	}
+
+	// Facts require evidence and can't be created via CLI
+	if memType == memory.Fact {
+		fmt.Println("❌ Facts cannot be created directly via CLI - they require verified evidence.")
+		fmt.Println("Use 'claim' type instead, or use the MCP interface with evidence.")
+		return
+	}
+
+	if writeSummary == "" {
+		fmt.Println("❌ Summary is required. Use --summary or -s flag.")
+		return
+	}
+
+	newMemory := &memory.Memory{
+		ProjectID: a.ProjectID,
+		Type:      memType,
+		Summary:   writeSummary,
+		Detail:    writeDetail,
+	}
+
+	if writeKey != "" {
+		newMemory.Key = &writeKey
+	}
+	if writeSource != "" {
+		newMemory.Source = &writeSource
+	}
+
+	if err := a.Memory.CreateMemory(newMemory); err != nil {
+		a.Logger.Error("Failed to create memory", zap.Error(err))
+		fmt.Printf("❌ Failed to create memory: %v\n", err)
+		return
+	}
+
+	fmt.Printf("✅ Memory created successfully!\n")
+	fmt.Printf("   Type: %s\n", memType)
+	fmt.Printf("   Summary: %s\n", writeSummary)
+	if writeDetail != "" {
+		fmt.Printf("   Detail: %s\n", writeDetail)
+	}
+	if writeKey != "" {
+		fmt.Printf("   Key: %s\n", writeKey)
+	}
+	if writeSource != "" {
+		fmt.Printf("   Source: %s\n", writeSource)
+	}
+}
+
 var contractCmd = &cobra.Command{
 	Use:   "addContract",
 	Short: "Add the MANDATORY TINYMEM CONTROL PROTOCOL to agent markdown files",
@@ -389,6 +475,12 @@ func runContractCmd(a *app.App, cmd *cobra.Command, args []string) {
 		fmt.Printf("❌ Failed to add contract: %v\n", err)
 	}
 }
+
+var dashboardCmd = &cobra.Command{
+	Use:   "dashboard",
+	Short: "Show a snapshot dashboard of memory state",
+}
+
 
 // newAppRunner creates a Cobra Run function closure with the app.App instance.
 func newAppRunner(a *app.App, runFunc func(*app.App, *cobra.Command, []string)) func(*cobra.Command, []string) {
@@ -416,6 +508,8 @@ func main() {
 	recentCmd.Run = newAppRunner(appInstance, runRecentCmd)
 	queryCmd.Run = newAppRunner(appInstance, runQueryCmd)
 	contractCmd.Run = newAppRunner(appInstance, runContractCmd)
+	dashboardCmd.Run = newAppRunner(appInstance, runDashboardCmd)
+	writeCmd.Run = newAppRunner(appInstance, runWriteCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		appInstance.Logger.Error("Root command execution failed", zap.Error(err))

@@ -9,3 +9,4 @@
 .gemini/
 .claude/
 tasks.md
+Makefile
