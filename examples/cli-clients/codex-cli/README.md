@@ -103,6 +103,14 @@ codex mcp add tinymem \
     --env TINYMEM_LOG_LEVEL=info \
     -- tinymem mcp
 ```
+
+**With CoVe disabled:**
+```bash
+codex mcp add tinymem \
+    --env TINYMEM_LOG_LEVEL=info \
+    --env TINYMEM_COVE_ENABLED=false \
+    -- tinymem mcp
+```
 **How to use:**
 1.  Run this command once to register `tinyMem` as an MCP server named `tinymem`. The `codex` CLI will store this configuration.
 2.  The `codex` CLI will then be able to use `tinyMem`'s MCP tools (like `memory_query`, `memory_write`, etc.).

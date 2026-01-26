@@ -55,6 +55,22 @@ Some versions or variants of Claude CLI might support MCP integration through a 
   }
 }
 ```
+
+**With CoVe disabled:**
+```json
+{
+  "mcpServers": {
+    "tinymem": {
+      "command": "tinymem",
+      "args": ["mcp"],
+      "env": {
+        "TINYMEM_LOG_LEVEL": "info",
+        "TINYMEM_COVE_ENABLED": "false"
+      }
+    }
+  }
+}
+```
 **How to use:**
 1.  Find your Claude CLI's configuration directory.
 2.  Locate the JSON configuration file for MCP servers.

@@ -68,6 +68,33 @@ model = ""                        # Model to use, empty = default (default: "")
 recall_filter_enabled = false     # Enable recall filtering (default: false)
 ```
 
+### Disabling CoVe
+
+If you need to disable CoVe (for performance reasons or to reduce token usage), you can set `enabled = false`:
+
+```toml
+[cove]
+enabled = false                   # CoVe completely disabled
+# Other settings ignored when disabled
+```
+
+Alternatively, you can disable CoVe using an environment variable:
+
+```bash
+# Disable CoVe
+export TINYMEM_COVE_ENABLED=false
+```
+
+### Performance and Token Usage Considerations
+
+While CoVe significantly improves memory quality by filtering out hallucinated candidates, it does add some overhead:
+
+- **Token Usage**: CoVe makes additional LLM calls to evaluate memory candidates, which can slightly increase your token usage.
+- **Latency**: Each extraction event will have a small delay while CoVe evaluates candidates (typically 0.5-2 seconds).
+- **Cost**: Additional API calls to your LLM provider may incur extra costs.
+
+If you're concerned about token usage or performance, you can disable CoVe or adjust the confidence threshold to be more permissive.
+
 ### Environment Variables
 
 ```bash

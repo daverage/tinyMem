@@ -295,17 +295,30 @@ TINYMEM_COVE_MAX_CANDIDATES=20
 
 ### Chain-of-Verification (CoVe)
 
-CoVe is an optional quality filter that evaluates memory candidates before storage. When enabled, it:
+CoVe is an optional quality filter that evaluates memory candidates before storage. When enabled (now the default), it:
 
 - Assigns confidence scores (0.0-1.0) to each candidate based on specificity and certainty
 - Filters out low-confidence, speculative, or hallucinated extractions
 - Operates transparently with fail-safe fallback (errors don't block storage)
 - **Never** participates in fact promotion (evidence verification is separate)
 
-Enable CoVe when you want higher memory quality at the cost of an additional LLM call per extraction:
+CoVe significantly improves memory quality by reducing hallucinated extractions, but it does add some overhead:
 
+- **Token Usage**: CoVe makes additional LLM calls to evaluate memory candidates, which can slightly increase your token usage.
+- **Latency**: Each extraction event will have a small delay while CoVe evaluates candidates (typically 0.5-2 seconds).
+- **Cost**: Additional API calls to your LLM provider may incur extra costs.
+
+If you need to disable CoVe (for performance reasons or to reduce token usage), you can do so:
+
+**Via TOML configuration:**
+```toml
+[cove]
+enabled = false                   # CoVe completely disabled
+```
+
+**Via environment variable:**
 ```bash
-export TINYMEM_COVE_ENABLED=true
+export TINYMEM_COVE_ENABLED=false
 ```
 
 See [COVE.md](./COVE.md) for detailed documentation, configuration examples, and performance considerations.
