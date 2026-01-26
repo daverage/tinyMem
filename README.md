@@ -30,22 +30,32 @@ This approach prevents language models from hallucinating institutional knowledg
 
 ### Download Pre-built Binary
 
-Download the latest release for your platform from the [releases page](https://github.com/tinyMem/releases).
+Download the latest release for your platform from the [releases page](https://github.com/andrzejmarczewski/tinyMem/releases).
+
+**For macOS and Linux:**
 
 ```bash
-# macOS/Linux
-curl -L https://github.com/tinyMem/releases/latest/download/tinymem-$(uname -s)-$(uname -m) -o tinymem
+# The command will download the correct binary for your system.
+curl -L "https://github.com/andrzejmarczewski/tinyMem/releases/latest/download/tinymem-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)" -o tinymem
 chmod +x tinymem
-sudo mv tinymem /usr/local/bin/
 
-# Or keep it local to your project
-mv tinymem /path/to/your/project/
+# For global access, move it to a directory in your PATH:
+sudo mv tinymem /usr/local/bin/
 ```
+
+**For Windows:**
+
+1.  Download the `tinymem-windows-amd64.exe` (or other architecture) file from the [releases page](https://github.com/andrzejmarczewski/tinyMem/releases).
+2.  Rename it to `tinymem.exe` for convenience.
+3.  Place it in a folder (e.g., `C:\Program Files\tinymem`).
+4.  Add that folder to your system's `Path` environment variable to run `tinymem` from any terminal.
+
+See [Adding `tinymem` to your PATH](#adding-tinymem-to-your-path) for detailed instructions on updating your PATH.
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/a-marczewski/tinymem.git
+git clone https://github.com/andrzejmarczewski/tinyMem.git
 cd tinymem
 go build -o tinymem ./cmd/tinymem
 ```
