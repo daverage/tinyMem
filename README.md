@@ -4,6 +4,16 @@
 
 tinyMem is a standalone Go executable that gives small and medium language models reliable long-term memory in complex codebases. It acts as a truth-aware prompt governor, sitting between the developer and the LLM to inject verified context and capture validated facts—all without requiring model retraining or cloud services.
 
+## Purpose
+
+tinyMem exists because language models forget context quickly, hallucinate unchecked facts, and do not know when they should double-check their answers. By keeping a local, project-scoped database of classified, evidence-backed statements, it:
+
+- empowers developers with deterministic, token-budgeted context injection so models can remember decisions without re-reading every file,
+- enforces truth discipline so claims are only promoted to facts when local verification (greps, tests, file checks) succeeds,
+- stays entirely on your machine, avoiding cloud lock-in while remaining auditable and transparent.
+
+These benefits make tinyMem particularly useful for teams that use smaller models (7B–13B) or who need consistent memory across multiple IDEs and tools.
+
 ## Philosophy
 
 tinyMem operates on three core principles:

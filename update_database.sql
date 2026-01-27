@@ -97,8 +97,8 @@ SELECT COUNT(*) AS has_col
 FROM pragma_table_info('memories')
 WHERE name = 'recall_tier';
 
--- Add recall_tier column if it doesn't exist by recreating the table
-CREATE TABLE IF NOT EXISTS memories_v3 (
+-- Create a new table with recall_tier column if it doesn't exist
+CREATE TABLE IF NOT EXISTS memories_with_recall_tier (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id TEXT NOT NULL,
     type TEXT NOT NULL CHECK(type IN ('fact', 'claim', 'plan', 'decision', 'constraint', 'observation', 'note')),
@@ -115,8 +115,8 @@ CREATE TABLE IF NOT EXISTS memories_v3 (
     UNIQUE(key, project_id) ON CONFLICT REPLACE
 );
 
--- Only populate the new table if recall_tier column doesn't exist in the original
-INSERT OR REPLACE INTO memories_v3 (id, project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at, superseded_by)
+-- Populate the new table with recall_tier if the original doesn't have it
+INSERT INTO memories_with_recall_tier (id, project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at, superseded_by)
 SELECT
     m.id,
     m.project_id,
@@ -130,16 +130,29 @@ SELECT
         WHEN m.type IN ('decision', 'claim') THEN 'contextual'
         ELSE 'opportunistic'
     END,
-    m.truth_state,
-    m.classification,
+    CASE
+        WHEN (SELECT COUNT(*) FROM pragma_table_info('memories') WHERE name = 'truth_state') = 0
+        THEN
+            CASE
+                WHEN m.type = 'fact' THEN 'verified'
+                WHEN m.type IN ('decision', 'constraint') THEN 'asserted'
+                ELSE 'tentative'
+            END
+        ELSE m.truth_state
+    END,
+    CASE
+        WHEN (SELECT COUNT(*) FROM pragma_table_info('memories') WHERE name = 'classification') = 0
+        THEN NULL
+        ELSE m.classification
+    END,
     m.created_at,
     m.updated_at,
     m.superseded_by
 FROM memories m
 WHERE (SELECT has_col FROM temp_has_recall_tier) = 0;
 
--- Insert remaining records that already had recall_tier
-INSERT OR IGNORE INTO memories_v3 (id, project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at, superseded_by)
+-- Insert records that already had recall_tier
+INSERT OR IGNORE INTO memories_with_recall_tier (id, project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at, superseded_by)
 SELECT
     m.id,
     m.project_id,
@@ -149,20 +162,33 @@ SELECT
     m.key,
     m.source,
     m.recall_tier,
-    m.truth_state,
-    m.classification,
+    CASE
+        WHEN (SELECT COUNT(*) FROM pragma_table_info('memories') WHERE name = 'truth_state') = 0
+        THEN
+            CASE
+                WHEN m.type = 'fact' THEN 'verified'
+                WHEN m.type IN ('decision', 'constraint') THEN 'asserted'
+                ELSE 'tentative'
+            END
+        ELSE m.truth_state
+    END,
+    CASE
+        WHEN (SELECT COUNT(*) FROM pragma_table_info('memories') WHERE name = 'classification') = 0
+        THEN NULL
+        ELSE m.classification
+    END,
     m.created_at,
     m.updated_at,
     m.superseded_by
 FROM memories m;
 
--- Replace the old table with the new one if we made changes
+-- Replace the old table with the new one if we added recall_tier
 DELETE FROM memories WHERE (SELECT has_col FROM temp_has_recall_tier) = 0;
 INSERT OR REPLACE INTO memories (id, project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at, superseded_by)
 SELECT id, project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at, superseded_by
-FROM memories_v3;
+FROM memories_with_recall_tier;
 
-DROP TABLE memories_v3;
+DROP TABLE memories_with_recall_tier;
 
 -- Migration v4: Add truth_state column with appropriate defaults
 -- Check if truth_state column exists
@@ -171,8 +197,8 @@ SELECT COUNT(*) AS has_col
 FROM pragma_table_info('memories')
 WHERE name = 'truth_state';
 
--- Add truth_state column if it doesn't exist by recreating the table
-CREATE TABLE IF NOT EXISTS memories_v4 (
+-- Create a new table with truth_state column if it doesn't exist
+CREATE TABLE IF NOT EXISTS memories_with_truth_state (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id TEXT NOT NULL,
     type TEXT NOT NULL CHECK(type IN ('fact', 'claim', 'plan', 'decision', 'constraint', 'observation', 'note')),
@@ -189,8 +215,8 @@ CREATE TABLE IF NOT EXISTS memories_v4 (
     UNIQUE(key, project_id) ON CONFLICT REPLACE
 );
 
--- Only populate the new table if truth_state column doesn't exist in the original
-INSERT OR REPLACE INTO memories_v4 (id, project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at, superseded_by)
+-- Populate the new table with truth_state if the original doesn't have it
+INSERT INTO memories_with_truth_state (id, project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at, superseded_by)
 SELECT
     m.id,
     m.project_id,
@@ -205,15 +231,19 @@ SELECT
         WHEN m.type IN ('decision', 'constraint') THEN 'asserted'
         ELSE 'tentative'
     END,
-    m.classification,
+    CASE
+        WHEN (SELECT COUNT(*) FROM pragma_table_info('memories') WHERE name = 'classification') = 0
+        THEN NULL
+        ELSE m.classification
+    END,
     m.created_at,
     m.updated_at,
     m.superseded_by
 FROM memories m
 WHERE (SELECT has_col FROM temp_has_truth_state) = 0;
 
--- Insert remaining records that already had truth_state
-INSERT OR IGNORE INTO memories_v4 (id, project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at, superseded_by)
+-- Insert records that already had truth_state
+INSERT OR IGNORE INTO memories_with_truth_state (id, project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at, superseded_by)
 SELECT
     m.id,
     m.project_id,
@@ -224,19 +254,23 @@ SELECT
     m.source,
     m.recall_tier,
     m.truth_state,
-    m.classification,
+    CASE
+        WHEN (SELECT COUNT(*) FROM pragma_table_info('memories') WHERE name = 'classification') = 0
+        THEN NULL
+        ELSE m.classification
+    END,
     m.created_at,
     m.updated_at,
     m.superseded_by
 FROM memories m;
 
--- Replace the old table with the new one if we made changes
+-- Replace the old table with the new one if we added truth_state
 DELETE FROM memories WHERE (SELECT has_col FROM temp_has_truth_state) = 0;
 INSERT OR REPLACE INTO memories (id, project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at, superseded_by)
 SELECT id, project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at, superseded_by
-FROM memories_v4;
+FROM memories_with_truth_state;
 
-DROP TABLE memories_v4;
+DROP TABLE memories_with_truth_state;
 
 -- Migration v5: Create recall_metrics table (if not exists)
 -- This was handled by CREATE TABLE IF NOT EXISTS at the beginning
@@ -248,8 +282,8 @@ SELECT COUNT(*) AS has_col
 FROM pragma_table_info('memories')
 WHERE name = 'classification';
 
--- Add classification column if it doesn't exist by recreating the table
-CREATE TABLE IF NOT EXISTS memories_v6 (
+-- Create a new table with classification column if it doesn't exist
+CREATE TABLE IF NOT EXISTS memories_with_classification (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id TEXT NOT NULL,
     type TEXT NOT NULL CHECK(type IN ('fact', 'claim', 'plan', 'decision', 'constraint', 'observation', 'note')),
@@ -266,8 +300,8 @@ CREATE TABLE IF NOT EXISTS memories_v6 (
     UNIQUE(key, project_id) ON CONFLICT REPLACE
 );
 
--- Only populate the new table if classification column doesn't exist in the original
-INSERT OR REPLACE INTO memories_v6 (id, project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at, superseded_by)
+-- Populate the new table with classification if the original doesn't have it
+INSERT INTO memories_with_classification (id, project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at, superseded_by)
 SELECT
     m.id,
     m.project_id,
@@ -285,8 +319,8 @@ SELECT
 FROM memories m
 WHERE (SELECT has_col FROM temp_has_classification) = 0;
 
--- Insert remaining records that already had classification
-INSERT OR IGNORE INTO memories_v6 (id, project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at, superseded_by)
+-- Insert records that already had classification
+INSERT OR IGNORE INTO memories_with_classification (id, project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at, superseded_by)
 SELECT
     m.id,
     m.project_id,
@@ -303,13 +337,13 @@ SELECT
     m.superseded_by
 FROM memories m;
 
--- Replace the old table with the new one if we made changes
+-- Replace the old table with the new one if we added classification
 DELETE FROM memories WHERE (SELECT has_col FROM temp_has_classification) = 0;
 INSERT OR REPLACE INTO memories (id, project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at, superseded_by)
 SELECT id, project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at, superseded_by
-FROM memories_v6;
+FROM memories_with_classification;
 
-DROP TABLE memories_v6;
+DROP TABLE memories_with_classification;
 
 -- Create indexes for efficient querying if they don't exist
 CREATE INDEX IF NOT EXISTS idx_recall_metrics_project_id ON recall_metrics(project_id);
