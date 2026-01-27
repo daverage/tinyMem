@@ -222,6 +222,21 @@ tinyMem categorizes all memory entries into typed buckets:
 | **observation** | Neutral context or state | No | Yes (low priority) | Opportunistic | Tentative |
 | **note** | General information | No | Yes (lowest priority) | Opportunistic | Tentative |
 
+### Memory Classification (Optional)
+
+Memory entries can have an optional `classification` field to improve recall precision:
+
+| Classification | Purpose |
+|----------------|---------|
+| **decision** | Important architectural or design decisions |
+| **constraint** | Technical or business constraints |
+| **glossary** | Definitions of terms or concepts |
+| **invariant** | System invariants or guarantees |
+| **best-practice** | Recommended approaches or patterns |
+| **pitfall** | Common mistakes or gotchas to avoid |
+
+Classification is optional and does not affect memory behavior, but can be used to improve search precision.
+
 ### Recall Tiers
 
 Memory entries are assigned recall tiers that determine their inclusion priority during prompt injection:
@@ -229,6 +244,16 @@ Memory entries are assigned recall tiers that determine their inclusion priority
 - **Always**: High-priority memories (facts, constraints) that are always included when relevant
 - **Contextual**: Medium-priority memories (decisions, claims) included based on relevance and token budget
 - **Opportunistic**: Low-priority memories (observations, notes) only included if space permits
+
+### Recall Discipline Guidelines
+
+To prevent token waste and irrelevant recall, follow these guidelines:
+
+- **Startup Phase**: Use empty query (`memory_query(query="")`) or `memory_recent()` to establish initial context
+- **Working Phase**: Use targeted keyword queries (`memory_query(query="authentication flow")`) for specific topics
+- **Token Efficiency**: Limit results with `limit` parameter when appropriate
+- **Classification Filtering**: Use classification field to improve precision when available
+- **Avoid Over-Recall**: Don't use broad queries that return many irrelevant memories
 
 ### Truth States
 
@@ -761,6 +786,22 @@ When enabled, tinyMem provides comprehensive metrics:
 - Response token counts
 - Token delta measurements for optimization
 
+## Memory Hygiene (Manual Only)
+
+Keep memory lean and relevant with these manual practices:
+
+### Manual Cleanup
+- **Review obsolete memories**: Periodically review and remove outdated information
+- **Consolidate duplicates**: Merge similar memories with overlapping information
+- **Verify stale facts**: Check if facts are still accurate and relevant
+
+### Best Practices
+- **Regular audits**: Manually review memory content periodically
+- **Prune unused memories**: Remove memories that haven't been recalled in months
+- **Update classifications**: Ensure classifications remain accurate over time
+
+**Note**: All cleanup is intentional and manual. No automatic compaction or scheduled cleanup occurs.
+
 ## Invariants (Truth Discipline)
 
 These guarantees hold everywhere in tinyMem:
@@ -865,6 +906,22 @@ Language models are powerful but have limited context windows and no persistent 
 tinyMem takes a different approach: treat the model as a conversational partner, but verify everything it claims against reality. Optional Chain-of-Verification (CoVe) filtering reduces hallucinated extractions before they pollute the memory system. This gives small models (7B-13B) the behavior of much larger models with long-term memory, while reducing token costs for all models through smart context injection.
 
 The result: better model performance, lower costs, higher memory quality, and guaranteed truth discipline—all running locally with zero configuration.
+
+## Non-Goals
+
+These features are explicitly NOT goals for TinyMem, to protect against complexity creep:
+
+- **Chat History Storage**: TinyMem does not store conversation history or chat logs
+- **Automatic Memory Management**: No automatic cleanup, summarization, or lifecycle management
+- **Embeddings or Vector Search**: No fuzzy similarity matching or neural search (only lexical FTS and optional semantic search)
+- **Agent Orchestration**: No coordination between multiple agents or workflow management
+- **Predictive Prefetching**: No speculative loading of memories based on patterns
+- **Multi-Modal Memory**: No storage of images, audio, or other non-text content
+- **Real-Time Collaboration**: No shared memory spaces between concurrent users
+- **External Knowledge Integration**: No connections to external knowledge bases or APIs
+- **Machine Learning Models**: No ML-based classification or clustering of memories
+
+These limitations preserve TinyMem's focus: a simple, deterministic, auditable memory system that enhances LLM interactions without adding complexity.
 
 ---
 

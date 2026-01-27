@@ -1,6 +1,6 @@
 # MANDATORY TINYMEM CONTROL PROTOCOL
 
-You are not a conversational assistant. You are an executor operating inside a constrained system. 
+You are not a conversational assistant. You are an executor operating inside a constrained system.
 This protocol is **not optional**. Failure to adhere to the execution workflow results in a system failure state.
 
 ## 1. SCOPE OF PROTOCOL
@@ -16,7 +16,31 @@ This protocol applies to **any request** involving this repository, including:
 
 ---
 
-## 2. EXECUTION WORKFLOW (STRICT ORDER)
+## 2. MEMORY LIFECYCLE PHASES
+
+TinyMem operates in three distinct lifecycle phases. Agents must follow the appropriate workflow for each phase:
+
+### Phase 1: Startup Recall
+* **Purpose:** Establish initial context for the session
+* **Allowed Operations:** `memory_query(query="")`, `memory_recent()`, `memory_stats()`, `memory_health()`
+* **Forbidden Operations:** `memory_write()` (except for session initialization notes)
+* **Guidelines:** Retrieve foundational memories, constraints, and architectural decisions
+
+### Phase 2: Working Phase
+* **Purpose:** Execute specific tasks and maintain context
+* **Allowed Operations:** `memory_query()`, `memory_recent()`, `memory_write()` (following discipline rules)
+* **Forbidden Operations:** Writing speculative or temporary information
+* **Guidelines:** Query relevant memories, write only durable knowledge with clear justification
+
+### Phase 3: Commit Phase
+* **Purpose:** Preserve important outcomes and lessons learned
+* **Allowed Operations:** `memory_write()` (for final decisions, constraints, facts)
+* **Forbidden Operations:** Writing ephemeral or intermediate results
+* **Guidelines:** Capture decisions, constraints, and verified facts that matter for future sessions
+
+---
+
+## 3. EXECUTION WORKFLOW (STRICT ORDER)
 
 You must follow these steps sequentially. Do not skip steps.
 
@@ -30,6 +54,7 @@ These concepts define your search parameters.
 ### Step 1: Memory Recall (MANDATORY)
 Before forming an answer, you **must** consult tinyMem.
 *   **Action:** Call `memory_query(query="...")` using the concepts from Step 0.
+*   **Phase Context:** Match recall operation to current lifecycle phase
 *   **Broad Context:** If a project-wide view is needed, call `memory_query(query="")`.
 *   **Fallback:** If results are empty, call `memory_recent()` to inspect the latest entries.
 
@@ -50,6 +75,7 @@ Construct your response only after Steps 0–2 are complete.
 
 ### Step 4: Preserve Durable Knowledge (CONDITIONAL)
 If you confirmed or discovered **durable** project knowledge, you **must** write it to memory.
+*   **Phase Context:** Only write during Working or Commit phases
 *   **What to write:** Facts, decisions, constraints, non-obvious conclusions, architectural patterns.
 *   **How to write:** Call `memory_write` with a clear summary and optional details.
 *   **What NOT to write:** Temporary plans, debug logs, raw tool output, verbatim user instructions.
@@ -61,7 +87,7 @@ If the user asks about memory state, connectivity, or scope:
 
 ---
 
-## 3. COMPLIANCE & ENFORCEMENT
+## 4. COMPLIANCE & ENFORCEMENT
 
 ### Tool Honesty Rule
 *   Never fabricate tool outputs.
@@ -77,7 +103,7 @@ If this invariant is violated, the response is structurally invalid.
 
 ---
 
-## 4. MENTAL MODEL
+## 5. MENTAL MODEL
 
 1.  **TinyMem is the source of continuity.** It bridges the gap between sessions.
 2.  **You are the interface.** Your job is to read the map (Memory), verify the terrain (Repo), and update the map (Write).

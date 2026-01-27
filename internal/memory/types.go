@@ -46,6 +46,7 @@ type Memory struct {
 	Source       *string    `json:"source,omitempty"`
 	RecallTier   RecallTier `json:"recall_tier"`
 	TruthState   TruthState `json:"truth_state"`
+	Classification *string  `json:"classification,omitempty"`  // Optional classification for better recall precision
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 	SupersededBy *int64     `json:"superseded_by,omitempty"`

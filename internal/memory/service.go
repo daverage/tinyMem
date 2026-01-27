@@ -41,8 +41,8 @@ func (s *Service) CreateMemory(memory *Memory) error {
 	}
 
 	query := `
-		INSERT INTO memories (project_id, type, summary, detail, key, source, recall_tier, truth_state, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO memories (project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		RETURNING id
 	`
 
@@ -55,6 +55,7 @@ func (s *Service) CreateMemory(memory *Memory) error {
 		memory.Source,
 		string(memory.RecallTier),
 		string(memory.TruthState),
+		memory.Classification,
 		time.Now(),
 		time.Now(),
 	)
@@ -104,7 +105,7 @@ func (s *Service) UpdateMemory(memory *Memory) error {
 
 	query := `
 		UPDATE memories
-		SET type = ?, summary = ?, detail = ?, key = ?, source = ?, recall_tier = ?, truth_state = ?, updated_at = ?
+		SET type = ?, summary = ?, detail = ?, key = ?, source = ?, recall_tier = ?, truth_state = ?, classification = ?, updated_at = ?
 		WHERE id = ?
 	`
 
@@ -116,6 +117,7 @@ func (s *Service) UpdateMemory(memory *Memory) error {
 		memory.Source,
 		string(memory.RecallTier),
 		string(memory.TruthState),
+		memory.Classification,
 		time.Now(),
 		memory.ID,
 	)
@@ -141,7 +143,7 @@ func (s *Service) UpdateMemory(memory *Memory) error {
 // GetMemory retrieves a memory by ID
 func (s *Service) GetMemory(id int64, projectID string) (*Memory, error) {
 	query := `
-		SELECT id, project_id, type, summary, detail, key, source, recall_tier, truth_state, created_at, updated_at, superseded_by
+		SELECT id, project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at, superseded_by
 		FROM memories
 		WHERE id = ? AND project_id = ? AND (superseded_by IS NULL OR superseded_by = 0)
 	`
@@ -149,7 +151,7 @@ func (s *Service) GetMemory(id int64, projectID string) (*Memory, error) {
 	row := s.db.GetConnection().QueryRow(query, id, projectID)
 
 	var memory Memory
-	var key, source sql.NullString
+	var key, source, classification sql.NullString
 	var recallTier, truthState string
 	var supersededByID sql.NullInt64
 
@@ -163,6 +165,7 @@ func (s *Service) GetMemory(id int64, projectID string) (*Memory, error) {
 		&source,
 		&recallTier,
 		&truthState,
+		&classification,
 		&memory.CreatedAt,
 		&memory.UpdatedAt,
 		&supersededByID,
@@ -180,6 +183,9 @@ func (s *Service) GetMemory(id int64, projectID string) (*Memory, error) {
 	}
 	if source.Valid {
 		memory.Source = &source.String
+	}
+	if classification.Valid {
+		memory.Classification = &classification.String
 	}
 	memory.RecallTier = RecallTier(recallTier)
 	memory.TruthState = TruthState(truthState)
@@ -235,7 +241,7 @@ func (s *Service) searchWithFTS(projectID string, searchTerm string, limit int) 
 	ftsQuery := strings.Join(terms, " OR ")
 
 	query := `
-		SELECT m.id, m.project_id, m.type, m.summary, m.detail, m.key, m.source, m.recall_tier, m.truth_state, m.created_at, m.updated_at, m.superseded_by
+		SELECT m.id, m.project_id, m.type, m.summary, m.detail, m.key, m.source, m.recall_tier, m.truth_state, m.classification, m.created_at, m.updated_at, m.superseded_by
 		FROM memories m
 		JOIN memories_fts f ON m.id = f.rowid
 		WHERE f.memories_fts MATCH ?
@@ -253,7 +259,7 @@ func (s *Service) searchWithFTS(projectID string, searchTerm string, limit int) 
 	var memories []*Memory
 	for rows.Next() {
 		var memory Memory
-		var key, source sql.NullString
+		var key, source, classification sql.NullString
 		var recallTier, truthState string
 		var supersededByID sql.NullInt64
 
@@ -267,6 +273,7 @@ func (s *Service) searchWithFTS(projectID string, searchTerm string, limit int) 
 			&source,
 			&recallTier,
 			&truthState,
+			&classification,
 			&memory.CreatedAt,
 			&memory.UpdatedAt,
 			&supersededByID,
@@ -281,6 +288,9 @@ func (s *Service) searchWithFTS(projectID string, searchTerm string, limit int) 
 		}
 		if source.Valid {
 			memory.Source = &source.String
+		}
+		if classification.Valid {
+			memory.Classification = &classification.String
 		}
 		memory.RecallTier = RecallTier(recallTier)
 		memory.TruthState = TruthState(truthState)
@@ -300,7 +310,7 @@ func (s *Service) searchWithLike(projectID string, searchTerm string, limit int)
 	searchPattern := "%" + searchTerm + "%"
 
 	query := `
-		SELECT id, project_id, type, summary, detail, key, source, recall_tier, truth_state, created_at, updated_at, superseded_by
+		SELECT id, project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at, superseded_by
 		FROM memories
 		WHERE (summary LIKE ? OR detail LIKE ?)
 		  AND project_id = ? AND (superseded_by IS NULL OR superseded_by = 0)
@@ -317,7 +327,7 @@ func (s *Service) searchWithLike(projectID string, searchTerm string, limit int)
 	var memories []*Memory
 	for rows.Next() {
 		var memory Memory
-		var key, source sql.NullString
+		var key, source, classification sql.NullString
 		var recallTier, truthState string
 		var supersededByID sql.NullInt64
 
@@ -331,6 +341,7 @@ func (s *Service) searchWithLike(projectID string, searchTerm string, limit int)
 			&source,
 			&recallTier,
 			&truthState,
+			&classification,
 			&memory.CreatedAt,
 			&memory.UpdatedAt,
 			&supersededByID,
@@ -345,6 +356,9 @@ func (s *Service) searchWithLike(projectID string, searchTerm string, limit int)
 		}
 		if source.Valid {
 			memory.Source = &source.String
+		}
+		if classification.Valid {
+			memory.Classification = &classification.String
 		}
 		memory.RecallTier = RecallTier(recallTier)
 		memory.TruthState = TruthState(truthState)
@@ -361,7 +375,7 @@ func (s *Service) searchWithLike(projectID string, searchTerm string, limit int)
 // GetAllMemories retrieves all memories for a project
 func (s *Service) GetAllMemories(projectID string) ([]*Memory, error) {
 	query := `
-		SELECT id, project_id, type, summary, detail, key, source, recall_tier, truth_state, created_at, updated_at, superseded_by
+		SELECT id, project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at, superseded_by
 		FROM memories
 		WHERE project_id = ? AND (superseded_by IS NULL OR superseded_by = 0)
 		ORDER BY created_at DESC
@@ -376,7 +390,7 @@ func (s *Service) GetAllMemories(projectID string) ([]*Memory, error) {
 	var memories []*Memory
 	for rows.Next() {
 		var memory Memory
-		var key, source sql.NullString
+		var key, source, classification sql.NullString
 		var recallTier, truthState string
 		var supersededByID sql.NullInt64
 
@@ -390,6 +404,7 @@ func (s *Service) GetAllMemories(projectID string) ([]*Memory, error) {
 			&source,
 			&recallTier,
 			&truthState,
+			&classification,
 			&memory.CreatedAt,
 			&memory.UpdatedAt,
 			&supersededByID,
@@ -404,6 +419,9 @@ func (s *Service) GetAllMemories(projectID string) ([]*Memory, error) {
 		}
 		if source.Valid {
 			memory.Source = &source.String
+		}
+		if classification.Valid {
+			memory.Classification = &classification.String
 		}
 		memory.RecallTier = RecallTier(recallTier)
 		memory.TruthState = TruthState(truthState)
@@ -492,8 +510,8 @@ func (s *Service) CreateFactWithEvidence(mem *Memory, evidences []EvidenceInput,
 	defer tx.Rollback()
 
 	query := `
-		INSERT INTO memories (project_id, type, summary, detail, key, source, recall_tier, truth_state, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO memories (project_id, type, summary, detail, key, source, recall_tier, truth_state, classification, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		RETURNING id
 	`
 
@@ -507,6 +525,7 @@ func (s *Service) CreateFactWithEvidence(mem *Memory, evidences []EvidenceInput,
 		mem.Source,
 		string(mem.RecallTier),
 		string(mem.TruthState),
+		mem.Classification,
 		now,
 		now,
 	)

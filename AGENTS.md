@@ -118,6 +118,9 @@ By harnessing tinyMem, you can improve the interaction between language models a
    3. **Step 2 – Gather evidence.** Any claim about code paths, behavior, configuration, tests, bugs, or architecture must be backed with filesystem evidence (repo files, tool outputs, etc.).
    4. **Step 3 – Synthesize.** Respond only after combining memory results with verified repo evidence, citing each source. Note any gaps (what you could not confirm) and any conflicts between memory and code.
    5. **Step 4 – Preserve durable knowledge.** When you confirm a durable fact, decision, constraint, or observation worth remembering, call `memory_write` with a clear summary/detail/key.
+      - **Memory Discipline**: Before writing, ask yourself: "Will this matter in a future session?" If not, don't write it.
+      - **Classification**: Use the optional `classification` field to improve future recall precision (e.g., 'decision', 'constraint', 'glossary', 'invariant').
+      - **One-Line Justification**: Before writing, articulate why this matters later. If you can't, reconsider the write.
    6. **Step 5 – Health checks.** If the user asks about memory state, connectivity, or scope, run `memory_health` before replying.
 
   This workflow is non-negotiable for project-related requests; trivial small talk may skip it, but otherwise failing to consult TinyMem tools before answering is disallowed.

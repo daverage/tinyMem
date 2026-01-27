@@ -222,6 +222,10 @@ func (s *Server) handleToolsList(req *MCPRequest) {
 						"type":        "string",
 						"description": "Optional source reference (file path, URL, etc.)",
 					},
+					"classification": map[string]interface{}{
+						"type":        "string",
+						"description": "Optional classification for better recall precision (e.g., 'decision', 'constraint', 'glossary', 'invariant')",
+					},
 					"evidence": map[string]interface{}{
 						"type": "array",
 						"items": map[string]interface{}{
@@ -443,11 +447,12 @@ func (s *Server) handleMemoryRecent(req *MCPRequest, args json.RawMessage) {
 // handleMemoryWrite handles memory write requests
 func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 	var writeReq struct {
-		Type     string `json:"type"`
-		Summary  string `json:"summary"`
-		Detail   string `json:"detail"`
-		Key      string `json:"key"`
-		Source   string `json:"source"`
+		Type           string `json:"type"`
+		Summary        string `json:"summary"`
+		Detail         string `json:"detail"`
+		Key            string `json:"key"`
+		Source         string `json:"source"`
+		Classification string `json:"classification"`  // Optional classification field
 		Evidence []struct {
 			Type    string `json:"type"`
 			Content string `json:"content"`
@@ -480,6 +485,9 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 	}
 	if writeReq.Source != "" {
 		newMemory.Source = &writeReq.Source
+	}
+	if writeReq.Classification != "" {
+		newMemory.Classification = &writeReq.Classification
 	}
 
 	if memType == memory.Fact {

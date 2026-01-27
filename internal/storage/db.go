@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	SchemaVersion = 5
+	SchemaVersion = 6
 )
 
 // DB represents the database connection
@@ -83,6 +83,10 @@ func (db *DB) migrate() error {
 			}
 		case 5:
 			if err := db.applySchemaV5(tx); err != nil {
+				return fmt.Errorf("failed to apply schema v%d: %w", version, err)
+			}
+		case 6:
+			if err := db.applySchemaV6(tx); err != nil {
 				return fmt.Errorf("failed to apply schema v%d: %w", version, err)
 			}
 		default:
@@ -346,6 +350,79 @@ func (db *DB) applySchemaV5(tx *sql.Tx) error {
 		return err
 	}
 
+	return err
+}
+
+// applySchemaV6 adds the classification column to memories table.
+func (db *DB) applySchemaV6(tx *sql.Tx) error {
+	// Check if classification column already exists
+	var exists int
+	err := tx.QueryRow(`
+		SELECT COUNT(*)
+		FROM pragma_table_info('memories')
+		WHERE name='classification'
+	`).Scan(&exists)
+	if err != nil {
+		return err
+	}
+
+	if exists == 0 {
+		// Add the classification column with a default value of NULL
+		_, err = tx.Exec(`
+			ALTER TABLE memories
+			ADD COLUMN classification TEXT
+		`)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Update FTS5 table to include classification in content sync.
+	// Skip trigger updates if the FTS table is absent.
+	ftsExists, err := db.hasFTSTable(tx)
+	if err != nil {
+		return err
+	}
+
+	if ftsExists {
+		// Drop and recreate the FTS triggers to account for the new column.
+		for _, trigger := range []string{"memories_ai", "memories_ad", "memories_au"} {
+			if _, err := tx.Exec(fmt.Sprintf("DROP TRIGGER IF EXISTS %s;", trigger)); err != nil {
+				return err
+			}
+		}
+
+		// Recreate the triggers to keep FTS table in sync (only summary and detail are indexed).
+		// Note: We don't include classification in FTS indexing as it's typically a structured field.
+		_, err = tx.Exec(`
+			CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+				INSERT INTO memories_fts(rowid, summary, detail) VALUES (new.id, new.summary, new.detail);
+			END;
+		`)
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.Exec(`
+			CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+				DELETE FROM memories_fts WHERE rowid = old.id;
+			END;
+		`)
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.Exec(`
+			CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+				DELETE FROM memories_fts WHERE rowid = old.id;
+				INSERT INTO memories_fts(rowid, summary, detail) VALUES (new.id, new.summary, new.detail);
+			END;
+		`)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Update schema version
 	_, err = tx.Exec(fmt.Sprintf("PRAGMA user_version = %d", SchemaVersion))
 	return err
@@ -365,6 +442,7 @@ func (db *DB) applySchemaV1(tx *sql.Tx) error {
 			source TEXT,
 			recall_tier TEXT NOT NULL DEFAULT 'opportunistic',
 			truth_state TEXT NOT NULL DEFAULT 'tentative',
+			classification TEXT,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			superseded_by INTEGER REFERENCES memories(id),
