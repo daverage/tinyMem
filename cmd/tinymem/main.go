@@ -150,8 +150,9 @@ func runRunCmd(a *app.App, cmd *cobra.Command, args []string) {
 	if a.Config.SemanticEnabled {
 		recallEngine = semantic.NewSemanticEngine(a.DB, a.Memory, evidenceService, a.Config, a.Logger)
 	} else {
-		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config, a.Logger)
+		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config, a.Logger, a.DB.GetConnection())
 	}
+	defer recallEngine.Close()
 	injector := inject.NewMemoryInjector(recallEngine)
 
 	// Perform recall based on the command
@@ -344,8 +345,9 @@ func runQueryCmd(a *app.App, cmd *cobra.Command, args []string) {
 	if a.Config.SemanticEnabled {
 		recallEngine = semantic.NewSemanticEngine(a.DB, a.Memory, evidenceService, a.Config, a.Logger)
 	} else {
-		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config, a.Logger)
+		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config, a.Logger, a.DB.GetConnection())
 	}
+	defer recallEngine.Close()
 
 	// Perform search
 	query := strings.Join(args, " ")

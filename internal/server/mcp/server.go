@@ -65,7 +65,7 @@ func NewServer(a *app.App) *Server {
 	if a.Config.SemanticEnabled {
 		recallEngine = semantic.NewSemanticEngine(a.DB, a.Memory, evidenceService, a.Config, a.Logger)
 	} else {
-		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config, a.Logger)
+		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config, a.Logger, a.DB.GetConnection())
 	}
 	extractor := extract.NewExtractor(evidenceService)
 
@@ -661,7 +661,7 @@ func (s *Server) handleMemoryDoctor(req *MCPRequest) {
 // handleShutdown handles shutdown requests
 func (s *Server) handleShutdown(req *MCPRequest) {
 	s.app.Logger.Info("MCP server received shutdown request.")
-	s.cancel()
+	s.Close()
 
 	response := map[string]interface{}{
 		"jsonrpc": "2.0",
@@ -672,6 +672,15 @@ func (s *Server) handleShutdown(req *MCPRequest) {
 	s.sendResponse(response)
 	// Do not os.Exit(0) here. Let the main goroutine handle the exit
 	// after all deferred cleanups are done.
+}
+
+// Close gracefully shuts down the MCP server and its resources.
+func (s *Server) Close() {
+	// Close the recall engine to flush any pending metrics
+	if s.recallEngine != nil {
+		s.recallEngine.Close()
+	}
+	s.cancel()
 }
 
 // sendResponse sends a successful response

@@ -1,14 +1,17 @@
 package recall
 
 import (
+	"database/sql"
 	"fmt"
+	"sort"
+	"strings"
+	"time"
+	"unicode/utf8"
+
 	"github.com/a-marczewski/tinymem/internal/config"
 	"github.com/a-marczewski/tinymem/internal/evidence"
 	"github.com/a-marczewski/tinymem/internal/memory"
 	"go.uber.org/zap"
-	"sort"
-	"strings"
-	"unicode/utf8"
 )
 
 // Engine handles memory recall operations
@@ -17,15 +20,29 @@ type Engine struct {
 	evidenceService *evidence.Service
 	config          *config.Config
 	logger          *zap.Logger
+	metricsWriter   *MetricsWriter
 }
 
 // NewEngine creates a new recall engine
-func NewEngine(memoryService *memory.Service, evidenceService *evidence.Service, cfg *config.Config, logger *zap.Logger) *Engine {
+func NewEngine(memoryService *memory.Service, evidenceService *evidence.Service, cfg *config.Config, logger *zap.Logger, db *sql.DB) *Engine {
+	var metricsWriter *MetricsWriter
+	if cfg.MetricsEnabled && db != nil {
+		metricsWriter = NewMetricsWriter(db, logger)
+	}
+
 	return &Engine{
 		memoryService:   memoryService,
 		evidenceService: evidenceService,
 		config:          cfg,
 		logger:          logger,
+		metricsWriter:   metricsWriter,
+	}
+}
+
+// Close gracefully shuts down the engine and its resources.
+func (e *Engine) Close() {
+	if e.metricsWriter != nil {
+		e.metricsWriter.Close()
 	}
 }
 
@@ -49,10 +66,13 @@ type RecallResult struct {
 // Recaller defines the interface for memory recall engines.
 type Recaller interface {
 	Recall(options RecallOptions) ([]RecallResult, error)
+	Close()
 }
 
 // Recall performs memory recall based on the query
 func (e *Engine) Recall(options RecallOptions) ([]RecallResult, error) {
+	startTime := time.Now()
+
 	// If no query is provided, return recent memories
 	if options.Query == "" {
 		memories, err := e.memoryService.GetAllMemories(options.ProjectID)
@@ -100,25 +120,9 @@ func (e *Engine) Recall(options RecallOptions) ([]RecallResult, error) {
 
 		finalResults := e.applyLimits(results, options)
 
-		// Log recall metrics if enabled
+		// Write recall metrics if enabled
 		if e.config.MetricsEnabled {
-			totalTokens := 0
-			for _, result := range finalResults {
-				totalTokens += result.Tokens
-			}
-
-			var memoryIDs []string
-			for _, result := range finalResults {
-				memoryIDs = append(memoryIDs, fmt.Sprintf("%d(%s)", result.Memory.ID, result.Memory.Type))
-			}
-
-			e.logger.Info("Recall metrics",
-				zap.String("project_id", options.ProjectID),
-				zap.String("query", options.Query),
-				zap.Int("total_memories", len(finalResults)),
-				zap.Int("total_tokens", totalTokens),
-				zap.Strings("memory_ids_and_types", memoryIDs),
-			)
+			e.writeMetrics(options, finalResults, startTime)
 		}
 
 		return finalResults, nil
@@ -183,25 +187,9 @@ func (e *Engine) Recall(options RecallOptions) ([]RecallResult, error) {
 
 	finalResults := e.applyLimits(results, options)
 
-	// Log recall metrics if enabled
+	// Write recall metrics if enabled
 	if e.config.MetricsEnabled {
-		totalTokens := 0
-		for _, result := range finalResults {
-			totalTokens += result.Tokens
-		}
-
-		var memoryIDs []string
-		for _, result := range finalResults {
-			memoryIDs = append(memoryIDs, fmt.Sprintf("%d(%s)", result.Memory.ID, result.Memory.Type))
-		}
-
-		e.logger.Info("Recall metrics",
-			zap.String("project_id", options.ProjectID),
-			zap.String("query", options.Query),
-			zap.Int("total_memories", len(finalResults)),
-			zap.Int("total_tokens", totalTokens),
-			zap.Strings("memory_ids_and_types", memoryIDs),
-		)
+		e.writeMetrics(options, finalResults, startTime)
 	}
 
 	return finalResults, nil
@@ -478,4 +466,65 @@ func estimateTokenCount(text string) int {
 		return conservativeEstimate
 	}
 	return wordBasedEstimate
+}
+
+// writeMetrics logs and writes recall metrics to the database.
+func (e *Engine) writeMetrics(options RecallOptions, results []RecallResult, startTime time.Time) {
+	duration := time.Since(startTime)
+
+	// Calculate totals and tier breakdown
+	totalTokens := 0
+	var memoryIDs []int64
+	var memoryIDsStr []string
+	tierStats := TierStats{}
+
+	for _, result := range results {
+		totalTokens += result.Tokens
+		memoryIDs = append(memoryIDs, result.Memory.ID)
+		memoryIDsStr = append(memoryIDsStr, fmt.Sprintf("%d(%s)", result.Memory.ID, result.Memory.Type))
+
+		switch result.Memory.RecallTier {
+		case memory.Always:
+			tierStats.Always++
+		case memory.Contextual:
+			tierStats.Contextual++
+		case memory.Opportunistic:
+			tierStats.Opportunistic++
+		}
+	}
+
+	// Determine query type
+	queryType := "search"
+	if options.Query == "" {
+		queryType = "empty"
+	}
+
+	// Log to structured logger
+	e.logger.Info("Recall metrics",
+		zap.String("project_id", options.ProjectID),
+		zap.String("query", options.Query),
+		zap.String("query_type", queryType),
+		zap.Int("total_memories", len(results)),
+		zap.Int("total_tokens", totalTokens),
+		zap.Int64("duration_ms", duration.Milliseconds()),
+		zap.Strings("memory_ids_and_types", memoryIDsStr),
+		zap.Int("tier_always", tierStats.Always),
+		zap.Int("tier_contextual", tierStats.Contextual),
+		zap.Int("tier_opportunistic", tierStats.Opportunistic),
+	)
+
+	// Write to persistent storage
+	if e.metricsWriter != nil {
+		e.metricsWriter.Write(RecallMetric{
+			ProjectID:     options.ProjectID,
+			Query:         options.Query,
+			QueryType:     queryType,
+			MemoryIDs:     memoryIDs,
+			MemoryCount:   len(results),
+			TotalTokens:   totalTokens,
+			TierBreakdown: tierStats,
+			DurationMs:    duration.Milliseconds(),
+			CreatedAt:     time.Now(),
+		})
+	}
 }

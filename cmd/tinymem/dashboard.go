@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -109,15 +110,37 @@ func printHeaderSection(projectRoot, tinyMemDir, dbPath string, db *sql.DB) {
 	}
 
 	// Get last memory activity timestamp and total memory count
-	var lastActivity sql.NullTime
+	var lastActivityStr sql.NullString
 	var totalCount int
-	err = db.QueryRow("SELECT MAX(updated_at), COUNT(*) FROM memories;").Scan(&lastActivity, &totalCount)
+	err = db.QueryRow("SELECT MAX(updated_at), COUNT(*) FROM memories;").Scan(&lastActivityStr, &totalCount)
 	if err != nil {
 		fmt.Fprintf(w, "Last Activity:\terror retrieving\n")
 		fmt.Fprintf(w, "Total Memories:\terror retrieving\n")
 	} else {
-		if lastActivity.Valid {
-			fmt.Fprintf(w, "Last Activity:\t%s\n", lastActivity.Time.Format("2006-01-02 15:04:05"))
+		if lastActivityStr.Valid && lastActivityStr.String != "" {
+			// Try parsing different datetime formats that SQLite might store
+			var lastActivity time.Time
+			formats := []string{
+				"2006-01-02 15:04:05.999999-07:00",
+				"2006-01-02 15:04:05.999999+00:00",
+				"2006-01-02 15:04:05.999999",
+				"2006-01-02 15:04:05",
+				time.RFC3339,
+			}
+			parsed := false
+			for _, format := range formats {
+				if t, parseErr := time.Parse(format, lastActivityStr.String); parseErr == nil {
+					lastActivity = t
+					parsed = true
+					break
+				}
+			}
+			if parsed {
+				fmt.Fprintf(w, "Last Activity:\t%s\n", lastActivity.Format("2006-01-02 15:04:05"))
+			} else {
+				// Fallback: show the raw string if parsing fails
+				fmt.Fprintf(w, "Last Activity:\t%s\n", lastActivityStr.String)
+			}
 		} else {
 			fmt.Fprintf(w, "Last Activity:\tnever\n")
 		}
@@ -351,64 +374,187 @@ func printRecallEffectiveness(db *sql.DB) {
 	var tableExists bool
 	err := db.QueryRow("SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='recall_metrics';").Scan(&tableExists)
 	if err != nil || !tableExists {
-		fmt.Println("Recall metrics: not enabled")
+		fmt.Println("Recall metrics: not yet available")
+		fmt.Println("  (Enable with [metrics] enabled = true in config)")
 		fmt.Println()
 		return
 	}
 
-	// If table exists, try to get some recall metrics
+	// Check if there's any data
+	var totalRecalls int
+	err = db.QueryRow("SELECT COUNT(*) FROM recall_metrics;").Scan(&totalRecalls)
+	if err != nil || totalRecalls == 0 {
+		fmt.Println("No recall metrics recorded yet.")
+		fmt.Println("  (Run queries with metrics enabled to collect data)")
+		fmt.Println()
+		return
+	}
+
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 
-	// Top recalled memory IDs
-	var topRecalledID int64
-	var recallCount int
+	// Total recalls and 24h recalls
+	var recalls24h int
 	err = db.QueryRow(`
-		SELECT memory_id, COUNT(*) as recall_count
-		FROM recall_metrics
-		GROUP BY memory_id
-		ORDER BY recall_count DESC
-		LIMIT 1;
-	`).Scan(&topRecalledID, &recallCount)
-
+		SELECT COUNT(*) FROM recall_metrics
+		WHERE created_at >= datetime('now', '-24 hours');
+	`).Scan(&recalls24h)
 	if err != nil {
-		fmt.Fprintf(w, "Top recalled memory: \tN/A\n")
+		recalls24h = 0
+	}
+	fmt.Fprintf(w, "Total recalls:\t%d (last 24h: %d)\n", totalRecalls, recalls24h)
+
+	// Average memories per recall
+	var avgMemories float64
+	err = db.QueryRow("SELECT AVG(memory_count) FROM recall_metrics;").Scan(&avgMemories)
+	if err != nil {
+		fmt.Fprintf(w, "Avg memories/recall:\terror\n")
 	} else {
-		fmt.Fprintf(w, "Top recalled memory: \tID %d (%d times)\n", topRecalledID, recallCount)
+		fmt.Fprintf(w, "Avg memories/recall:\t%.1f\n", avgMemories)
 	}
 
-	// Memories never recalled in last 30 days
-	var neverRecalledCount int
-	err = db.QueryRow(`
-		SELECT COUNT(*)
-		FROM memories m
-		LEFT JOIN recall_metrics rm ON m.id = rm.memory_id
-		WHERE rm.memory_id IS NULL;
-	`).Scan(&neverRecalledCount)
-
+	// Average tokens per recall
+	var avgTokens float64
+	err = db.QueryRow("SELECT AVG(total_tokens) FROM recall_metrics;").Scan(&avgTokens)
 	if err != nil {
-		fmt.Fprintf(w, "Never recalled: \t\tError\n")
+		fmt.Fprintf(w, "Avg tokens/recall:\terror\n")
 	} else {
-		fmt.Fprintf(w, "Never recalled: \t\t%d memories\n", neverRecalledCount)
+		fmt.Fprintf(w, "Avg tokens/recall:\t%.0f\n", avgTokens)
 	}
 
-	// Average recall rate
-	var avgRecallRate float64
-	err = db.QueryRow(`
-		SELECT AVG(recall_rate)
-		FROM (
-			SELECT CAST(COUNT(rm.memory_id) AS REAL) as recall_rate
-			FROM memories m
-			LEFT JOIN recall_metrics rm ON m.id = rm.memory_id
-			GROUP BY m.id
-		);
-	`).Scan(&avgRecallRate)
-
+	// Average duration
+	var avgDuration float64
+	err = db.QueryRow("SELECT AVG(duration_ms) FROM recall_metrics WHERE duration_ms IS NOT NULL;").Scan(&avgDuration)
 	if err != nil {
-		fmt.Fprintf(w, "Avg. recall rate: \tError\n")
+		fmt.Fprintf(w, "Avg duration:\t\terror\n")
 	} else {
-		fmt.Fprintf(w, "Avg. recall rate: \t%.2f%%\n", avgRecallRate*100)
+		fmt.Fprintf(w, "Avg duration:\t\t%.1f ms\n", avgDuration)
 	}
+
+	// Query type distribution
+	var emptyQueries, searchQueries int
+	err = db.QueryRow("SELECT COUNT(*) FROM recall_metrics WHERE query_type = 'empty';").Scan(&emptyQueries)
+	if err != nil {
+		emptyQueries = 0
+	}
+	err = db.QueryRow("SELECT COUNT(*) FROM recall_metrics WHERE query_type = 'search';").Scan(&searchQueries)
+	if err != nil {
+		searchQueries = 0
+	}
+	fmt.Fprintf(w, "Query types:\t\tempty: %d, search: %d\n", emptyQueries, searchQueries)
 
 	w.Flush()
+	fmt.Println()
+
+	// Top 5 most recalled memories
+	fmt.Println("Top recalled memories:")
+	topW := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintf(topW, "  ID\tCount\tSummary\n")
+	fmt.Fprintf(topW, "  --\t-----\t-------\n")
+
+	// Parse memory_ids JSON to count occurrences
+	rows, err := db.Query(`
+		SELECT memory_ids FROM recall_metrics WHERE memory_ids IS NOT NULL AND memory_ids != '[]';
+	`)
+	if err == nil {
+		defer rows.Close()
+		memoryRecallCounts := make(map[int64]int)
+		for rows.Next() {
+			var memoryIDsJSON string
+			if err := rows.Scan(&memoryIDsJSON); err != nil {
+				continue
+			}
+			var memoryIDs []int64
+			if err := json.Unmarshal([]byte(memoryIDsJSON), &memoryIDs); err != nil {
+				continue
+			}
+			for _, id := range memoryIDs {
+				memoryRecallCounts[id]++
+			}
+		}
+
+		// Sort by count and get top 5
+		type memCount struct {
+			ID    int64
+			Count int
+		}
+		var counts []memCount
+		for id, count := range memoryRecallCounts {
+			counts = append(counts, memCount{ID: id, Count: count})
+		}
+		// Sort descending by count
+		for i := 0; i < len(counts); i++ {
+			for j := i + 1; j < len(counts); j++ {
+				if counts[j].Count > counts[i].Count {
+					counts[i], counts[j] = counts[j], counts[i]
+				}
+			}
+		}
+
+		shown := 0
+		for _, mc := range counts {
+			if shown >= 5 {
+				break
+			}
+			// Get memory summary
+			var summary string
+			err := db.QueryRow("SELECT summary FROM memories WHERE id = ?;", mc.ID).Scan(&summary)
+			if err != nil {
+				summary = "(deleted)"
+			}
+			if len(summary) > 40 {
+				summary = summary[:37] + "..."
+			}
+			fmt.Fprintf(topW, "  %d\t%d\t%s\n", mc.ID, mc.Count, summary)
+			shown++
+		}
+
+		if shown == 0 {
+			fmt.Fprintf(topW, "  (no data)\t\t\n")
+		}
+	}
+	topW.Flush()
+	fmt.Println()
+
+	// Never-recalled memories count
+	var neverRecalledCount int
+	// Get all memory IDs that have been recalled
+	recalledIDs := make(map[int64]bool)
+	rows2, err := db.Query("SELECT memory_ids FROM recall_metrics WHERE memory_ids IS NOT NULL AND memory_ids != '[]';")
+	if err == nil {
+		defer rows2.Close()
+		for rows2.Next() {
+			var memoryIDsJSON string
+			if err := rows2.Scan(&memoryIDsJSON); err != nil {
+				continue
+			}
+			var memoryIDs []int64
+			if err := json.Unmarshal([]byte(memoryIDsJSON), &memoryIDs); err != nil {
+				continue
+			}
+			for _, id := range memoryIDs {
+				recalledIDs[id] = true
+			}
+		}
+	}
+
+	// Count memories not in the recalled set
+	var totalMemories int
+	err = db.QueryRow("SELECT COUNT(*) FROM memories;").Scan(&totalMemories)
+	if err == nil {
+		rows3, err := db.Query("SELECT id FROM memories;")
+		if err == nil {
+			defer rows3.Close()
+			for rows3.Next() {
+				var id int64
+				if err := rows3.Scan(&id); err != nil {
+					continue
+				}
+				if !recalledIDs[id] {
+					neverRecalledCount++
+				}
+			}
+		}
+		fmt.Printf("Never recalled: %d of %d memories\n", neverRecalledCount, totalMemories)
+	}
 	fmt.Println()
 }

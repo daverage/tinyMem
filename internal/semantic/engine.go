@@ -41,6 +41,11 @@ func NewSemanticEngine(
 	}
 }
 
+// Close gracefully shuts down the semantic engine.
+func (s *SemanticEngine) Close() {
+	// SemanticEngine doesn't have any resources that need explicit cleanup
+}
+
 // SemanticRecall performs semantic recall combined with lexical recall
 func (s *SemanticEngine) SemanticRecall(options recall.RecallOptions) ([]recall.RecallResult, error) {
 	// First, try to get embeddings for the query
@@ -253,7 +258,11 @@ func (s *SemanticEngine) storeEmbeddingInDB(memoryID int64, embedding []float32)
 // fallbackLexicalRecall performs lexical recall as a fallback
 func (s *SemanticEngine) fallbackLexicalRecall(options recall.RecallOptions) ([]recall.RecallResult, error) {
 	// Create a basic recall engine for fallback
-	basicRecall := recall.NewEngine(s.memoryService, s.evidenceService, s.config, s.logger)
+	var dbConn *sql.DB
+	if s.db != nil {
+		dbConn = s.db.GetConnection()
+	}
+	basicRecall := recall.NewEngine(s.memoryService, s.evidenceService, s.config, s.logger, dbConn)
 	return basicRecall.Recall(options)
 }
 

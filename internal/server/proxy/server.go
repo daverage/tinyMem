@@ -53,7 +53,7 @@ func NewServer(a *app.App) *Server {
 	if a.Config.SemanticEnabled {
 		recallEngine = semantic.NewSemanticEngine(a.DB, a.Memory, evidenceService, a.Config, a.Logger)
 	} else {
-		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config, a.Logger)
+		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config, a.Logger, a.DB.GetConnection())
 	}
 	injector := inject.NewMemoryInjector(recallEngine)
 	llmClient := llm.NewClient(a.Config)
@@ -133,6 +133,11 @@ func (s *Server) Start() error {
 
 // Stop stops the proxy server
 func (s *Server) Stop() error {
+	// Close the recall engine to flush any pending metrics
+	if s.recallEngine != nil {
+		s.recallEngine.Close()
+	}
+
 	if s.server != nil {
 		// Close the response buffer channel to stop the processing goroutine
 		close(s.responseBuffer)
@@ -282,7 +287,8 @@ func (s *Server) handleStreamingRequest(w http.ResponseWriter, ctx context.Conte
 				continue
 			}
 
-			fmt.Fprintf(w, "data: %s\n", chunkBytes)
+			// Terminate the SSE event with a blank line so clients treat it as a complete message.
+			fmt.Fprintf(w, "data: %s\n\n", chunkBytes)
 			w.(http.Flusher).Flush()
 		case err, ok := <-errChan:
 			if ok && err != nil {

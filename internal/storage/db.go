@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	SchemaVersion = 4
+	SchemaVersion = 5
 )
 
 // DB represents the database connection
@@ -79,6 +79,10 @@ func (db *DB) migrate() error {
 			}
 		case 4:
 			if err := db.applySchemaV4(tx); err != nil {
+				return fmt.Errorf("failed to apply schema v%d: %w", version, err)
+			}
+		case 5:
+			if err := db.applySchemaV5(tx); err != nil {
 				return fmt.Errorf("failed to apply schema v%d: %w", version, err)
 			}
 		default:
@@ -214,49 +218,52 @@ func (db *DB) applySchemaV3(tx *sql.Tx) error {
 		// For 'observation', 'note', and 'plan', leave as 'opportunistic' (the default)
 	}
 
-	// Update FTS5 table to include recall_tier in content sync
-	// Drop and recreate the FTS triggers to account for the new column
-	_, err = tx.Exec(`DROP TRIGGER IF EXISTS memories_ai`)
+	// Update FTS5 table to include recall_tier in content sync.
+	// Skip trigger updates if the FTS table is absent.
+	ftsExists, err := db.hasFTSTable(tx)
 	if err != nil {
 		return err
 	}
 
-	_, err = tx.Exec(`DROP TRIGGER IF EXISTS memories_ad`)
-	if err != nil {
-		return err
+	if ftsExists {
+		// Drop and recreate the FTS triggers to account for the new column.
+		for _, trigger := range []string{"memories_ai", "memories_ad", "memories_au"} {
+			if _, err := tx.Exec(fmt.Sprintf("DROP TRIGGER IF EXISTS %s;", trigger)); err != nil {
+				return err
+			}
+		}
+
+		// Recreate the triggers to keep FTS table in sync (only summary and detail are indexed).
+		_, err = tx.Exec(`
+			CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+				INSERT INTO memories_fts(rowid, summary, detail) VALUES (new.id, new.summary, new.detail);
+			END;
+		`)
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.Exec(`
+			CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+				DELETE FROM memories_fts WHERE rowid = old.id;
+			END;
+		`)
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.Exec(`
+			CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+				DELETE FROM memories_fts WHERE rowid = old.id;
+				INSERT INTO memories_fts(rowid, summary, detail) VALUES (new.id, new.summary, new.detail);
+			END;
+		`)
+		if err != nil {
+			return err
+		}
 	}
 
-	_, err = tx.Exec(`DROP TRIGGER IF EXISTS memories_au`)
-	if err != nil {
-		return err
-	}
-
-	// Recreate the triggers to keep FTS table in sync (only summary and detail are indexed)
-	_, err = tx.Exec(`
-		CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
-			INSERT INTO memories_fts(rowid, summary, detail) VALUES (new.id, new.summary, new.detail);
-		END;
-	`)
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.Exec(`
-		CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
-			DELETE FROM memories_fts WHERE rowid = old.id;
-		END;
-	`)
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.Exec(`
-		CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
-			DELETE FROM memories_fts WHERE rowid = old.id;
-			INSERT INTO memories_fts(rowid, summary, detail) VALUES (new.id, new.summary, new.detail);
-		END;
-	`)
-	return err
+	return nil
 }
 
 // applySchemaV4 adds the truth_state column to memories table.
@@ -305,6 +312,43 @@ func (db *DB) applySchemaV4(tx *sql.Tx) error {
 	}
 
 	return nil
+}
+
+// applySchemaV5 adds the recall_metrics table for tracking recall operations.
+func (db *DB) applySchemaV5(tx *sql.Tx) error {
+	// Create recall_metrics table
+	_, err := tx.Exec(`
+		CREATE TABLE IF NOT EXISTS recall_metrics (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			project_id TEXT NOT NULL,
+			query TEXT NOT NULL DEFAULT '',
+			query_type TEXT NOT NULL CHECK(query_type IN ('empty', 'search')),
+			memory_ids TEXT,
+			memory_count INTEGER NOT NULL DEFAULT 0,
+			total_tokens INTEGER NOT NULL DEFAULT 0,
+			tier_breakdown TEXT,
+			duration_ms INTEGER,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Create indexes for efficient querying
+	_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_recall_metrics_project_id ON recall_metrics(project_id)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_recall_metrics_created_at ON recall_metrics(created_at)`)
+	if err != nil {
+		return err
+	}
+
+	// Update schema version
+	_, err = tx.Exec(fmt.Sprintf("PRAGMA user_version = %d", SchemaVersion))
+	return err
 }
 
 // applySchemaV1 applies the initial schema
@@ -418,6 +462,19 @@ func (db *DB) isFTS5Available(tx *sql.Tx) bool {
 	// Clean up the test table
 	_, err = tx.Exec(`DROP TABLE test_fts5;`)
 	return err == nil
+}
+
+func (db *DB) hasFTSTable(tx *sql.Tx) (bool, error) {
+	var exists int
+	err := tx.QueryRow(`
+		SELECT COUNT(*)
+		FROM sqlite_master
+		WHERE type='table' AND name='memories_fts'
+	`).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists > 0, nil
 }
 
 // Close closes the database connection
