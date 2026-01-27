@@ -1,5 +1,9 @@
 # tinyMem
 
+<p align="center">
+  <img src="assets/tinymem-logo.png" alt="tinyMem logo" width="280" />
+</p>
+
 **Local, project-scoped memory system for language models with evidence-based truth validation.**
 
 tinyMem is a standalone Go executable that gives small and medium language models reliable long-term memory in complex codebases. It acts as a truth-aware prompt governor, sitting between the developer and the LLM to inject verified context and capture validated facts—all without requiring model retraining or cloud services.

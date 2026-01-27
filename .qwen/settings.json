@@ -2,9 +2,10 @@
   "mcpServers": {
     "tinymem": {
       "command": "tinymem",
-      "args": [
-        "mcp"
-      ],
+      "args": ["mcp"],
+      "exp": {
+        "TINYMEM_METRICS_ENABLED": "true"
+      },
       "timeout": 30000,
       "trust": false
     }
