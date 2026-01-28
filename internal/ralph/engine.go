@@ -212,7 +212,7 @@ func (e *Engine) recall(ctx context.Context, opt Options, state *IterationState)
 	}
 
 	// Use existing memory service to query
-	return e.mem.QueryMemories(e.projectID, query, opt.Recall.Limit)
+	return e.mem.SearchMemories(e.projectID, query, opt.Recall.Limit)
 }
 
 func (e *Engine) repair(ctx context.Context, opt Options, state *IterationState, memories []*memory.Memory) error {
