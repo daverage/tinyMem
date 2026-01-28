@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +30,20 @@ type ResponseCapture struct {
 	ResponseText string
 	Model        string
 	Timestamp    time.Time
+}
+
+type recallStatus string
+
+const (
+	recallStatusNone     recallStatus = "none"
+	recallStatusInjected recallStatus = "injected"
+	recallStatusFailed   recallStatus = "failed"
+)
+
+// MemoryNotification describes the recall/notification state for a proxied request.
+type MemoryNotification struct {
+	RecallCount  int
+	RecallStatus recallStatus
 }
 
 // Server implements the HTTP proxy server
@@ -168,6 +183,10 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	notification := MemoryNotification{
+		RecallStatus: recallStatusNone,
+	}
+
 	// Extract the user's message to use for memory recall
 	userMessage := ""
 	for i := len(req.Messages) - 1; i >= 0; i-- {
@@ -188,8 +207,13 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		})
 		if err != nil {
 			s.app.Logger.Warn("Failed to recall memories for prompt injection", zap.Error(err), zap.String("user_message", userMessage))
-			// Continue without memory injection if recall fails
+			notification.RecallStatus = recallStatusFailed
 		} else {
+			notifyCount := len(recallResults)
+			notification.RecallCount = notifyCount
+			if notifyCount > 0 {
+				notification.RecallStatus = recallStatusInjected
+			}
 			// Format memories and prepend to the last user message
 			var memories []*memory.Memory
 			for _, result := range recallResults {
@@ -208,14 +232,14 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 
 	// Check if streaming is requested
 	if req.Stream {
-		s.handleStreamingRequest(w, ctx, req)
+		s.handleStreamingRequest(w, ctx, req, notification)
 	} else {
-		s.handleNonStreamingRequest(w, ctx, req)
+		s.handleNonStreamingRequest(w, ctx, req, notification)
 	}
 }
 
 // handleStreamingRequest handles streaming chat completion requests
-func (s *Server) handleStreamingRequest(w http.ResponseWriter, ctx context.Context, req llm.ChatCompletionRequest) {
+func (s *Server) handleStreamingRequest(w http.ResponseWriter, ctx context.Context, req llm.ChatCompletionRequest, notification MemoryNotification) {
 	// Set headers for SSE
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -259,6 +283,7 @@ func (s *Server) handleStreamingRequest(w http.ResponseWriter, ctx context.Conte
 					s.app.Logger.Warn("Response buffer is full, skipping extraction for streaming request", zap.String("model", req.Model))
 				}
 
+				s.emitMemoryNotificationEvent(w, notification)
 				return
 			}
 
@@ -308,7 +333,7 @@ func (s *Server) handleStreamingRequest(w http.ResponseWriter, ctx context.Conte
 }
 
 // handleNonStreamingRequest handles non-streaming chat completion requests
-func (s *Server) handleNonStreamingRequest(w http.ResponseWriter, ctx context.Context, req llm.ChatCompletionRequest) {
+func (s *Server) handleNonStreamingRequest(w http.ResponseWriter, ctx context.Context, req llm.ChatCompletionRequest, notification MemoryNotification) {
 	resp, err := s.llmClient.ChatCompletionsRaw(ctx, req)
 	if err != nil {
 		s.app.Logger.Error("LLM ChatCompletions failed for non-streaming request", zap.Error(err))
@@ -325,6 +350,10 @@ func (s *Server) handleNonStreamingRequest(w http.ResponseWriter, ctx context.Co
 			w.Header().Add(key, value)
 		}
 	}
+	if notification.RecallStatus != "" {
+		w.Header().Set("X-TinyMem-Recall-Status", string(notification.RecallStatus))
+	}
+	w.Header().Set("X-TinyMem-Recall-Count", strconv.Itoa(notification.RecallCount))
 	w.WriteHeader(resp.StatusCode)
 
 	tee := io.TeeReader(resp.Body, rollingBuffer)
@@ -366,6 +395,26 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"status": "healthy",
 		"time":   time.Now().Format(time.RFC3339),
 	})
+}
+
+func (s *Server) emitMemoryNotificationEvent(w http.ResponseWriter, notification MemoryNotification) {
+	payload := map[string]interface{}{
+		"type":          "tinymem.memory_status",
+		"recall_count":  notification.RecallCount,
+		"recall_status": notification.RecallStatus,
+		"timestamp":     time.Now().Format(time.RFC3339),
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		s.app.Logger.Warn("Failed to encode memory notification", zap.Error(err))
+		return
+	}
+
+	fmt.Fprintf(w, "data: %s\n\n", data)
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
 }
 
 // estimateTokenCount provides a conservative estimate of token count

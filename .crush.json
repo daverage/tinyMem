@@ -17,8 +17,8 @@
       "type": "openai-compat",
       "models": [
         {
-          "name": "rnj",
-          "id": "unsloth/rnj-1-instruct",
+          "name": "qwen",
+          "id": "qwen2.5-coder-7b-instruct",
           "context_window": 256000,
           "default_max_tokens": 20000
         }

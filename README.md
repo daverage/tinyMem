@@ -197,6 +197,11 @@ export OPENAI_API_BASE_URL=http://localhost:8080/v1
 # Your existing scripts now use tinyMem automatically
 ```
 
+While proxying, tinyMem now reports recall activity back to the client so that downstream UIs or agents can show “memory checked” indicators:
+* **Streaming responses** append an SSE event of type `tinymem.memory_status` once the upstream LLM finishes. The payload includes `recall_count`, `recall_status` (`none`/`injected`/`failed`), and a timestamp.
+* **Non-streaming responses** carry the same data via new headers: `X-TinyMem-Recall-Status` and `X-TinyMem-Recall-Count`.
+Agents or dashboards that read those fields can display whenever recall was applied or when the proxy skipped it.
+
 ### MCP Server (IDE Integration)
 Compatible with Claude Desktop, Cursor, and other MCP clients.
 
