@@ -133,8 +133,8 @@ func updateReadme() error {
 		readmeContent += "Include the contract content from [AGENT_CONTRACT.md](AGENT_CONTRACT.md) in your agent's system prompt to ensure proper interaction with tinyMem.\n\n"
 	} else {
 		// Insert after the IDE Integration heading
-		before := readmeContent[:insertionPoint + len("## IDE Integration")]
-		after := readmeContent[insertionPoint + len("## IDE Integration"):]
+		before := readmeContent[:insertionPoint+len("## IDE Integration")]
+		after := readmeContent[insertionPoint+len("## IDE Integration"):]
 
 		addition := "\n\n### Agent Setup for MCP Usage\n\n"
 		addition += "When using tinyMem as an MCP server for AI agents, ensure that your agents follow the MANDATORY TINYMEM CONTROL PROTOCOL.\n\n"

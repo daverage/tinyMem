@@ -1,12 +1,12 @@
 package memory_test
 
 import (
-	"os"
-	"path/filepath"
-	"testing"
 	"github.com/a-marczewski/tinymem/internal/config"
 	"github.com/a-marczewski/tinymem/internal/memory"
 	"github.com/a-marczewski/tinymem/internal/storage"
+	"os"
+	"path/filepath"
+	"testing"
 )
 
 func TestMain(m *testing.M) {
@@ -46,9 +46,9 @@ func TestExtractorCannotEmitFacts(t *testing.T) {
 func TestFactInsertWithoutEvidenceFails(t *testing.T) {
 	db, teardown := setupTestDB(t)
 	defer teardown()
-	
+
 	memoryService := memory.NewService(db)
-	
+
 	// Try to create a fact directly (this should fail due to our storage layer protection)
 	factMemory := &memory.Memory{
 		ProjectID: "test-project",
@@ -56,7 +56,7 @@ func TestFactInsertWithoutEvidenceFails(t *testing.T) {
 		Summary:   "Test fact",
 		Detail:    "This should not be inserted",
 	}
-	
+
 	err := memoryService.CreateMemory(factMemory)
 	if err == nil {
 		t.Error("Expected error when creating fact without evidence, but got none")
@@ -68,9 +68,9 @@ func TestFactInsertWithoutEvidenceFails(t *testing.T) {
 func TestFactUpdateWithoutEvidenceFails(t *testing.T) {
 	db, teardown := setupTestDB(t)
 	defer teardown()
-	
+
 	memoryService := memory.NewService(db)
-	
+
 	// First create a non-fact memory
 	claimMemory := &memory.Memory{
 		ProjectID: "test-project",
@@ -78,12 +78,12 @@ func TestFactUpdateWithoutEvidenceFails(t *testing.T) {
 		Summary:   "Test claim",
 		Detail:    "This is a claim",
 	}
-	
+
 	err := memoryService.CreateMemory(claimMemory)
 	if err != nil {
 		t.Fatalf("Failed to create claim: %v", err)
 	}
-	
+
 	// Then try to update it to a fact (this should fail)
 	claimMemory.Type = memory.Fact
 	err = memoryService.UpdateMemory(claimMemory)

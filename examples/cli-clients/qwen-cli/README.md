@@ -37,6 +37,10 @@ qwen-code chat --proxy http://localhost:8080
 ```
 Replace `chat` with the specific Qwen-Code command you intend to use.
 
+This matches the official Qwen Code configuration reference (last updated November 24, 2025), which documents `--proxy` as the flag for redirecting CLI traffic through an HTTP proxy. Because the CLI also honors `HTTP_PROXY`/`HTTPS_PROXY`, you can set those variables once per shell session instead of repeatedly supplying `--proxy`.
+
+> A current issue (Qwen Code #756, opened October 2, 2025) confirms that `NO_PROXY` is ignored when the CLI reads proxy environment variables, so the only reliable way to bypass tinyMem for specific hosts is to temporarily unset the proxy variables before running the CLI for those hosts.
+
 ## Considerations
 
 *   **`NO_PROXY` Issues:** There have been reported issues where the Qwen-Code CLI might not correctly honor the `NO_PROXY` environment variable. If you experience unexpected routing, you might need to explicitly unset proxy environment variables for commands that should bypass `tinyMem` entirely.

@@ -10,6 +10,7 @@ port = 8080
 # The base URL of your local LLM provider.
 # This is the default API endpoint for LM Studio.
 base_url = "http://localhost:1234/v1"
+# LM Studio's documentation (2025) confirms this endpoint and notes you can override it with LMSTUDIO_API_BASE when you start the server.
 
 # To use this, you must first start the local server in LM Studio.
 # 1. Go to the "Local Server" tab (the "↔️" icon) in LM Studio.

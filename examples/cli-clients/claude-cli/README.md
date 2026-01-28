@@ -23,6 +23,8 @@ export HTTPS_PROXY="http://localhost:8080"
 # unset HTTPS_PROXY
 # unset NO_PROXY
 ```
+Anthropic's corporate proxy documentation (November 2025) reiterates that Claude Code expects an `http://` URL even when you set `HTTPS_PROXY` and currently ignores `NO_PROXY`, so clearing the proxy environment variables is the only reliable way to bypass tinyMem for specific hosts.
+
 **Important Note:** Claude Code generally expects an `http://` schema even for `HTTPS_PROXY` when connecting to a simple HTTP proxy like `tinyMem`.
 
 ## Using the In-App `/config` Command
@@ -36,6 +38,8 @@ If you are using the interactive REPL of Claude Code, you can configure network 
 2.  In the Claude Code REPL, type `/config` and press Enter.
 3.  This will open a settings interface. Look for `network.httpProxyPort` and set it to `8080` (or your `tinyMem` proxy port).
 4.  Save and exit the configuration.
+
+Anthropic's Claude Code settings documentation (late 2025) describes `/config` as the entry point for changing `network.httpProxyPort`, so following these steps matches the way the app exposes proxy settings today.
 
 ## MCP Integration (for supported Claude CLI versions)
 

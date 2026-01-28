@@ -12,15 +12,15 @@ import (
 )
 
 const (
-	DefaultProxyPort                = 8080
-	DefaultExtractionBufferBytes    = 16384 // 16KB default
-	DefaultLLMBaseURL               = "http://localhost:11434/v1"
-	DefaultEmbeddingModel           = "nomic-embed-text"
-	DefaultHybridWeight             = 0.5
-	DefaultCoVeConfidenceThreshold  = 0.6
-	DefaultCoVeMaxCandidates        = 20
-	DefaultCoVeTimeoutSeconds       = 30
-	DefaultCoVeModel                = "" // Empty = use default LLM
+	DefaultProxyPort               = 8080
+	DefaultExtractionBufferBytes   = 16384 // 16KB default
+	DefaultLLMBaseURL              = "http://localhost:11434/v1"
+	DefaultEmbeddingModel          = "nomic-embed-text"
+	DefaultHybridWeight            = 0.5
+	DefaultCoVeConfidenceThreshold = 0.6
+	DefaultCoVeMaxCandidates       = 20
+	DefaultCoVeTimeoutSeconds      = 30
+	DefaultCoVeModel               = "" // Empty = use default LLM
 )
 
 // Config holds the application configuration
@@ -47,14 +47,14 @@ type Config struct {
 	RecallMaxItems                int
 	RecallMaxTokens               int
 	// Metrics configuration
-	MetricsEnabled                 bool
+	MetricsEnabled bool
 	// CoVe (Chain-of-Verification) configuration
-	CoVeEnabled              bool
-	CoVeConfidenceThreshold  float64
-	CoVeMaxCandidates        int
-	CoVeTimeoutSeconds       int
-	CoVeModel                string
-	CoVeRecallFilterEnabled  bool
+	CoVeEnabled             bool
+	CoVeConfidenceThreshold float64
+	CoVeMaxCandidates       int
+	CoVeTimeoutSeconds      int
+	CoVeModel               string
+	CoVeRecallFilterEnabled bool
 }
 
 type fileConfig struct {
@@ -93,12 +93,12 @@ type fileConfig struct {
 		Enabled bool `toml:"enabled"`
 	} `toml:"metrics"`
 	CoVe struct {
-		Enabled              bool    `toml:"enabled"`
-		ConfidenceThreshold  float64 `toml:"confidence_threshold"`
-		MaxCandidates        int     `toml:"max_candidates"`
-		TimeoutSeconds       int     `toml:"timeout_seconds"`
-		Model                string  `toml:"model"`
-		RecallFilterEnabled  bool    `toml:"recall_filter_enabled"`
+		Enabled             bool    `toml:"enabled"`
+		ConfidenceThreshold float64 `toml:"confidence_threshold"`
+		MaxCandidates       int     `toml:"max_candidates"`
+		TimeoutSeconds      int     `toml:"timeout_seconds"`
+		Model               string  `toml:"model"`
+		RecallFilterEnabled bool    `toml:"recall_filter_enabled"`
 	} `toml:"cove"`
 }
 
@@ -141,12 +141,12 @@ func LoadConfig() (*Config, error) {
 		RecallMaxTokens:               2000,
 		MetricsEnabled:                false,
 		// CoVe defaults (enabled by default)
-		CoVeEnabled:              true,
-		CoVeConfidenceThreshold:  DefaultCoVeConfidenceThreshold,
-		CoVeMaxCandidates:        DefaultCoVeMaxCandidates,
-		CoVeTimeoutSeconds:       DefaultCoVeTimeoutSeconds,
-		CoVeModel:                DefaultCoVeModel,
-		CoVeRecallFilterEnabled:  false,
+		CoVeEnabled:             true,
+		CoVeConfidenceThreshold: DefaultCoVeConfidenceThreshold,
+		CoVeMaxCandidates:       DefaultCoVeMaxCandidates,
+		CoVeTimeoutSeconds:      DefaultCoVeTimeoutSeconds,
+		CoVeModel:               DefaultCoVeModel,
+		CoVeRecallFilterEnabled: false,
 	}
 
 	embeddingBaseURLSet := false

@@ -15,14 +15,15 @@ const (
 	Constraint  Type = "constraint"
 	Observation Type = "observation"
 	Note        Type = "note"
+	Task        Type = "task"
 )
 
 // RecallTier represents the recall tier of a memory
 type RecallTier string
 
 const (
-	Always       RecallTier = "always"
-	Contextual   RecallTier = "contextual"
+	Always        RecallTier = "always"
+	Contextual    RecallTier = "contextual"
 	Opportunistic RecallTier = "opportunistic"
 )
 
@@ -37,19 +38,19 @@ const (
 
 // Memory represents a memory entry
 type Memory struct {
-	ID           int64      `json:"id"`
-	ProjectID    string     `json:"project_id"`
-	Type         Type       `json:"type"`
-	Summary      string     `json:"summary"`
-	Detail       string     `json:"detail"`
-	Key          *string    `json:"key,omitempty"`
-	Source       *string    `json:"source,omitempty"`
-	RecallTier   RecallTier `json:"recall_tier"`
-	TruthState   TruthState `json:"truth_state"`
-	Classification *string  `json:"classification,omitempty"`  // Optional classification for better recall precision
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
-	SupersededBy *int64     `json:"superseded_by,omitempty"`
+	ID             int64      `json:"id"`
+	ProjectID      string     `json:"project_id"`
+	Type           Type       `json:"type"`
+	Summary        string     `json:"summary"`
+	Detail         string     `json:"detail"`
+	Key            *string    `json:"key,omitempty"`
+	Source         *string    `json:"source,omitempty"`
+	RecallTier     RecallTier `json:"recall_tier"`
+	TruthState     TruthState `json:"truth_state"`
+	Classification *string    `json:"classification,omitempty"` // Optional classification for better recall precision
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	SupersededBy   *int64     `json:"superseded_by,omitempty"`
 }
 
 // Evidence represents evidence for a memory
@@ -75,7 +76,7 @@ func (t Type) RequiresEvidence() bool {
 
 func (t Type) IsValid() bool {
 	switch t {
-	case Fact, Claim, Plan, Decision, Constraint, Observation, Note:
+	case Fact, Claim, Plan, Decision, Constraint, Observation, Note, Task:
 		return true
 	default:
 		return false

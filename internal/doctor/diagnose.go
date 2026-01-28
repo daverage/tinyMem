@@ -34,8 +34,8 @@ type CheckResult struct {
 type ServerMode string
 
 const (
-	ProxyMode ServerMode = "proxy"
-	MCPMode   ServerMode = "mcp"
+	ProxyMode      ServerMode = "proxy"
+	MCPMode        ServerMode = "mcp"
 	StandaloneMode ServerMode = "standalone"
 )
 

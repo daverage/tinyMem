@@ -4,6 +4,12 @@
   <img src="assets/tinymem-logo.png" alt="tinyMem logo" width="280" />
 </p>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" />
+  <img src="https://img.shields.io/badge/Go-1.22+-00ADD8.svg" alt="Go 1.22+" />
+  <img src="https://img.shields.io/badge/Build-Passing-brightgreen.svg" alt="Build Status" />
+</p>
+
 **Local, project-scoped memory system for language models with evidence-based truth validation.**
 
 tinyMem is a standalone Go executable that gives small and medium language models reliable long-term memory in complex codebases. It acts as a truth-aware prompt governor, sitting between the developer and the LLM to inject verified context and capture validated facts—all without requiring model retraining or cloud services.
@@ -45,7 +51,7 @@ This approach prevents language models from hallucinating institutional knowledg
 
 ## Installation
 
-For a simpler, step-by-step guide aimed at less technical users, please see the [Quick Start Guide for Beginners](QUICK_START_GUIDE.md).
+For a simpler, step-by-step guide aimed at less technical users, please see the [Quick Start Guide for Beginners](docs/QUICK_START_GUIDE.md).
 
 ### Download Pre-built Binary
 
@@ -80,18 +86,18 @@ cd tinymem
 make
 ```
 
-Or use `go build` directly with tags:
+The `build-minimal` target still enforces FTS5 and is provided for compatibility with older workflows:
+
+```bash
+make build-minimal
+```
+
+Or run `go build` directly with the required tag:
 ```bash
 go build -tags fts5 -o tinymem ./cmd/tinymem
 ```
 
-If you need a build without FTS5 (smaller binary or compatibility reasons):
-
-```bash
-make build-minimal
-# or
-go build -o tinymem ./cmd/tinymem
-```
+FTS5 support is mandatory; there is no supported build that omits the `fts5` tag.
 
 Once built, the `tinymem` executable will be in your current directory. For easier access, consider moving it to a directory included in your system's PATH (e.g., `/usr/local/bin/` on macOS/Linux) or adding your project directory to your PATH environment variable.
 
@@ -235,6 +241,7 @@ tinyMem categorizes all memory entries into typed buckets:
 | **constraint** | Hard requirement or limitation | Yes | No | Always | Asserted |
 | **observation** | Neutral context or state | No | Yes (low priority) | Opportunistic | Tentative |
 | **note** | General information | No | Yes (lowest priority) | Opportunistic | Tentative |
+| **task** | Specific task or action item | No | No | Contextual | Tentative |
 
 ### Memory Classification (Optional)
 
@@ -297,6 +304,17 @@ Evidence types:
 - `grep_hit`: Pattern matches in file
 - `cmd_exit0`: Command exits successfully
 - `test_pass`: Test suite passes
+
+### Evidence Security Considerations
+
+When using command-based evidence verification (`cmd_exit0` and `test_pass`), be aware of the following security implications:
+
+- **Command Execution**: These evidence types execute commands on your system, which could pose security risks if malicious patterns are introduced.
+- **Whitelist Configuration**: By default, command execution is disabled. To enable it, you must explicitly set `TINYMEM_EVIDENCE_ALLOW_COMMAND=true` and configure `TINYMEM_EVIDENCE_ALLOWED_COMMANDS` with a whitelist of permitted commands.
+- **Path Safety**: TinyMem implements path traversal protection to prevent access to files outside the project directory.
+- **Command Validation**: All commands undergo validation to prevent shell injection attacks.
+
+For production environments, carefully consider whether to enable command-based evidence verification and maintain a strict whitelist of allowed commands.
 
 ## Architecture
 
@@ -427,7 +445,7 @@ enabled = false                   # CoVe completely disabled
 export TINYMEM_COVE_ENABLED=false
 ```
 
-See [COVE.md](./COVE.md) for detailed documentation, configuration examples, and performance considerations.
+See [docs/COVE.md](./docs/COVE.md) for detailed documentation, configuration examples, and performance considerations.
 
 ## IDE Integration
 
@@ -435,7 +453,7 @@ See [COVE.md](./COVE.md) for detailed documentation, configuration examples, and
 
 When using tinyMem as an MCP server for AI agents, ensure that your agents follow the MANDATORY TINYMEM CONTROL PROTOCOL.
 
-Include the contract content from [AGENT_CONTRACT.md](AGENT_CONTRACT.md) in your agent's system prompt to ensure proper interaction with tinyMem.
+Include the contract content from [docs/AGENT_CONTRACT.md](docs/AGENT_CONTRACT.md) in your agent's system prompt to ensure proper interaction with tinyMem.
 
 ### Claude Desktop / Cursor (MCP)
 
@@ -468,7 +486,7 @@ Add the following server configuration to your `claude_desktop_config.json` file
 
 **Important**: Use the absolute path to your tinymem executable. After updating the configuration, restart Claude Desktop.
 
-For detailed MCP troubleshooting, see [MCP_TROUBLESHOOTING.md](./MCP_TROUBLESHOOTING.md).
+For detailed MCP troubleshooting, see [docs/MCP_TROUBLESHOOTING.md](./docs/MCP_TROUBLESHOOTING.md).
 
 Available MCP tools:
 - `memory_query` - Search memories using full-text or semantic search
@@ -491,7 +509,7 @@ Configure your LLM extension to use the `tinymem` proxy. Since the proxy forward
 
 ### Qwen Code CLI
 
-See [QWEN.md](./QWEN.md) for detailed Qwen integration setup.
+See [docs/agents/QWEN.md](./docs/agents/QWEN.md) for detailed Qwen integration setup.
 
 ### Qwen and Gemini MCP Configuration
 
@@ -578,17 +596,17 @@ For comprehensive AI Assistant Directives including:
 - Complete workflow examples
 - Critical reminders and error patterns
 
-**See the full directives in [claude.md](./claude.md)**
+**See the full directives in [docs/agents/CLAUDE.md](./docs/agents/CLAUDE.md)**
 
 ### Adding Directives to Your AI Assistant
 
 Pick the directive file that matches your model and paste its contents verbatim into your system prompt or project instructions (do not summarize or paraphrase).
 
 **Choose the correct file:**
-- **Claude:** `claude.md`
-- **Gemini:** `GEMINI.md`
-- **Qwen:** `QWEN.md`
-- **Custom/other agents:** `AGENT.md`
+- **Claude:** `docs/agents/CLAUDE.md`
+- **Gemini:** `docs/agents/GEMINI.md`
+- **Qwen:** `docs/agents/QWEN.md`
+- **Custom/other agents:** `docs/AGENT_CONTRACT.md`
 
 This ensures the assistant:
 1. Always queries memory before providing project-specific answers
@@ -598,7 +616,7 @@ This ensures the assistant:
 5. Follows evidence-based truth discipline
 
 **Concrete examples:**
-- **Claude Desktop/Cursor:** Paste `claude.md` into project instructions or `.clinerules`
+- **Claude Desktop/Cursor:** Paste `docs/agents/CLAUDE.md` into project instructions or `.clinerules`
 - **Continue (VS Code):** Paste the matching file into the system message or a context file
 - **Custom agents:** Prepend the matching file to the system prompt at initialization
 
@@ -834,6 +852,30 @@ These guarantees hold everywhere in tinyMem:
 
 Violating any invariant is a bug, not a feature gap.
 
+## Task Management with tinyTasks
+
+TinyMem includes a protocol for managing multi-step tasks using `tinyTasks.md` files. This system allows for structured task tracking that integrates with the memory system:
+
+```
+# Tasks – <Goal>
+
+- [ ] Top-Level Task
+  - [ ] Atomic subtask
+  - [ ] Atomic subtask
+
+- [ ] Next Task
+  - [ ] Atomic subtask
+```
+
+The protocol requires:
+- Two levels only (top-level tasks and subtasks)
+- One responsibility per top-level task
+- Subtasks must be atomic and verifiable
+- Checkboxes define all state
+- Order is execution order
+
+This system helps track complex development work and integrates with the memory system for persistent task management.
+
 ## Development
 
 ### Build
@@ -842,24 +884,46 @@ Violating any invariant is a bug, not a feature gap.
 # Build with all features (FTS5 enabled by default)
 make
 
-# Or build without FTS5 for minimal binary
+# Or build with the minimal target (FTS5 remains enabled)
 make build-minimal
 ```
+
+Both `make` and `make build-minimal` enforce `-tags fts5` so every build includes SQLite FTS5 support.
 
 Alternatively, use `go build` directly:
 ```bash
 go build -tags fts5 -o tinymem ./cmd/tinymem
 ```
 
+### Build Scripts
+
+Build scripts are located in the `build/` directory but can be executed from the project root:
+
+- `build.sh` - Unix/Linux/macOS build script
+- `build.bat` - Windows build script
+
 ### Test
 
 ```bash
+# Run the standard Go tests
 go test ./...
+```
+
+Comprehensive test suite (located in the `test/` directory):
+
+```bash
+# Run all tests using the test runner
+cd test && python3 run_tests.py
+
+# Or run individual test files
+cd test && python3 test_tinymem.py
+cd test && python3 test_tinymem_mcp.py
+cd test && python3 test_tinymem_config.py
 ```
 
 ### Cross-Platform Build
 
-You can build `tinymem` for different operating systems and architectures by setting the `GOOS` (target operating system) and `GOARCH` (target architecture) environment variables before running the `go build` command. Each command below enables FTS5 by passing `-tags fts5`, mirroring the defaults used in `build.sh`. Add `TINYMEM_DISABLE_FTS5=1` if you need a non-FTS5 build.
+You can build `tinymem` for different operating systems and architectures by setting the `GOOS` (target operating system) and `GOARCH` (target architecture) environment variables before running the `go build` command. Each command below enables FTS5 by passing `-tags fts5`, mirroring the defaults used in `build.sh` (located in the build/ directory but referenced from project root). FTS5 support is required for every build.
 
 Here are some common examples:
 
@@ -901,8 +965,6 @@ Contributions welcome! Please ensure:
 3. **Zero-config remains**: Defaults must work out of the box
 4. **Tests pass**: `go test ./...`
 5. **Doctor explains it**: If it can fail, `tinymem doctor` should diagnose it
-
-See [TASKS.md](./TASKS.md) for the full implementation roadmap and design principles.
 
 ## License
 

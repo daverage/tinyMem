@@ -15,6 +15,7 @@
   // This tells the Continue extension to send its requests to the tinyMem proxy
   // instead of directly to the LLM provider.
   "continue.apiBase": "http://localhost:8080/v1",
+  // Continue's configuration docs describe `apiBase` as the endpoint the extension will call, so this redirects Continue to tinyMem.
 
   // Since tinyMem is forwarding the request to your actual LLM backend
   // (which is configured in tinyMem's config.toml), you can often

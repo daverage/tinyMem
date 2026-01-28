@@ -24,6 +24,8 @@ export HTTPS_PROXY="http://localhost:8080"
 gcloud genai models list
 ```
 
+The Google Cloud SDK docs (November 2025) describe those same proxy commands and explicitly state that values persisted via `gcloud config set proxy/*` override the HTTP_PROXY/HTTPS_PROXY environment variables, so the CLI will keep routing through tinyMem even if `NO_PROXY` is present.
+
 ### Using `gcloud config` commands
 
 You can also configure the proxy settings directly within `gcloud`'s configuration.
@@ -83,6 +85,8 @@ except Exception as e:
 # response = model.generate_content("Tell me a story about a magical cat.")
 # print(response.text)
 ```
+The Google Generative AI client docs (October 2025) describe passing `HttpOptions(client_args={"proxy": ...})` to expose a custom HTTPX proxy while also respecting the standard `HTTP_PROXY`/`HTTPS_PROXY` environment variables if you don't configure `HttpOptions`.
+
 Choose the method that best suits your setup. The `HttpOptions` method is generally more explicit and reliable for programmatic configuration.
 
 ## 3. MCP Integration (for supported Gemini CLI versions)
@@ -108,3 +112,5 @@ If you are using a Gemini CLI that supports MCP (Meta-Code Protocol), you can co
 2.  Add the `tinymem` server configuration to the `mcpServers` object.
 3.  Ensure `tinymem` is in your system's PATH, or provide the absolute path to the executable in the `command` field.
 4.  Once configured, the Gemini CLI will be able to access `tinyMem`'s memory tools (e.g., `memory_query`, `memory_write`).
+
+The Gemini CLI configuration guide (late 2025) describes exactly this `mcpServers` structure within `.gemini/settings.json`, so copying the above snippet matches the official schema.

@@ -23,7 +23,7 @@ type App struct {
 	DB          *storage.DB
 	Memory      *memory.Service
 	ProjectPath string
-	ProjectID   string // New field for the current project's ID
+	ProjectID   string            // New field for the current project's ID
 	ServerMode  doctor.ServerMode // Track the server mode
 }
 
@@ -80,7 +80,7 @@ func NewApp() (*App, error) {
 		DB:          db,
 		Memory:      memoryService,
 		ProjectPath: projectPath,
-		ProjectID:   projectID, // Store the generated project ID
+		ProjectID:   projectID,             // Store the generated project ID
 		ServerMode:  doctor.StandaloneMode, // Default to standalone mode
 	}, nil
 }

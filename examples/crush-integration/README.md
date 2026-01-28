@@ -49,6 +49,8 @@ Create a `.crush.json` file in your project root (or `~/.config/crush/crush.json
 }
 ```
 
+The official Crush docs (2025) describe this same `mcp` structure—`type`, `command`, `args`, `timeout`, and `env`—and use `type: "stdio"` for local MCP servers, which confirms this example aligns with the upstream schema.
+
 ### Configuration Options
 
 | Option | Description |

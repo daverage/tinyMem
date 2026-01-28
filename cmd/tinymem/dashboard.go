@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/tabwriter"
 	"time"
 
+	"github.com/a-marczewski/tinymem/internal/analytics"
 	"github.com/a-marczewski/tinymem/internal/app"
 	"github.com/a-marczewski/tinymem/internal/config"
 	"github.com/a-marczewski/tinymem/internal/memory"
@@ -44,6 +46,9 @@ func runDashboardCmd(a *app.App, cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	// Initialize analytics
+	taskAnalytics := analytics.NewTaskAnalytics(dbConn)
+
 	// Print dashboard header
 	fmt.Println("┌─────────────────────────────────────────────────────────────┐")
 	fmt.Println("│                    tinyMem Dashboard                      │")
@@ -65,7 +70,10 @@ func runDashboardCmd(a *app.App, cmd *cobra.Command, args []string) {
 	// Section 5: Needs Attention / Suspicious Items
 	printNeedsAttention(dbConn)
 
-	// Section 6: Recall Effectiveness
+	// Section 6: Task Analytics with Enhanced Visualizations
+	printEnhancedTaskAnalytics(taskAnalytics, a.ProjectID)
+
+	// Section 7: Recall Effectiveness
 	printRecallEffectiveness(dbConn)
 }
 
@@ -364,10 +372,104 @@ func printNeedsAttention(db *sql.DB) {
 	fmt.Println()
 }
 
+// printEnhancedTaskAnalytics prints the enhanced task analytics section with visualizations
+func printEnhancedTaskAnalytics(analyticsService *analytics.TaskAnalytics, projectID string) {
+	fmt.Println("┌─────────────────────────────────────────────────────────────┐")
+	fmt.Println("│ 6️⃣  Task Analytics & Visualizations                       │")
+	fmt.Println("└─────────────────────────────────────────────────────────────┘")
+
+	// Get comprehensive task metrics using the analytics service
+	metrics, err := analyticsService.GetTaskMetrics(projectID)
+	if err != nil {
+		fmt.Printf("Error getting task metrics: %v\n", err)
+		return
+	}
+
+	// Print summary statistics
+	fmt.Printf("📊 Summary:\n")
+	fmt.Printf("   Total Tasks: %d\n", metrics.TotalTasks)
+	fmt.Printf("   Completed: %d\n", metrics.CompletedTasks)
+	fmt.Printf("   Incomplete: %d\n", metrics.IncompleteTasks)
+
+	if metrics.TotalTasks > 0 {
+		fmt.Printf("   Completion Rate: %.1f%%\n", metrics.CompletionRate)
+		// Visualize completion rate
+		fmt.Printf("   Progress: %s\n", metrics.VisualizeCompletionRate(30))
+	}
+
+	// Show average time to complete if available
+	if metrics.AverageTimeToComplete > 0 {
+		hours := metrics.AverageTimeToComplete.Hours()
+		fmt.Printf("   Avg. Time to Complete: %.1f hours\n", hours)
+	}
+
+	fmt.Println()
+
+	// Visualize section completion rates
+	if len(metrics.TasksBySection) > 0 {
+		fmt.Printf("📈 Completion by Section:\n")
+		sectionVisuals := metrics.VisualizeSectionRates(20)
+		for _, vis := range sectionVisuals {
+			fmt.Printf("   %s\n", vis)
+		}
+		fmt.Println()
+	}
+
+	// Show completion trend visualization
+	if len(metrics.CompletionTrend) > 0 {
+		fmt.Printf("📉 Completion Trend (last 30 days):\n")
+		trendLines := metrics.VisualizeCompletionTrend(10)
+		for _, line := range trendLines {
+			fmt.Printf("   %s\n", line)
+		}
+		fmt.Println()
+	}
+
+	// Show recent tasks
+	fmt.Printf("📋 Recent Tasks:\n")
+	db := analyticsService.DB
+	recentRows, err := db.Query(`
+		SELECT summary, detail, updated_at
+		FROM memories
+		WHERE project_id = ? AND type = 'task'
+		ORDER BY updated_at DESC
+		LIMIT 5;
+	`, projectID)
+	if err != nil {
+		fmt.Printf("Error querying recent tasks: %v\n", err)
+	} else {
+		defer recentRows.Close()
+		fmt.Printf("   %-30s %-10s %-12s\n", "Summary", "Status", "Updated")
+		fmt.Printf("   %-30s %-10s %-12s\n", "-------", "------", "-------")
+		for recentRows.Next() {
+			var summary, detail, updatedAt string
+			err := recentRows.Scan(&summary, &detail, &updatedAt)
+			if err != nil {
+				continue
+			}
+
+			// Determine status from detail
+			status := "Incomplete"
+			if strings.Contains(detail, "Completed: true") {
+				status = "Complete"
+			}
+
+			// Truncate summary if too long
+			truncatedSummary := summary
+			if len(truncatedSummary) > 30 {
+				truncatedSummary = truncatedSummary[:27] + "..."
+			}
+
+			fmt.Printf("   %-30s %-10s %-12s\n", truncatedSummary, status, updatedAt[:10]) // Just date part
+		}
+	}
+	fmt.Println()
+}
+
 // printRecallEffectiveness prints the recall effectiveness section
 func printRecallEffectiveness(db *sql.DB) {
 	fmt.Println("┌─────────────────────────────────────────────────────────────┐")
-	fmt.Println("│ 6️⃣  Recall Effectiveness                                    │")
+	fmt.Println("│ 7️⃣  Recall Effectiveness                                    │")
 	fmt.Println("└─────────────────────────────────────────────────────────────┘")
 
 	// Check if recall metrics table exists

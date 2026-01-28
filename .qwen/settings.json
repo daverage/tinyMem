@@ -3,7 +3,7 @@
     "tinymem": {
       "command": "tinymem",
       "args": ["mcp"],
-      "exp": {
+      "env": {
         "TINYMEM_METRICS_ENABLED": "true"
       },
       "timeout": 30000,

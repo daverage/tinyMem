@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	SchemaVersion = 6
+	SchemaVersion = 7
 )
 
 // DB represents the database connection
@@ -87,6 +87,10 @@ func (db *DB) migrate() error {
 			}
 		case 6:
 			if err := db.applySchemaV6(tx); err != nil {
+				return fmt.Errorf("failed to apply schema v%d: %w", version, err)
+			}
+		case 7:
+			if err := db.applySchemaV7(tx); err != nil {
 				return fmt.Errorf("failed to apply schema v%d: %w", version, err)
 			}
 		default:
@@ -435,7 +439,7 @@ func (db *DB) applySchemaV1(tx *sql.Tx) error {
 		CREATE TABLE IF NOT EXISTS memories (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			project_id TEXT NOT NULL,
-			type TEXT NOT NULL CHECK(type IN ('fact', 'claim', 'plan', 'decision', 'constraint', 'observation', 'note')),
+			type TEXT NOT NULL CHECK(type IN ('fact', 'claim', 'plan', 'decision', 'constraint', 'observation', 'note', 'task')),
 			summary TEXT NOT NULL,
 			detail TEXT,
 			key TEXT,
@@ -553,6 +557,114 @@ func (db *DB) hasFTSTable(tx *sql.Tx) (bool, error) {
 		return false, err
 	}
 	return exists > 0, nil
+}
+
+// applySchemaV7 adds 'task' to the allowed memory types.
+func (db *DB) applySchemaV7(tx *sql.Tx) error {
+	// Since SQLite doesn't support ALTER TABLE to modify CHECK constraints directly,
+	// we need to recreate the table with the new constraint.
+	// First, create a backup of the current data
+	_, err := tx.Exec(`
+		CREATE TEMPORARY TABLE memories_backup AS SELECT * FROM memories
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Drop the original table
+	_, err = tx.Exec(`
+		DROP TABLE memories
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Create the new table with the updated schema
+	_, err = tx.Exec(`
+		CREATE TABLE memories (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			project_id TEXT NOT NULL,
+			type TEXT NOT NULL CHECK(type IN ('fact', 'claim', 'plan', 'decision', 'constraint', 'observation', 'note', 'task')),
+			summary TEXT NOT NULL,
+			detail TEXT,
+			key TEXT,
+			source TEXT,
+			recall_tier TEXT NOT NULL DEFAULT 'opportunistic',
+			truth_state TEXT NOT NULL DEFAULT 'tentative',
+			classification TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			superseded_by INTEGER REFERENCES memories(id),
+			UNIQUE(key, project_id) ON CONFLICT REPLACE
+		)
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Copy the data back
+	_, err = tx.Exec(`
+		INSERT INTO memories SELECT * FROM memories_backup
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Drop the backup table
+	_, err = tx.Exec(`
+		DROP TABLE memories_backup
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Recreate the FTS triggers if FTS is available
+	ftsExists, err := db.hasFTSTable(tx)
+	if err != nil {
+		return err
+	}
+
+	if ftsExists {
+		// Drop existing FTS triggers
+		for _, trigger := range []string{"memories_ai", "memories_ad", "memories_au"} {
+			if _, err := tx.Exec(fmt.Sprintf("DROP TRIGGER IF EXISTS %s;", trigger)); err != nil {
+				return err
+			}
+		}
+
+		// Recreate the triggers to keep FTS table in sync
+		_, err = tx.Exec(`
+			CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+				INSERT INTO memories_fts(rowid, summary, detail) VALUES (new.id, new.summary, new.detail);
+			END;
+		`)
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.Exec(`
+			CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+				DELETE FROM memories_fts WHERE rowid = old.id;
+			END;
+		`)
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.Exec(`
+			CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+				DELETE FROM memories_fts WHERE rowid = old.id;
+				INSERT INTO memories_fts(rowid, summary, detail) VALUES (new.id, new.summary, new.detail);
+			END;
+		`)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Update schema version
+	_, err = tx.Exec(fmt.Sprintf("PRAGMA user_version = %d", SchemaVersion))
+	return err
 }
 
 // Close closes the database connection

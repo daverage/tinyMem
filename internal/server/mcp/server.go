@@ -452,8 +452,8 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 		Detail         string `json:"detail"`
 		Key            string `json:"key"`
 		Source         string `json:"source"`
-		Classification string `json:"classification"`  // Optional classification field
-		Evidence []struct {
+		Classification string `json:"classification"` // Optional classification field
+		Evidence       []struct {
 			Type    string `json:"type"`
 			Content string `json:"content"`
 		} `json:"evidence"`

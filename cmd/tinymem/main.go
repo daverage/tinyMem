@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/a-marczewski/tinymem/internal/analytics"
 	"github.com/a-marczewski/tinymem/internal/app"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -268,6 +269,56 @@ func runStatsCmd(a *app.App, cmd *cobra.Command, args []string) {
 		fmt.Printf("  %s: %d\n", string(memType), count)
 	}
 
+	// Task-specific statistics using analytics package
+	if taskCount, exists := typeCounts[memory.Task]; exists && taskCount > 0 {
+		fmt.Printf("\nTask Statistics:\n")
+
+		// Initialize analytics service
+		taskAnalytics := analytics.NewTaskAnalytics(a.DB.GetConnection())
+
+		// Get comprehensive task metrics
+		metrics, err := taskAnalytics.GetTaskMetrics(a.ProjectID)
+		if err != nil {
+			fmt.Printf("  Error getting detailed task metrics: %v\n", err)
+
+			// Fallback to basic calculation
+			var completedTasks int
+			for _, mem := range memories {
+				if mem.Type == memory.Task && strings.Contains(mem.Detail, "Completed: true") {
+					completedTasks++
+				}
+			}
+
+			completionRate := 0.0
+			if taskCount > 0 {
+				completionRate = float64(completedTasks) / float64(taskCount) * 100
+			}
+
+			fmt.Printf("  Total Tasks: %d\n", taskCount)
+			fmt.Printf("  Completed: %d\n", completedTasks)
+			fmt.Printf("  Completion Rate: %.1f%%\n", completionRate)
+		} else {
+			fmt.Printf("  Total Tasks: %d\n", metrics.TotalTasks)
+			fmt.Printf("  Completed: %d\n", metrics.CompletedTasks)
+			fmt.Printf("  Incomplete: %d\n", metrics.IncompleteTasks)
+			fmt.Printf("  Completion Rate: %.1f%%\n", metrics.CompletionRate)
+
+			if metrics.AverageTimeToComplete > 0 {
+				hours := metrics.AverageTimeToComplete.Hours()
+				fmt.Printf("  Avg. Time to Complete: %.1f hours\n", hours)
+			}
+
+			// Task breakdown by section if available
+			if len(metrics.TasksBySection) > 0 {
+				fmt.Printf("  By Section:\n")
+				for section, sectionMetrics := range metrics.TasksBySection {
+					fmt.Printf("    %s: %d/%d (%.1f%%)\n",
+						section, sectionMetrics.Completed, sectionMetrics.Total, sectionMetrics.Rate)
+				}
+			}
+		}
+	}
+
 	// Mode-specific stats
 	switch a.ServerMode {
 	case doctor.MCPMode:
@@ -417,19 +468,19 @@ func runWriteCmd(a *app.App, cmd *cobra.Command, args []string) {
 	if !memType.IsValid() {
 		fmt.Printf("❌ Invalid memory type: %s\n", writeType)
 		fmt.Println("Valid types: fact, claim, plan, decision, constraint, observation, note")
-		return
+		os.Exit(1)
 	}
 
 	// Facts require evidence and can't be created via CLI
 	if memType == memory.Fact {
 		fmt.Println("❌ Facts cannot be created directly via CLI - they require verified evidence.")
 		fmt.Println("Use 'claim' type instead, or use the MCP interface with evidence.")
-		return
+		os.Exit(1)
 	}
 
 	if writeSummary == "" {
 		fmt.Println("❌ Summary is required. Use --summary or -s flag.")
-		return
+		os.Exit(1)
 	}
 
 	newMemory := &memory.Memory{
@@ -449,7 +500,7 @@ func runWriteCmd(a *app.App, cmd *cobra.Command, args []string) {
 	if err := a.Memory.CreateMemory(newMemory); err != nil {
 		a.Logger.Error("Failed to create memory", zap.Error(err))
 		fmt.Printf("❌ Failed to create memory: %v\n", err)
-		return
+		os.Exit(1)
 	}
 
 	fmt.Printf("✅ Memory created successfully!\n")
@@ -482,7 +533,6 @@ var dashboardCmd = &cobra.Command{
 	Use:   "dashboard",
 	Short: "Show a snapshot dashboard of memory state",
 }
-
 
 // newAppRunner creates a Cobra Run function closure with the app.App instance.
 func newAppRunner(a *app.App, runFunc func(*app.App, *cobra.Command, []string)) func(*cobra.Command, []string) {

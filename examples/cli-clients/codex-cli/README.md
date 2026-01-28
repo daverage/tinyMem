@@ -6,6 +6,8 @@ This guide explains how to configure OpenAI API clients (which previously includ
 
 Before you begin, ensure `tinyMem` is running in proxy mode (e.g., `tinymem proxy`) and listening on `http://localhost:8080` (or your configured port).
 
+The OpenAI Python client documentation (November 2025) explicitly shows how to pass a custom `httpx` client with proxy settings plus a `base_url`, and it calls out `OPENAI_BASE_URL` as the environment variable you can use instead of embedding a full URL in your code, so the examples below mirror that official guidance.
+
 ## 1. OpenAI Python Client Library (`openai`)
 
 The OpenAI Python client library (using the `openai` package) can be configured to use a proxy in several ways.

@@ -10,26 +10,26 @@ import (
 func memory_addContract() {
 	fmt.Println("This function will add the MANDATORY TINYMEM CONTROL PROTOCOL to the following files:")
 	fmt.Println("- AGENTS.md")
-	fmt.Println("- QWEN.md") 
+	fmt.Println("- QWEN.md")
 	fmt.Println("- GEMINI.md")
 	fmt.Println("- CLAUDE.md")
 	fmt.Println()
 	fmt.Println("It will append the contract to the end of each file if it doesn't already exist.")
 	fmt.Println("It will also update README.md to include setup instructions for MCP usage.")
 	fmt.Println()
-	
+
 	var response string
 	fmt.Print("Are you happy to proceed? (yes/no): ")
 	fmt.Scanln(&response)
-	
+
 	if strings.ToLower(response) != "yes" && strings.ToLower(response) != "y" {
 		fmt.Println("Operation cancelled.")
 		return
 	}
-	
+
 	files := []string{"AGENTS.md", "QWEN.md", "GEMINI.md", "CLAUDE.md"}
 	contractContent := getContractContent()
-	
+
 	for _, filename := range files {
 		if _, err := os.Stat(filename); err == nil {
 			// File exists, append contract if not already present
@@ -39,10 +39,10 @@ func memory_addContract() {
 			createFileWithContract(filename, contractContent)
 		}
 	}
-	
+
 	// Update README.md
 	updateReadme()
-	
+
 	fmt.Println("Operation completed successfully!")
 }
 
@@ -145,20 +145,20 @@ func appendContractToFile(filename, contractContent string) {
 		fmt.Printf("Error reading %s: %v\n", filename, err)
 		return
 	}
-	
+
 	fileContent := string(content)
 	if strings.Contains(fileContent, "MANDATORY TINYMEM CONTROL PROTOCOL") {
 		fmt.Printf("Contract already exists in %s, skipping.\n", filename)
 		return
 	}
-	
+
 	newContent := fileContent + contractContent
 	err = os.WriteFile(filename, []byte(newContent), 0644)
 	if err != nil {
 		fmt.Printf("Error writing to %s: %v\n", filename, err)
 		return
 	}
-	
+
 	fmt.Printf("Contract appended to %s\n", filename)
 }
 
@@ -169,7 +169,7 @@ func createFileWithContract(filename, contractContent string) {
 		fmt.Printf("Error creating %s: %v\n", filename, err)
 		return
 	}
-	
+
 	fmt.Printf("Created %s with contract\n", filename)
 }
 
@@ -179,13 +179,13 @@ func updateReadme() {
 		fmt.Printf("Error reading README.md: %v\n", err)
 		return
 	}
-	
+
 	readmeContent := string(content)
 	if strings.Contains(readmeContent, "MANDATORY TINYMEM CONTROL PROTOCOL") {
 		fmt.Println("Contract section already exists in README.md, skipping.")
 		return
 	}
-	
+
 	// Find a good place to insert the MCP setup instructions
 	insertionPoint := strings.Index(readmeContent, "## IDE Integration")
 	if insertionPoint == -1 {
@@ -195,22 +195,22 @@ func updateReadme() {
 		readmeContent += "Include the contract content from [AGENT_CONTRACT.md](AGENT_CONTRACT.md) in your agent's system prompt to ensure proper interaction with tinyMem.\n\n"
 	} else {
 		// Insert after the IDE Integration heading
-		before := readmeContent[:insertionPoint + len("## IDE Integration")]
-		after := readmeContent[insertionPoint + len("## IDE Integration"):]
-		
+		before := readmeContent[:insertionPoint+len("## IDE Integration")]
+		after := readmeContent[insertionPoint+len("## IDE Integration"):]
+
 		addition := "\n\n### Agent Setup for MCP Usage\n\n"
 		addition += "When using tinyMem as an MCP server for AI agents, ensure that your agents follow the MANDATORY TINYMEM CONTROL PROTOCOL.\n\n"
 		addition += "Include the contract content from [AGENT_CONTRACT.md](AGENT_CONTRACT.md) in your agent's system prompt to ensure proper interaction with tinyMem.\n\n"
-		
+
 		readmeContent = before + addition + after
 	}
-	
+
 	err = os.WriteFile("README.md", []byte(readmeContent), 0644)
 	if err != nil {
 		fmt.Printf("Error writing to README.md: %v\n", err)
 		return
 	}
-	
+
 	fmt.Println("README.md updated with MCP setup instructions")
 }
 

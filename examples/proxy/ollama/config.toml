@@ -9,6 +9,7 @@ port = 8080
 
 # The base URL of your local LLM provider.
 # This is the default API endpoint for Ollama.
+# Ollama's HTTP API defaults to `http://localhost:11434` (the OpenAI compatibility layer uses `/v1`), so this base_url matches their published endpoint in late 2025.
 base_url = "http://localhost:11434/v1"
 
 # All other tinyMem settings can also be configured in this file.
