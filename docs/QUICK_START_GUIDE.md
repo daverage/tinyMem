@@ -1,89 +1,106 @@
-# tinyMem Quick Start Guide (for Beginners)
+# Quick Start Guide
 
-Welcome to tinyMem! This guide walks you through the most straightforward way to get tinyMem running in your project, with clear steps, minimal jargon, and pointers to the deeper docs when you are ready for integrations.
+**Get your AI to remember your project context in 5 minutes.**
 
-## Why tinyMem first?
-Language models forget context quickly and can hallucinate facts without checking the codebase. tinyMem solves this by keeping a local, project-scoped repository of classified, evidence-backed memories. That means:
+tinyMem is a local tool that sits between your code and your AI assistant. It creates a "memory brain" for your specific project so you don't have to keep repeating context.
 
-- your assistant can remember decisions, constraints, and facts without re-reading every file;
-- every claim is backed by verifiable evidence before it becomes a fact;
-- everything runs locally, so you stay in control of your data and tooling.
+---
 
-This guide helps you reach the point where tinyMem is running and ready to connect to your AI client. For more detail on integrations, recall discipline, and CLI usage, see the full [README](README.md).
+## 1. Install tinyMem
 
-## Before you begin
-
-1.  **Pick the right binary** for your machine (64-bit Windows, macOS Intel/ARM, or Linux) from the [releases page](https://github.com/andrzejmarczewski/tinyMem/releases).
-2.  **Keep a terminal handy** (PowerShell, Command Prompt, or Terminal.app) and stay in the folder where you dropped the binary.
-3.  **Plan to keep the tinyMem process running** while you use your AI assistant; closing it stops the proxy/ MCP server.
-
-## Step 1: Download tinyMem
+First, get the single executable file. No complex installers or dependencies required.
 
 ### Windows
+1.  Download the **[latest release](https://github.com/andrzejmarczewski/tinyMem/releases)** (`tinymem-windows-amd64.exe`).
+2.  Create a folder `C:\Tools` (or use an existing one) and put the file there.
+3.  Rename it to `tinymem.exe` for convenience.
+4.  **Important:** Add this folder to your PATH so you can run it from anywhere.
+    *   *Search "Edit the system environment variables" > "Environment Variables" > Select "Path" in User variables > "Edit" > "New" > Paste `C:\Tools` > OK > OK.*
 
-1.  Visit the [Releases page](https://github.com/andrzejmarczewski/tinyMem/releases).
-2.  Download `tinymem-windows-amd64.exe` (or the architecture that matches your machine).
-3.  Create a folder (e.g., `C:\tinyMem`) and move the executable there.
-4.  Rename it to `tinymem.exe` so commands look cleaner.
-
-### macOS
-
-1.  Visit the [Releases page](https://github.com/andrzejmarczewski/tinyMem/releases).
-2.  If you have Apple Silicon (M1, M2, M3), download `tinymem-darwin-arm64`. Otherwise, choose `tinymem-darwin-amd64`.
-3.  Move the file to a folder you can access easily (Desktop, Documents, or a dedicated tooling folder).
-4.  Rename it to `tinymem` and run `chmod +x tinymem` in Terminal to make it executable.
-
-## Step 2: Start tinyMem
-
-### Windows
-
-1.  Open Command Prompt, then `cd` into the folder where `tinymem.exe` lives.
-2.  Run:
-
-    ```cmd
-    tinymem.exe proxy
-    ```
-
-    or, if you plan to use MCP agents:
-
-    ```cmd
-    tinymem.exe mcp
-    ```
-
-3.  Leave the window open. tinyMem keeps listening until you close the terminal.
-
-### macOS (and Linux)
-
-1.  Open Terminal and `cd` into the folder containing `tinymem`.
-2.  Run:
-
+### macOS / Linux
+1.  Open your terminal.
+2.  Run this command to download and install to `/usr/local/bin`:
     ```bash
-    ./tinymem proxy
+    curl -L "https://github.com/andrzejmarczewski/tinyMem/releases/latest/download/tinymem-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)" -o tinymem
+    chmod +x tinymem
+    sudo mv tinymem /usr/local/bin/
     ```
 
-    or for MCP mode:
+---
 
+## 2. Initialize Your Project
+
+tinyMem creates a memory database *inside* your project folder (in a hidden `.tinyMem` directory). You need to tell it which project to manage.
+
+1.  Open your terminal.
+2.  Navigate to your project's root folder:
     ```bash
-    ./tinymem mcp
+    cd /path/to/my-cool-app
+    ```
+3.  Initialize the memory system:
+    ```bash
+    tinymem health
+    ```
+    *(You should see "✅ System is healthy" and a new `.tinyMem` folder created).*
+
+---
+
+## 3. Connect Your AI
+
+Choose the method that matches how you work.
+
+### Option A: IDE Integration (Claude Desktop, Cursor, VS Code)
+*Best for: Coding assistants and chat interfaces.*
+
+You need to tell your IDE to run tinyMem as a "Model Context Protocol" (MCP) server.
+
+**For Claude Desktop:**
+Edit your config file (usually `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS or `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
+
+```json
+{
+  "mcpServers": {
+    "tinymem": {
+      "command": "tinymem",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+*Restart Claude Desktop. The 🔌 icon should appear, indicating tinyMem is connected.*
+
+### Option B: Proxy Mode (Scripts & API Clients)
+*Best for: Running Python scripts, generic OpenAI clients, or terminal tools.*
+
+1.  Start the proxy in a separate terminal window:
+    ```bash
+    cd /path/to/my-cool-app
+    tinymem proxy
+    ```
+2.  In your main terminal, set the environment variable to route requests through tinyMem:
+    ```bash
+    export OPENAI_API_BASE_URL=http://localhost:8080/v1
+    ```
+3.  Run your script as usual. tinyMem will transparently intercept and inject memory.
+
+---
+
+## 4. Verify It's Working
+
+1.  Ask your AI something about your project.
+2.  Check the tinyMem status:
+    ```bash
+    tinymem stats
+    ```
+3.  See your memories visually:
+    ```bash
+    tinymem dashboard
     ```
 
-3.  If macOS reports “unverified developer,” open **System Settings > Privacy & Security** and click “Open Anyway,” then rerun the command.
+---
 
-## Step 3: Connect your AI tool
+## Next Steps
 
-1.  For HTTP clients (Curl, SDKs, VS Code extensions), point the base URL at `http://localhost:8080/v1` so tinyMem can intercept requests.
-2.  For MCP-aware IDEs (Claude Desktop, Cursor, Qwen, Gemini), configure the MCP server to run `tinymem mcp` from the folder where the executable lives.
-3.  Use the `tinymem health`, `tinymem stats`, and `tinymem dashboard` commands to confirm the service is healthy and observing your requests.
-
-## Need help?
-
-- The main [README](README.md) has sections on IDE integration, Memory types, and Chain-of-Verification (CoVe).  
-- `tinymem health` shows initialization problems.  
-- `tinymem doctor` runs diagnostics if something misbehaves.  
-- `AGENT_CONTRACT.md`, `claude.md`, `GEMINI.md`, and `QWEN.md` explain how to write agent prompts if you are embedding tinyMem into an assistant.
-
-## Optional cleanup
-
-When you finish experimenting, press `Ctrl+C` (or `⌘+C`) in the terminal to stop tinyMem. Your `.tinyMem/` folder will keep any collected memories in case you want to resume later.
-
-Happy coding with a memory-aware assistant!
+*   **Read the full [README](../README.md)** for advanced configuration.
+*   **Learn about Memory Types** to understand the difference between a `fact` (verified) and a `claim` (unverified).
+*   **Check `tinymem doctor`** if you run into any issues.

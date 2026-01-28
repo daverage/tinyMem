@@ -26,6 +26,13 @@ if [[ -n "$TINYMEM_EXTRA_BUILD_TAGS" ]]; then
     done
 fi
 
+# Determine version from git
+VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+echo "Building version: ${VERSION}"
+
+# Set up linker flags to inject version
+LDFLAGS="-X github.com/andrzejmarczewski/tinyMem/internal/version.Version=${VERSION}"
+
 tags_flag=(-tags "${build_tags[*]}")
 tag_summary="${build_tags[*]}"
 
@@ -46,7 +53,7 @@ build_target() {
     fi
 
     echo "Building ${platform_label} (including icons for Windows)..."
-    env "${env_vars[@]}" go build "${tags_flag[@]}" -o "${output}" ./cmd/tinymem
+    env "${env_vars[@]}" go build "${tags_flag[@]}" -ldflags "${LDFLAGS}" -o "${output}" ./cmd/tinymem
     echo "✓ Built ${output}"
 }
 

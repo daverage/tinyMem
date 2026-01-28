@@ -1,6 +1,6 @@
-# Tasks - Update Documentation
+# Tasks - Version Automation
 
-- [ ] Update docs/QUICK_START_GUIDE.md
-  - [ ] Structure content for clarity (Prerequisites, Install, Init, Connect, Verify)
-  - [ ] Fix the initialization instruction (ensure users run it in the *project* directory)
-  - [ ] Simplify the installation/PATH instructions for beginners
+- [x] Implement Git-based version injection
+  - [x] Modify `internal/version/version.go` to use a variable instead of a constant (allowing linker overrides)
+  - [x] Update `build/build.sh` to capture `git describe --tags` and inject it via `-ldflags`
+  - [x] Update `build/build.bat` to mirror this logic for Windows

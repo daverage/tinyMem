@@ -11,46 +11,54 @@ cd /d "%SCRIPT_DIR%.."
 REM Create releases directory if it doesn't exist
 if not exist build\releases mkdir build\releases
 
+REM Determine version from git
+for /f "tokens=*" %%i in ('git describe --tags --always --dirty 2^>nul') do set VERSION=%%i
+if "%VERSION%"=="" set VERSION=dev
+echo Building version: %VERSION%
+
+REM Set up linker flags to inject version
+set LDFLAGS=-X github.com/andrzejmarczewski/tinyMem/internal/version.Version=%VERSION%
+
 REM Build Windows AMD64
 echo Building Windows AMD64 (with icon and metadata)...
 set GOOS=windows
 set GOARCH=amd64
-go build -tags fts5 -o build\releases\tinymem-windows-amd64.exe ./cmd/tinymem
+go build -tags fts5 -ldflags "%LDFLAGS%" -o build\releases\tinymem-windows-amd64.exe ./cmd/tinymem
 echo.✓ Built build\releases\tinymem-windows-amd64.exe
 
 REM Build Windows ARM64
 echo Building Windows ARM64...
 set GOOS=windows
 set GOARCH=arm64
-go build -tags fts5 -o build\releases\tinymem-windows-arm64.exe ./cmd/tinymem
+go build -tags fts5 -ldflags "%LDFLAGS%" -o build\releases\tinymem-windows-arm64.exe ./cmd/tinymem
 echo.✓ Built build\releases\tinymem-windows-arm64.exe
 
 REM Build Linux AMD64
 echo Building Linux AMD64...
 set GOOS=linux
 set GOARCH=amd64
-go build -tags fts5 -o build\releases\tinymem-linux-amd64 ./cmd/tinymem
+go build -tags fts5 -ldflags "%LDFLAGS%" -o build\releases\tinymem-linux-amd64 ./cmd/tinymem
 echo.✓ Built build\releases\tinymem-linux-amd64
 
 REM Build Linux ARM64
 echo Building Linux ARM64...
 set GOOS=linux
 set GOARCH=arm64
-go build -tags fts5 -o build\releases\tinymem-linux-arm64 ./cmd/tinymem
+go build -tags fts5 -ldflags "%LDFLAGS%" -o build\releases\tinymem-linux-arm64 ./cmd/tinymem
 echo.✓ Built build\releases\tinymem-linux-arm64
 
 REM Build macOS AMD64
 echo Building macOS AMD64...
 set GOOS=darwin
 set GOARCH=amd64
-go build -tags fts5 -o build\releases\tinymem-darwin-amd64 ./cmd/tinymem
+go build -tags fts5 -ldflags "%LDFLAGS%" -o build\releases\tinymem-darwin-amd64 ./cmd/tinymem
 echo.✓ Built build\releases\tinymem-darwin-amd64
 
 REM Build macOS ARM64
 echo Building macOS ARM64...
 set GOOS=darwin
 set GOARCH=arm64
-go build -tags fts5 -o build\releases\tinymem-darwin-arm64 ./cmd/tinymem
+go build -tags fts5 -ldflags "%LDFLAGS%" -o build\releases\tinymem-darwin-arm64 ./cmd/tinymem
 echo.✓ Built build\releases\tinymem-darwin-arm64
 
 echo.
