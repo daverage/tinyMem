@@ -12,7 +12,7 @@ REM Create releases directory if it doesn't exist
 if not exist build\releases mkdir build\releases
 
 REM Build Windows AMD64
-echo Building Windows AMD64...
+echo Building Windows AMD64 (with icon and metadata)...
 set GOOS=windows
 set GOARCH=amd64
 go build -tags fts5 -o build\releases\tinymem-windows-amd64.exe ./cmd/tinymem

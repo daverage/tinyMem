@@ -45,7 +45,7 @@ build_target() {
         env_vars+=("GOARCH=${goarch}")
     fi
 
-    echo "Building ${platform_label}..."
+    echo "Building ${platform_label} (including icons for Windows)..."
     env "${env_vars[@]}" go build "${tags_flag[@]}" -o "${output}" ./cmd/tinymem
     echo "✓ Built ${output}"
 }

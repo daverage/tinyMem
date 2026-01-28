@@ -79,18 +79,19 @@ See [Adding `tinymem` to your PATH](#adding-tinymem-to-your-path) for detailed i
 
 ### Build from Source
 
+tinyMem is written in Go and requires version 1.25.6 or later.
+
 ```bash
 git clone https://github.com/andrzejmarczewski/tinyMem.git
-cd tinymem
+cd tinyMem
+
 # Build with all features (FTS5 enabled by default)
-make
+./build/build.sh  # macOS/Linux
+# or
+.\build\build.bat # Windows
 ```
 
-The `build-minimal` target still enforces FTS5 and is provided for compatibility with older workflows:
-
-```bash
-make build-minimal
-```
+Windows binaries automatically include the tinyMem icon and version metadata embedded via resource files. For macOS and Linux, icon files are provided in the `assets/` directory (`.icns` for macOS, `.png` for Linux) for use in desktop shortcuts or application bundles.
 
 Or run `go build` directly with the required tag:
 ```bash
@@ -880,20 +881,19 @@ This system helps track complex development work and integrates with the memory 
 
 ### Build
 
+Build using the provided scripts or directly with `go build`:
+
 ```bash
-# Build with all features (FTS5 enabled by default)
-make
+# Using build scripts (recommended)
+./build/build.sh  # macOS/Linux
+# or
+.\build\build.bat # Windows
 
-# Or build with the minimal target (FTS5 remains enabled)
-make build-minimal
-```
-
-Both `make` and `make build-minimal` enforce `-tags fts5` so every build includes SQLite FTS5 support.
-
-Alternatively, use `go build` directly:
-```bash
+# Using go build directly
 go build -tags fts5 -o tinymem ./cmd/tinymem
 ```
+
+Windows binaries automatically include the tinyMem icon and version metadata. For macOS and Linux, icon files are provided in the `assets/` directory.
 
 ### Build Scripts
 
