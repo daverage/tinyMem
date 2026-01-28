@@ -31,7 +31,7 @@ func AddContract() error {
 	}
 
 	files := []string{"AGENTS.md", "QWEN.md", "GEMINI.md", "CLAUDE.md"}
-	contractContent, err := getContractContentFromRepo()
+	contractContent, err := getContractContent()
 	if err != nil {
 		return fmt.Errorf("error fetching contract content: %w", err)
 	}
@@ -66,8 +66,17 @@ func AddContract() error {
 	return nil
 }
 
-func getContractContentFromRepo() (string, error) {
-	url := "https://raw.githubusercontent.com/daverage/tinyMem/refs/heads/main/docs/agents/AGENT_CONTRACT.md"
+func getContractContent() (string, error) {
+	// 1. Try local file first
+	localPath := filepath.Join("docs", "agents", "AGENT_CONTRACT.md")
+	if data, err := os.ReadFile(localPath); err == nil {
+		fmt.Printf("Using local contract from %s\n", localPath)
+		return string(data), nil
+	}
+
+	// 2. Fall back to GitHub
+	url := "https://raw.githubusercontent.com/a-marczewski/tinyMem/refs/heads/main/docs/agents/AGENT_CONTRACT.md"
+	fmt.Printf("Local contract not found, fetching from %s...\n", url)
 
 	resp, err := http.Get(url)
 	if err != nil {

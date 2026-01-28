@@ -1,5 +1,20 @@
 # Chain-of-Verification (CoVe) in tinyMem
 
+## 🧠 What is CoVe? (The Simple Version)
+
+Imagine you're telling a story to a friend. Sometimes your friend might mishear you or imagine details that weren't there.
+
+**CoVe is a "Double-Check" system.**
+
+When the AI tries to save a new memory (like "We decided to use Python"), CoVe stops it and asks: *"Are you sure? Did the user actually say that, or are you just guessing?"*
+
+*   **If it's a guess:** CoVe throws it away so your memory doesn't get cluttered with junk.
+*   **If it's real:** CoVe gives it a "thumbs up" and lets it be saved.
+
+It makes the AI's memory much more reliable and prevents it from "hallucinating" facts that aren't true.
+
+---
+
 ## Overview
 
 Chain-of-Verification (CoVe) is a probabilistic filtering and prioritization layer integrated into tinyMem. **CoVe is NOT a truth authority** - it is a noise filter that reduces hallucinated memory candidates and improves recall relevance.

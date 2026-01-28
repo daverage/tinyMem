@@ -31,3 +31,11 @@
 - [x] Move agent directive files to `docs/agents/`
 - [x] Update `AddContract` command to use new directory structure
 - [x] Remove redundant `cmd/add_contract/` utility
+- [x] Fix `addContract` to look for local `AGENT_CONTRACT.md` first and update GitHub URL
+
+# Tasks - README Review (User Request)
+
+- [x] Audit codebase to identify all public tools/commands
+- [x] Review current README.md content
+- [x] Update README.md to explain what each tool is, why it exists, and how to use it
+- [x] Ensure non-technical explanations are included

@@ -44,17 +44,17 @@ tinyMem gives small and medium language models (7B–13B) reliable long-term mem
 
 ---
 
-## 🎯 Purpose
+## 🎯 Why tinyMem?
 
-Language models forget context, hallucinate, and don't verify their own answers. **tinyMem** solves this by:
-1.  **Injecting Context**: Deterministic, token-budgeted context so models "remember" decisions.
-2.  **Enforcing Truth**: Claims become facts *only* when locally verified (files, greps, tests).
-3.  **Local Privacy**: Stays entirely on your machine. No cloud lock-in.
+If you've ever used an AI for a large project, you know it eventually starts to "forget." It forgets which database you chose, it forgets the naming conventions you agreed on, and it starts making things up (hallucinating).
 
-### Philosophy
-1.  **Memory is not gospel**: Model output is never trusted by default.
-2.  **Facts require evidence**: Claims without verification stay as claims.
-3.  **Reality checks are free**: We use local tools (grep, tests) to verify reality.
+**tinyMem is a "Hard Drive for your AI's Brain."**
+
+Instead of the AI trying to remember everything in its limited "short-term memory" (the chat window), tinyMem saves important facts and decisions to a local database on your computer. When the AI needs to answer a question or write code, tinyMem "reminds" it of the relevant facts.
+
+*   **No more repeating yourself**: "Remember, we use Go for the backend."
+*   **No more AI hallucinations**: If the AI isn't sure, it checks its memory.
+*   **Total Privacy**: Your project data never leaves your machine to "train" a model.
 
 ---
 
@@ -130,34 +130,29 @@ cd tinyMem
 ## 💻 Usage
 
 ### CLI Commands
-```bash
-# Core
-tinymem health          # Initialize/Check system
-tinymem stats           # View memory statistics
-tinymem dashboard       # Visual snapshot of memory state
+The tinyMem CLI is your primary way to interact with the system from your terminal.
 
-# Memory Operations
-tinymem query "auth"    # Search memories
-tinymem recent          # Show recent entries
-tinymem write ...       # Manually add memory (see below)
-
-# Modes
-tinymem proxy           # Start HTTP proxy
-tinymem mcp             # Start MCP server
-
-# Utilities
-tinymem addContract     # Add protocol to agent config files
-```
+| Command | What it is | Why use it? | Example |
+|:---|:---|:---|:---|
+| `health` | **System Check** | To make sure tinyMem is installed correctly and can talk to its database. | `tinymem health` |
+| `stats` | **Memory Overview** | To see how many memories you've stored and how your tasks are progressing. | `tinymem stats` |
+| `dashboard` | **Visual Status** | To get a quick, beautiful summary of your project's memory "health." | `tinymem dashboard` |
+| `query` | **Search** | To find specific information you or the AI saved previously. | `tinymem query "API"` |
+| `recent` | **Recent History** | To see the last few things tinyMem learned or recorded. | `tinymem recent` |
+| `write` | **Manual Note** | To tell the AI something important that it should never forget. | `tinymem write --type decision --summary "Use Go 1.25"` |
+| `run` | **Command Wrapper**| To run a script or tool (like `make` or `npm test`) while "reminding" it of project context. | `tinymem run make build` |
+| `proxy` / `mcp` | **Server Modes** | To start the "brain" that connects tinyMem to your IDE or AI client. | `tinymem mcp` |
+| `doctor` | **Diagnostics** | To fix the system if it stops working or has configuration issues. | `tinymem doctor` |
+| `addContract` | **Agent Setup** | To automatically configure your AI agents to use tinyMem properly. | `tinymem addContract` |
 
 ### Writing Memories
+Think of writing memories as "tagging" reality for the AI.
 ```bash
-# Add a simple note
-tinymem write --type note --summary "Refactoring user API"
+# Record a decision so the AI doesn't suggest an alternative later
+tinymem write --type decision --summary "Switching to REST" --detail "GraphQL was too complex for this scale."
 
-# Add a high-value decision
-tinymem write --type decision --summary "Use PostgreSQL" \
-  --detail "Needed for JSONB support" \
-  --source "Architecture Review"
+# Add a simple note for yourself or the AI
+tinymem write --type note --summary "The database password is in the vault, not .env"
 ```
 
 ### Memory Types & Truth
@@ -176,7 +171,7 @@ tinymem write --type decision --summary "Use PostgreSQL" \
 
 ## 🤖 The Ralph Loop (Autonomous Repair)
 
-The **Ralph Loop** (`memory_ralph`) is a deterministic governor for autonomous codebase repair. Once triggered, tinyMem takes control, iterating until evidence passes or limits are reached.
+The **Ralph Loop** (`memory_ralph`) is a deterministic governor for autonomous codebase repair. **It is not automatic; the AI must explicitly choose to "engage" it** when it detects a complex failure that requires iterative fixing. Once triggered, tinyMem takes control, iterating until evidence passes or limits are reached.
 
 ### 🔄 Execution Phases
 | Phase | Action | Purpose |
@@ -219,13 +214,14 @@ Compatible with Claude Desktop, Cursor, and other MCP clients.
 *Run `./verify_mcp.sh` to validate your setup.*
 
 #### Available MCP Tools:
-- `memory_query` - Search memories using full-text or semantic search
-- `memory_recent` - Retrieve the most recent memories
-- `memory_write` - Create a new memory entry with optional evidence
-- `memory_stats` - Get statistics about stored memories
-- `memory_health` - Check the health status of the memory system
-- `memory_doctor` - Run diagnostics on the memory system
-- `memory_ralph` - Execute an autonomous evidence-gated repair loop
+When tinyMem is running in MCP mode, your AI agent (like Claude or Gemini) gains these "superpowers":
+
+*   **`memory_query`**: **Search the past.** The AI uses this to find facts, decisions, or notes related to its current task.
+*   **`memory_recent`**: **Get up to speed.** The AI uses this when it first starts to see what has happened recently in the project.
+*   **`memory_write`**: **Learn something new.** The AI uses this to save a new fact or decision it just discovered or made. *Facts require "Evidence" (like checking if a file exists).*
+*   **`memory_ralph`**: **Self-Repair.** This is the "Nuclear Option." The AI uses this to try and fix a bug autonomously by running tests, reading errors, and retrying until it works.
+*   **`memory_stats` & `memory_health`**: **System Check.** The AI uses these to check if its memory is working correctly or how much it has learned.
+*   **`memory_doctor`**: **Self-Diagnosis.** If the AI feels "confused" or senses memory issues, it can run this to identify problems.
 
 ### AI Agent Directives
 **CRITICAL**: If you are building an AI agent, you MUST include the appropriate directive in its system prompt to ensure it uses tinyMem correctly.
