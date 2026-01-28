@@ -103,18 +103,36 @@ func appendContractToFile(filename, contractContent string) error {
 	}
 
 	fileContent := string(content)
-	if strings.Contains(fileContent, "MANDATORY TINYMEM CONTROL PROTOCOL") {
-		fmt.Printf("Contract already exists in %s, skipping.\n", filename)
-		return nil
+
+	// Marker for the start of the contract
+	marker := "# TINYMEM CONTROL PROTOCOL"
+	idx := strings.Index(fileContent, marker)
+
+	if idx != -1 {
+		// Check if it's already identical to avoid unnecessary writes
+		existingContract := fileContent[idx:]
+		if existingContract == contractContent {
+			fmt.Printf("Contract in %s is already up to date, skipping.\n", filename)
+			return nil
+		}
+
+		fmt.Printf("Updating existing contract in %s...\n", filename)
+		// Remove old contract (from marker to end)
+		fileContent = fileContent[:idx]
+	} else {
+		fmt.Printf("Appending contract to %s...\n", filename)
+		// Ensure there's a newline if we're appending to a non-empty file
+		if len(fileContent) > 0 && !strings.HasSuffix(fileContent, "\n") {
+			fileContent += "\n"
+		}
 	}
 
-	newContent := fileContent + "\n" + contractContent
+	newContent := fileContent + contractContent
 	err = os.WriteFile(filename, []byte(newContent), 0644)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("Contract appended to %s\n", filename)
 	return nil
 }
 

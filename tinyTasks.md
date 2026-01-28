@@ -2,6 +2,8 @@
 
 - [x] Implement Git-based version injection
 - [x] Create automated release script (`build/release.sh`)
+- [x] Refactor `release.sh` to build before commit and ask for commit message
+- [x] Create Windows equivalent release script (`build/release.bat`)
 - [x] Remove obsolete "REPOSITORY VERSIONING RULES" from Agent docs
   - [x] Update `AGENTS.md`
   - [x] Update `CLAUDE.md`
@@ -32,6 +34,7 @@
 - [x] Update `AddContract` command to use new directory structure
 - [x] Remove redundant `cmd/add_contract/` utility
 - [x] Fix `addContract` to look for local `AGENT_CONTRACT.md` first and update GitHub URL
+- [x] Implement logic to replace old contracts with the new version in `addContract`
 
 # Tasks - README Review (User Request)
 

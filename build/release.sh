@@ -45,9 +45,11 @@ echo "------------------------------------------------"
 echo "🚀 Ready to release: $NEW_TAG"
 echo "------------------------------------------------"
 echo "This will:"
-echo "  1. Create git tag $NEW_TAG"
+echo "  1. Update internal/version/version.go to $NEW_TAG"
 echo "  2. Run ./build/build.sh to generate binaries"
-echo "  3. Push 'main' and tags to origin"
+echo "  3. Commit all changes and built binaries"
+echo "  4. Create git tag $NEW_TAG"
+echo "  5. Push 'main' and tags to origin"
 echo ""
 read -p "Continue? (y/N) " -n 1 -r
 echo ""
@@ -56,15 +58,29 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     exit 1
 fi
 
-# 5. Create Tag
-echo "🏷️  Tagging $NEW_TAG..."
-git tag -a "$NEW_TAG" -m "Release $NEW_TAG"
+# 5. Update version.go
+echo "📝 Updating version.go to $NEW_TAG..."
+sed -i '' "s/var Version = \".*\"/var Version = \"$NEW_TAG\"/" internal/version/version.go
 
 # 6. Build
 echo "🔨 Building binaries..."
 ./build/build.sh
 
-# 7. Push
+# 7. Commit changes
+echo "💾 Preparing commit..."
+git add .
+read -p "Enter commit message (default: Release $NEW_TAG): " COMMIT_MSG
+if [[ -z "$COMMIT_MSG" ]]; then
+    COMMIT_MSG="Release $NEW_TAG"
+fi
+
+git commit -m "$COMMIT_MSG"
+
+# 8. Create Tag
+echo "🏷️  Tagging $NEW_TAG..."
+git tag -a "$NEW_TAG" -m "Release $NEW_TAG"
+
+# 9. Push
 echo "⬆️  Pushing to origin..."
 git push origin main
 git push origin "$NEW_TAG"
