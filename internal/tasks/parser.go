@@ -68,8 +68,18 @@ func ParseTasks(r io.Reader) ([]*Task, error) {
 			taskIndex++
 
 			// Extract task details and advance the index past subtasks
-			title, stepsTotal, stepsDone, nextIdx := parseTopLevelTask(lines, i)
+			title, topCompleted, stepsTotal, stepsDone, nextIdx := parseTopLevelTask(lines, i)
 			i = nextIdx // Move index to the next position after subtasks
+
+			// Logic for task completion:
+			// 1. If there are subtasks, the top-level is completed only if all subtasks are done
+			// 2. If there are no subtasks, the top-level is completed if its checkbox is checked
+			completed := false
+			if stepsTotal > 0 {
+				completed = (stepsTotal == stepsDone)
+			} else {
+				completed = topCompleted
+			}
 
 			task := &Task{
 				ID:           generateTaskID(currentSection, taskIndex),
@@ -78,7 +88,7 @@ func ParseTasks(r io.Reader) ([]*Task, error) {
 				Index:        taskIndex,
 				StepsTotal:   stepsTotal,
 				StepsDone:    stepsDone,
-				Completed:    stepsTotal > 0 && stepsTotal == stepsDone,
+				Completed:    completed,
 				LastSeenHash: "",             // Will be set by caller
 				FilePath:     "tinyTasks.md", // Fixed path
 				LastUpdated:  "",             // Will be set by caller
@@ -122,8 +132,11 @@ func isTopLevelTask(line string) bool {
 }
 
 // parseTopLevelTask parses a top-level task and its subtasks
-func parseTopLevelTask(lines []string, startIndex int) (title string, totalSubtasks, doneSubtasks, nextIndex int) {
+func parseTopLevelTask(lines []string, startIndex int) (title string, topCompleted bool, totalSubtasks, doneSubtasks, nextIndex int) {
 	firstLine := lines[startIndex]
+
+	// Determine if the top-level checkbox is checked
+	topCompleted = strings.HasPrefix(strings.TrimLeft(firstLine, " \t"), "- [x]")
 
 	// Extract title from the first line
 	// First try to match bold formatting
@@ -177,7 +190,7 @@ func parseTopLevelTask(lines []string, startIndex int) (title string, totalSubta
 	}
 
 	nextIndex = currentIndex
-	return title, totalSubtasks, doneSubtasks, nextIndex
+	return title, topCompleted, totalSubtasks, doneSubtasks, nextIndex
 }
 
 // isSubtask checks if a line is a subtask (indented checkbox)

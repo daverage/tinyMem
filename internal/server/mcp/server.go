@@ -15,6 +15,7 @@ import (
 	"github.com/a-marczewski/tinymem/internal/evidence"
 	"github.com/a-marczewski/tinymem/internal/extract"
 	"github.com/a-marczewski/tinymem/internal/memory"
+	"github.com/a-marczewski/tinymem/internal/ralph"
 	"github.com/a-marczewski/tinymem/internal/recall"
 	"github.com/a-marczewski/tinymem/internal/semantic"
 	"github.com/a-marczewski/tinymem/internal/storage"
@@ -271,6 +272,93 @@ func (s *Server) handleToolsList(req *MCPRequest) {
 				"properties": map[string]interface{}{},
 			},
 		},
+		{
+			"name":        "memory_ralph",
+			"description": "Execute an evidence-gated repair loop with memory-assisted recall and bounded autonomous retries. NOTE: This may take several minutes to complete and may exceed default client timeouts.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"required": []string{"task", "command", "evidence"},
+				"properties": map[string]interface{}{
+					"task": map[string]interface{}{
+						"type":        "string",
+						"description": "Human-readable objective. Used for logging and memory recall context.",
+					},
+					"command": map[string]interface{}{
+						"type":        "string",
+						"description": "Shell command to execute for verification (e.g. 'go test ./...').",
+					},
+					"evidence": map[string]interface{}{
+						"type": "array",
+						"items": map[string]interface{}{
+							"type": "string",
+						},
+						"minItems":    1,
+						"description": "List of evidence predicates that must all pass to terminate the loop.",
+					},
+					"max_iterations": map[string]interface{}{
+						"type":        "integer",
+						"minimum":     1,
+						"default":     5,
+						"description": "Hard cap on autonomous attempts.",
+					},
+					"recall": map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"query_terms": map[string]interface{}{
+								"type": "array",
+								"items": map[string]interface{}{
+									"type": "string",
+								},
+								"description": "Optional explicit memory query terms. If omitted, tinyMem derives them from failure output.",
+							},
+							"limit": map[string]interface{}{
+								"type":        "integer",
+								"default":     5,
+								"description": "Maximum number of recalled memory entries.",
+							},
+						},
+					},
+					"safety": map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"forbid_paths": map[string]interface{}{
+								"type": "array",
+								"items": map[string]interface{}{
+									"type": "string",
+								},
+								"description": "Paths that must not be modified or deleted.",
+							},
+							"forbid_commands": map[string]interface{}{
+								"type": "array",
+								"items": map[string]interface{}{
+									"type": "string",
+								},
+								"description": "Shell commands that must never be executed.",
+							},
+							"require_diff_review": map[string]interface{}{
+								"type":        "boolean",
+								"default":     false,
+								"description": "If true, pause for human approval when a diff is produced.",
+							},
+						},
+					},
+					"human_gate": map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"on_ambiguity": map[string]interface{}{
+								"type":        "boolean",
+								"default":     true,
+								"description": "Pause and request human input if multiple viable fixes are detected.",
+							},
+							"after_iterations": map[string]interface{}{
+								"type":        "integer",
+								"description": "Require human approval after N failed iterations.",
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	response := map[string]interface{}{
@@ -324,9 +412,48 @@ func (s *Server) handleToolCall(req *MCPRequest) {
 		s.handleMemoryHealth(req)
 	case "memory_doctor":
 		s.handleMemoryDoctor(req)
+	case "memory_ralph":
+		s.handleMemoryRalph(req, argsBytes)
 	default:
 		s.sendError(req.ID, -32601, fmt.Sprintf("Tool not found: %s", params.Name))
 	}
+}
+
+// handleMemoryRalph handles the Ralph autonomous repair loop request
+func (s *Server) handleMemoryRalph(req *MCPRequest, args json.RawMessage) {
+	var options ralph.Options
+	if err := json.Unmarshal(args, &options); err != nil {
+		s.sendError(req.ID, -32602, fmt.Sprintf("Invalid arguments for memory_ralph: %v", err))
+		return
+	}
+
+	// Initialize Ralph engine
+	engine := ralph.NewEngine(s.config, s.memoryService, s.app.ProjectID, s.app.Logger)
+
+	// Execute the loop
+	result, err := engine.ExecuteLoop(context.Background(), options)
+	if err != nil {
+		s.sendError(req.ID, -32603, fmt.Sprintf("Ralph loop failed: %v", err))
+		return
+	}
+
+	// Format result as JSON for display
+	resultJSON, _ := json.MarshalIndent(result, "", "  ")
+
+	response := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"result": map[string]interface{}{
+			"content": []map[string]interface{}{
+				{
+					"type": "text",
+					"text": string(resultJSON),
+				},
+			},
+		},
+		"id": req.ID,
+	}
+
+	s.sendResponse(response)
 }
 
 // handleMemoryQuery handles memory query requests

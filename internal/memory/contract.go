@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -35,16 +36,23 @@ func AddContract() error {
 		return fmt.Errorf("error fetching contract content: %w", err)
 	}
 
+	// Ensure docs/agents directory exists
+	agentsDir := filepath.Join("docs", "agents")
+	if err := os.MkdirAll(agentsDir, 0755); err != nil {
+		return fmt.Errorf("error creating directory %s: %w", agentsDir, err)
+	}
+
 	for _, filename := range files {
-		if _, err := os.Stat(filename); err == nil {
+		targetPath := filepath.Join(agentsDir, filename)
+		if _, err := os.Stat(targetPath); err == nil {
 			// File exists, append contract if not already present
-			if err := appendContractToFile(filename, contractContent); err != nil {
-				return fmt.Errorf("error appending to %s: %w", filename, err)
+			if err := appendContractToFile(targetPath, contractContent); err != nil {
+				return fmt.Errorf("error appending to %s: %w", targetPath, err)
 			}
 		} else {
 			// File doesn't exist, create it with contract
-			if err := createFileWithContract(filename, contractContent); err != nil {
-				return fmt.Errorf("error creating %s: %w", filename, err)
+			if err := createFileWithContract(targetPath, contractContent); err != nil {
+				return fmt.Errorf("error creating %s: %w", targetPath, err)
 			}
 		}
 	}
@@ -59,7 +67,7 @@ func AddContract() error {
 }
 
 func getContractContentFromRepo() (string, error) {
-	url := "https://raw.githubusercontent.com/daverage/tinyMem/refs/heads/main/AGENT_CONTRACT.md"
+	url := "https://raw.githubusercontent.com/daverage/tinyMem/refs/heads/main/docs/agents/AGENT_CONTRACT.md"
 
 	resp, err := http.Get(url)
 	if err != nil {
@@ -119,26 +127,26 @@ func updateReadme() error {
 	}
 
 	readmeContent := string(content)
-	if strings.Contains(readmeContent, "MANDATORY TINYMEM CONTROL PROTOCOL") {
-		fmt.Println("Contract section already exists in README.md, skipping.")
+	if strings.Contains(readmeContent, "docs/agents/AGENT_CONTRACT.md") {
+		fmt.Println("Contract reference already exists in README.md, skipping.")
 		return nil
 	}
 
 	// Find a good place to insert the MCP setup instructions
-	insertionPoint := strings.Index(readmeContent, "## IDE Integration")
+	insertionPoint := strings.Index(readmeContent, "## 🔌 Integration")
 	if insertionPoint == -1 {
-		// If we can't find the IDE Integration section, append to end
+		// If we can't find the Integration section, append to end
 		readmeContent += "\n\n## Setting Up Agents for MCP Usage\n\n"
 		readmeContent += "When using tinyMem as an MCP server for AI agents, ensure that your agents follow the MANDATORY TINYMEM CONTROL PROTOCOL.\n\n"
-		readmeContent += "Include the contract content from [AGENT_CONTRACT.md](AGENT_CONTRACT.md) in your agent's system prompt to ensure proper interaction with tinyMem.\n\n"
+		readmeContent += "Include the contract content from [docs/agents/AGENT_CONTRACT.md](docs/agents/AGENT_CONTRACT.md) in your agent's system prompt to ensure proper interaction with tinyMem.\n\n"
 	} else {
-		// Insert after the IDE Integration heading
-		before := readmeContent[:insertionPoint+len("## IDE Integration")]
-		after := readmeContent[insertionPoint+len("## IDE Integration"):]
+		// Insert after the Integration heading
+		before := readmeContent[:insertionPoint+len("## 🔌 Integration")]
+		after := readmeContent[insertionPoint+len("## 🔌 Integration"):]
 
 		addition := "\n\n### Agent Setup for MCP Usage\n\n"
 		addition += "When using tinyMem as an MCP server for AI agents, ensure that your agents follow the MANDATORY TINYMEM CONTROL PROTOCOL.\n\n"
-		addition += "Include the contract content from [AGENT_CONTRACT.md](AGENT_CONTRACT.md) in your agent's system prompt to ensure proper interaction with tinyMem.\n\n"
+		addition += "Include the contract content from [docs/agents/AGENT_CONTRACT.md](docs/agents/AGENT_CONTRACT.md) in your agent's system prompt to ensure proper interaction with tinyMem.\n\n"
 
 		readmeContent = before + addition + after
 	}

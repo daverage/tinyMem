@@ -29,12 +29,6 @@ type App struct {
 
 // NewApp initializes and returns a new App instance.
 func NewApp() (*App, error) {
-	// 1. Determine project path
-	projectPath, err := os.Getwd()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get current working directory: %w", err)
-	}
-
 	// 2. Load configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -72,14 +66,14 @@ func NewApp() (*App, error) {
 	// 5. Initialize memory service
 	memoryService := memory.NewService(db)
 
-	projectID := config.GenerateProjectID(projectPath) // Generate project ID
+	projectID := config.GenerateProjectID(cfg.ProjectRoot) // Generate project ID from project root
 
 	return &App{
 		Config:      cfg,
 		Logger:      logger,
 		DB:          db,
 		Memory:      memoryService,
-		ProjectPath: projectPath,
+		ProjectPath: cfg.ProjectRoot,        // Use project root as the project path
 		ProjectID:   projectID,             // Store the generated project ID
 		ServerMode:  doctor.StandaloneMode, // Default to standalone mode
 	}, nil

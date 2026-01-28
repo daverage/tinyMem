@@ -30,11 +30,13 @@ tinyMem gives small and medium language models (7B–13B) reliable long-term mem
   - [CLI Commands](#cli-commands)
   - [Writing Memories](#writing-memories)
   - [Memory Types & Truth](#memory-types--truth)
+- [The Ralph Loop](#-the-ralph-loop-autonomous-repair)
 - [Integration](#-integration)
   - [Proxy Mode](#proxy-mode)
   - [MCP Server (IDE Integration)](#mcp-server-ide-integration)
   - [AI Agent Directives](#ai-agent-directives)
 - [Architecture](#-architecture)
+- [Token Economics](#-token-efficiency--economics)
 - [Configuration](#-configuration)
 - [Development](#-development)
 - [Contributing](#-contributing)
@@ -142,6 +144,9 @@ tinymem write ...       # Manually add memory (see below)
 # Modes
 tinymem proxy           # Start HTTP proxy
 tinymem mcp             # Start MCP server
+
+# Utilities
+tinymem addContract     # Add protocol to agent config files
 ```
 
 ### Writing Memories
@@ -166,6 +171,25 @@ tinymem write --type decision --summary "Use PostgreSQL" \
 | **Plan** | ❌ No | Tentative | Opportunistic |
 
 *Evidence types supported: `file_exists`, `grep_hit`, `cmd_exit0`, `test_pass`.*
+
+---
+
+## 🤖 The Ralph Loop (Autonomous Repair)
+
+The **Ralph Loop** (`memory_ralph`) is a deterministic governor for autonomous codebase repair. Once triggered, tinyMem takes control, iterating until evidence passes or limits are reached.
+
+### 🔄 Execution Phases
+| Phase | Action | Purpose |
+|-------|--------|---------|
+| **Execute** | Run Command | Executes the target verification (e.g., `go test`). |
+| **Evidence** | Validate | Checks predicates (`test_pass`, `file_exists`). |
+| **Recall** | Search | Retrieves failure patterns from long-term memory. |
+| **Repair** | Apply Fix | tinyMem's internal LLM applies code changes. |
+
+### 📜 Execution Contract
+- **Evidence is King**: Only successful evidence checks can terminate the loop.
+- **Safety First**: Supports path blacklisting (`forbid_paths`) and command blocking.
+- **Durable Memory**: The loop results are stored even if the agent is reset.
 
 ---
 
@@ -194,13 +218,24 @@ Compatible with Claude Desktop, Cursor, and other MCP clients.
 ```
 *Run `./verify_mcp.sh` to validate your setup.*
 
+#### Available MCP Tools:
+- `memory_query` - Search memories using full-text or semantic search
+- `memory_recent` - Retrieve the most recent memories
+- `memory_write` - Create a new memory entry with optional evidence
+- `memory_stats` - Get statistics about stored memories
+- `memory_health` - Check the health status of the memory system
+- `memory_doctor` - Run diagnostics on the memory system
+- `memory_ralph` - Execute an autonomous evidence-gated repair loop
+
 ### AI Agent Directives
 **CRITICAL**: If you are building an AI agent, you MUST include the appropriate directive in its system prompt to ensure it uses tinyMem correctly.
+
+**Quick Setup:** Run `tinymem addContract` to automatically create these files in your project.
 
 *   **Claude**: [`docs/agents/CLAUDE.md`](docs/agents/CLAUDE.md)
 *   **Gemini**: [`docs/agents/GEMINI.md`](docs/agents/GEMINI.md)
 *   **Qwen**: [`docs/agents/QWEN.md`](docs/agents/QWEN.md)
-*   **Other**: [`docs/AGENT_CONTRACT.md`](docs/AGENT_CONTRACT.md)
+*   **Other**: [`docs/agents/AGENT_CONTRACT.md`](docs/agents/AGENT_CONTRACT.md)
 
 ---
 
@@ -239,6 +274,19 @@ flowchart TD
 ├── internal/             # Core logic (Memory, Evidence, Recall)
 └── README.md             # This file
 ```
+
+## 📉 Token Efficiency & Economics
+
+tinyMem uses more tokens per minute but **significantly fewer tokens per task** compared to standard agents.
+
+| Feature | Token Impact | Why? |
+| :--- | :--- | :--- |
+| **Recall Engine** | 📉 **Saves** | Replaces "Read All Files" with targeted context snippets. |
+| **Context Reset** | 📉 **Saves** | Prevents chat history from snowballing by starting iterations fresh. |
+| **Truth Discipline**| 📉 **Saves** | Stops expensive "hallucination rabbit holes" before they start. |
+| **Ralph Loop** | 📈 **Uses** | Requires multiple internal completions to reach autonomous success. |
+
+**The Verdict:** tinyMem acts as a "Sniper Rifle" for context. By ensuring the few tokens sent are the *correct* ones, it avoids the massive waste of re-reading files and un-breaking hallucinated code.
 
 ---
 

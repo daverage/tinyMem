@@ -1,6 +1,33 @@
 # Tasks - Version Automation
 
 - [x] Implement Git-based version injection
-  - [x] Modify `internal/version/version.go` to use a variable instead of a constant (allowing linker overrides)
-  - [x] Update `build/build.sh` to capture `git describe --tags` and inject it via `-ldflags`
-  - [x] Update `build/build.bat` to mirror this logic for Windows
+- [x] Create automated release script (`build/release.sh`)
+- [x] Remove obsolete "REPOSITORY VERSIONING RULES" from Agent docs
+  - [x] Update `AGENTS.md`
+  - [x] Update `CLAUDE.md`
+  - [x] Update `GEMINI.md`
+  - [x] Update `QWEN.md`
+
+# Tasks - Dashboard Fixes
+
+- [x] Fix task pulling in Dashboard
+  - [x] Update parser to handle tasks without subtasks
+  - [x] Add auto-sync from `tinyTasks.md` to Dashboard load
+  - [x] Fix ProjectID consistency to ensure correct memory retrieval
+
+# Tasks - Ralph Loop (The Governor)
+
+- [x] Design and implement `memory_ralph` MCP tool
+  - [x] Create `internal/ralph` package for loop state management
+  - [x] Implement Evidence Gating (connecting to `internal/evidence`)
+  - [x] Implement Safety Layer (path/command blacklists)
+  - [x] Implement "Repair Phase" logic (internal LLM coordination)
+  - [x] Add `memory_ralph` to MCP server
+
+# Tasks - Documentation & Cleanup
+
+- [x] Document `memory_ralph` in README.md
+- [x] Document `addContract` in README.md
+- [x] Move agent directive files to `docs/agents/`
+- [x] Update `AddContract` command to use new directory structure
+- [x] Remove redundant `cmd/add_contract/` utility

@@ -14,6 +14,7 @@ import (
 	"github.com/a-marczewski/tinymem/internal/app"
 	"github.com/a-marczewski/tinymem/internal/config"
 	"github.com/a-marczewski/tinymem/internal/memory"
+	"github.com/a-marczewski/tinymem/internal/tasks"
 	"github.com/spf13/cobra"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -46,12 +47,21 @@ func runDashboardCmd(a *app.App, cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	// Synchronize tasks from tinyTasks.md if it exists
+	taskService := tasks.NewService(a.DB, a.Memory, a.ProjectID)
+	taskFilePath := filepath.Join(projectRoot, "tinyTasks.md")
+	if _, err := os.Stat(taskFilePath); err == nil {
+		if err := taskService.SyncTasksFromFile(taskFilePath); err != nil {
+			fmt.Printf("Warning: failed to synchronize tasks from tinyTasks.md: %v\n", err)
+		}
+	}
+
 	// Initialize analytics
 	taskAnalytics := analytics.NewTaskAnalytics(dbConn)
 
 	// Print dashboard header
 	fmt.Println("┌─────────────────────────────────────────────────────────────┐")
-	fmt.Println("│                    tinyMem Dashboard                      │")
+	fmt.Println("│                    tinyMem Dashboard                        │")
 	fmt.Println("└─────────────────────────────────────────────────────────────┘")
 	fmt.Println()
 
@@ -80,7 +90,7 @@ func runDashboardCmd(a *app.App, cmd *cobra.Command, args []string) {
 // printHeaderSection prints the header/project status section
 func printHeaderSection(projectRoot, tinyMemDir, dbPath string, db *sql.DB) {
 	fmt.Println("┌─────────────────────────────────────────────────────────────┐")
-	fmt.Println("│ 1️⃣  Header / Project Status                                 │")
+	fmt.Println("│ 1️⃣  Header / Project Status                                  │")
 	fmt.Println("└─────────────────────────────────────────────────────────────┘")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
@@ -162,7 +172,7 @@ func printHeaderSection(projectRoot, tinyMemDir, dbPath string, db *sql.DB) {
 // printIntegritySummary prints the integrity summary section
 func printIntegritySummary(db *sql.DB) {
 	fmt.Println("┌─────────────────────────────────────────────────────────────┐")
-	fmt.Println("│ 2️⃣  Integrity Summary                                       │")
+	fmt.Println("│ 2️⃣  Integrity Summary                                        │")
 	fmt.Println("└─────────────────────────────────────────────────────────────┘")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
@@ -237,7 +247,7 @@ func printIntegritySummary(db *sql.DB) {
 // printRecentDecisions prints the recent decisions section
 func printRecentDecisions(db *sql.DB) {
 	fmt.Println("┌─────────────────────────────────────────────────────────────┐")
-	fmt.Println("│ 3️⃣  Recent Decisions (limit 5)                              │")
+	fmt.Println("│ 3️⃣  Recent Decisions (limit 5)                               │")
 	fmt.Println("└─────────────────────────────────────────────────────────────┘")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
@@ -275,7 +285,7 @@ func printRecentDecisions(db *sql.DB) {
 // printActiveConstraints prints the active constraints section
 func printActiveConstraints(db *sql.DB) {
 	fmt.Println("┌─────────────────────────────────────────────────────────────┐")
-	fmt.Println("│ 4️⃣  Active Constraints (limit 5)                            │")
+	fmt.Println("│ 4️⃣  Active Constraints (limit 5)                             │")
 	fmt.Println("└─────────────────────────────────────────────────────────────┘")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
@@ -312,7 +322,7 @@ func printActiveConstraints(db *sql.DB) {
 // printNeedsAttention prints the needs attention section
 func printNeedsAttention(db *sql.DB) {
 	fmt.Println("┌─────────────────────────────────────────────────────────────┐")
-	fmt.Println("│ 5️⃣  Needs Attention / Suspicious Items (limit 5)            │")
+	fmt.Println("│ 5️⃣  Needs Attention / Suspicious Items (limit 5)             │")
 	fmt.Println("└─────────────────────────────────────────────────────────────┘")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
@@ -375,7 +385,7 @@ func printNeedsAttention(db *sql.DB) {
 // printEnhancedTaskAnalytics prints the enhanced task analytics section with visualizations
 func printEnhancedTaskAnalytics(analyticsService *analytics.TaskAnalytics, projectID string) {
 	fmt.Println("┌─────────────────────────────────────────────────────────────┐")
-	fmt.Println("│ 6️⃣  Task Analytics & Visualizations                       │")
+	fmt.Println("│ 6️⃣  Task Analytics & Visualizations                          │")
 	fmt.Println("└─────────────────────────────────────────────────────────────┘")
 
 	// Get comprehensive task metrics using the analytics service
@@ -469,7 +479,7 @@ func printEnhancedTaskAnalytics(analyticsService *analytics.TaskAnalytics, proje
 // printRecallEffectiveness prints the recall effectiveness section
 func printRecallEffectiveness(db *sql.DB) {
 	fmt.Println("┌─────────────────────────────────────────────────────────────┐")
-	fmt.Println("│ 7️⃣  Recall Effectiveness                                    │")
+	fmt.Println("│ 7️⃣  Recall Effectiveness                                     │")
 	fmt.Println("└─────────────────────────────────────────────────────────────┘")
 
 	// Check if recall metrics table exists

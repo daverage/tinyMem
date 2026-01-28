@@ -123,6 +123,27 @@ Failure to update tasks is a protocol failure.
 
 ---
 
+### Step 3.5: Autonomous Repair (The Ralph Loop)
+
+For complex, iterative tasks requiring verification (e.g., fixing failing tests), the agent SHOULD invoke `memory_ralph`.
+
+**Control Transfer Contract:**
+1. Once `memory_ralph` is invoked, control transfers to tinyMem.
+2. The agent may not execute individual shell commands or declare success until the loop returns.
+3. Termination is controlled solely by **Evidence Evaluation**.
+
+**Execution Phases:**
+- **Execute**: tinyMem runs the verification command (e.g., `go test`).
+- **Recall**: On failure, tinyMem retrieves relevant memories and failure patterns.
+- **Repair**: tinyMem uses its internal LLM to apply code fixes based on context.
+- **Evidence**: Success is declared only if all evidence predicates pass.
+
+**Safety Rules:**
+- Agents MUST provide `forbid_paths` for sensitive directories.
+- Agents SHOULD set `max_iterations` to prevent runaway token usage.
+
+---
+
 ### Step 4: Execution Phase
 
 Only after Steps 1–3 are complete may the agent:
