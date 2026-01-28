@@ -1,7 +1,3 @@
-Here’s a rebuilt version that’s tighter, more enforceable, and leaves less room for agent interpretation. It reads as a control contract, not guidance.
-
----
-
 # TINYMEM CONTROL PROTOCOL
 
 ## Mandatory Memory and Task Enforcement for AI Assistants
@@ -180,3 +176,12 @@ Execution state lives in files.
 ---
 
 **End of Protocol**
+
+---
+
+# REPOSITORY VERSIONING RULES
+
+- You MUST increment the version number in `internal/version/version.go` for every commit that introduces changes to the codebase.
+- Use semantic versioning (increment patch version by default: `0.1.0` -> `0.1.1`).
+- The version increment MUST be part of the commit.
+- This is a repository requirement separate from the TinyMem memory contract.

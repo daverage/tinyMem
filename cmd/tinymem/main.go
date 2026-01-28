@@ -24,6 +24,7 @@ import (
 	"github.com/a-marczewski/tinymem/internal/semantic"
 	"github.com/a-marczewski/tinymem/internal/server/mcp"
 	"github.com/a-marczewski/tinymem/internal/server/proxy"
+	"github.com/a-marczewski/tinymem/internal/version"
 )
 
 var rootCmd = &cobra.Command{
@@ -82,7 +83,7 @@ var versionCmd = &cobra.Command{
 }
 
 func runVersionCmd(a *app.App, cmd *cobra.Command, args []string) {
-	fmt.Println("tinyMem v0.1.0")
+	fmt.Printf("tinyMem v%s\n", version.Version)
 }
 
 var proxyCmd = &cobra.Command{
@@ -91,6 +92,9 @@ var proxyCmd = &cobra.Command{
 }
 
 func runProxyCmd(a *app.App, cmd *cobra.Command, args []string) {
+	// Check for updates in a separate goroutine
+	go checkUpdate(a)
+
 	// Set the server mode to ProxyMode
 	a.ServerMode = doctor.ProxyMode
 
@@ -109,6 +113,9 @@ var mcpCmd = &cobra.Command{
 }
 
 func runMcpCmd(a *app.App, cmd *cobra.Command, args []string) {
+	// Check for updates in a separate goroutine
+	go checkUpdate(a)
+
 	// Set the server mode to MCPMode
 	a.ServerMode = doctor.MCPMode
 
@@ -532,6 +539,21 @@ func runContractCmd(a *app.App, cmd *cobra.Command, args []string) {
 var dashboardCmd = &cobra.Command{
 	Use:   "dashboard",
 	Short: "Show a snapshot dashboard of memory state",
+}
+
+func checkUpdate(a *app.App) {
+	newVersion, err := version.CheckForUpdates()
+	if err != nil {
+		a.Logger.Debug("Failed to check for updates", zap.Error(err))
+		return
+	}
+
+	if newVersion != "" {
+		msg := fmt.Sprintf("A new version of tinyMem is available: v%s (current: v%s). Download it from: https://github.com/a-marczewski/tinymem/releases", newVersion, version.Version)
+		a.Logger.Info(msg)
+		// Also print to stderr to ensure user sees it in CLI
+		fmt.Fprintf(os.Stderr, "\n🔔 %s\n\n", msg)
+	}
 }
 
 // newAppRunner creates a Cobra Run function closure with the app.App instance.
