@@ -67,7 +67,7 @@ if [ "$IS_RELEASE" = true ]; then
 
   # Commit version bump
   git add internal/version/version.go
-  git commit -m "Bump version to $VERSION"
+  git commit -m "Bump version to $VERSION" || echo "Version already set in code, skipping commit."
 else
   # Read current version from code for standard build
   VERSION="$(grep -E 'var Version =' internal/version/version.go \
