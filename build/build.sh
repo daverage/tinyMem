@@ -109,11 +109,16 @@ fi
 if [[ "$OSTYPE" == msys* || "$OSTYPE" == cygwin* ]]; then
   build_target "Windows AMD64" windows amd64 "$OUT_DIR/tinymem-windows-amd64.exe"
   build_target "Windows ARM64" windows arm64 "$OUT_DIR/tinymem-windows-arm64.exe"
+elif command -v zig >/dev/null 2>&1; then
+  echo "→ Windows (Cross-compiling via zig cc)"
+  CC="zig cc -target x86_64-windows-gnu" build_target "Windows AMD64" windows amd64 "$OUT_DIR/tinymem-windows-amd64.exe"
+  CC="zig cc -target aarch64-windows-gnu" build_target "Windows ARM64" windows arm64 "$OUT_DIR/tinymem-windows-arm64.exe"
 elif command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then
   echo "→ Windows (Cross-compiling via mingw-w64)"
   CC=x86_64-w64-mingw32-gcc build_target "Windows AMD64" windows amd64 "$OUT_DIR/tinymem-windows-amd64.exe"
+  echo "Skipping Windows ARM64 build (requires zig or llvm-mingw)."
 else
-  echo "Skipping Windows builds (mingw-w64 not found). To enable on Mac: brew install mingw-w64"
+  echo "Skipping Windows builds (mingw-w64 or zig not found). To enable on Mac: brew install mingw-w64 or brew install zig"
 fi
 
 

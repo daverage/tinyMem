@@ -30,6 +30,15 @@ REM ------------------------------------------------
 REM Safety checks for Release Mode
 REM ------------------------------------------------
 if "%IS_RELEASE%"=="true" (
+    git status -s > temp_status.txt
+    set /p STATUS=<temp_status.txt
+    del temp_status.txt
+    if not "!STATUS!"=="" (
+        echo ❌ Error: Working directory is not clean. Commit or stash changes before releasing.
+        git status -s
+        exit /b 1
+    )
+    
     where gh >nul 2>nul
     if errorlevel 1 (
         echo ❌ Error: GitHub CLI (gh) not installed. Required for releases.
@@ -88,6 +97,9 @@ if not "%TINYMEM_EXTRA_BUILD_TAGS%"=="" (
 set TAGS_FLAG=-tags "%BUILD_TAGS%"
 set LDFLAGS=-X github.com/daverage/tinymem/internal/version.Version=%VERSION%
 
+REM Clear previous releases
+if exist "%OUT_DIR%\*" del /q "%OUT_DIR%\*"
+
 echo → Windows AMD64
 set CGO_ENABLED=1
 set GOOS=windows
@@ -99,6 +111,44 @@ set CGO_ENABLED=1
 set GOOS=windows
 set GOARCH=arm64
 go build %TAGS_FLAG% -ldflags "%LDFLAGS%" -o "%OUT_DIR%\tinymem-windows-arm64.exe" .\cmd\tinymem
+
+REM ------------------------------------------------
+REM Cross-compilation (if Zig is present)
+REM ------------------------------------------------
+where zig >nul 2>nul
+if not errorlevel 1 (
+    echo → macOS ARM64 (Cross-compiling via zig cc)
+    set CGO_ENABLED=1
+    set GOOS=darwin
+    set GOARCH=arm64
+    set CC=zig cc -target aarch64-macos
+    go build %TAGS_FLAG% -ldflags "%LDFLAGS%" -o "%OUT_DIR%\tinymem-darwin-arm64" .\cmd\tinymem
+
+    echo → macOS AMD64 (Cross-compiling via zig cc)
+    set CGO_ENABLED=1
+    set GOOS=darwin
+    set GOARCH=amd64
+    set CC=zig cc -target x86_64-macos
+    go build %TAGS_FLAG% -ldflags "%LDFLAGS%" -o "%OUT_DIR%\tinymem-darwin-amd64" .\cmd\tinymem
+
+    echo → Linux AMD64 (Cross-compiling via zig cc)
+    set CGO_ENABLED=1
+    set GOOS=linux
+    set GOARCH=amd64
+    set CC=zig cc -target x86_64-linux-musl
+    go build %TAGS_FLAG% -ldflags "%LDFLAGS%" -o "%OUT_DIR%\tinymem-linux-amd64" .\cmd\tinymem
+
+    echo → Linux ARM64 (Cross-compiling via zig cc)
+    set CGO_ENABLED=1
+    set GOOS=linux
+    set GOARCH=arm64
+    set CC=zig cc -target aarch64-linux-musl
+    go build %TAGS_FLAG% -ldflags "%LDFLAGS%" -o "%OUT_DIR%\tinymem-linux-arm64" .\cmd\tinymem
+    
+    set CC=
+) else (
+    echo Skipping cross-compilation (zig not found). To enable: winget install zig.zig
+)
 
 REM ------------------------------------------------
 REM Finalize Release

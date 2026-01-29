@@ -127,8 +127,15 @@ cd tinyMem
 
 **Cross-Compilation (on Mac):**
 To build Windows or Linux binaries on a Mac, you need C cross-compilers:
-- **For Windows**: `brew install mingw-w64`
+- **For Windows (Intel/AMD)**: `brew install mingw-w64`
+- **For Windows (ARM64)**: `brew install zig`
 - **For Linux**: `brew install FiloSottile/musl-cross/musl-cross` (static) or `brew install zig`
+
+**Cross-Compilation (on Windows):**
+To build macOS or Linux binaries on Windows, you need Zig:
+- `winget install zig.zig`
+
+*Tip: `zig` is the recommended way to enable cross-compilation for all platforms with a single tool, regardless of whether you are on Mac or Windows.*
 
 ---
 
