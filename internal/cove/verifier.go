@@ -223,8 +223,8 @@ func (v *Verifier) parseVerificationResponse(content string) ([]CandidateResult,
 // FilterRecall performs optional CoVe-based relevance filtering on recall results
 // This is an advisory filter that can only remove items, never add
 func (v *Verifier) FilterRecall(ctx context.Context, memories []RecallMemory, query string) ([]RecallMemory, error) {
-	// Safety check: recall filtering must be explicitly enabled
-	if !v.config.CoVeEnabled || !v.config.CoVeRecallFilterEnabled {
+	// Safety check: CoVe must be enabled
+	if !v.config.CoVeEnabled {
 		return memories, nil
 	}
 

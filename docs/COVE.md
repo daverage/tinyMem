@@ -6,10 +6,10 @@ Imagine you're telling a story to a friend. Sometimes your friend might mishear 
 
 **CoVe is a "Double-Check" system.**
 
-When the AI tries to save a new memory (like "We decided to use Python"), CoVe stops it and asks: *"Are you sure? Did the user actually say that, or are you just guessing?"*
+When the AI tries to save a new memory (like "We decided to use Python") or search for an old one, CoVe stops it and asks: *"Are you sure? Did the user actually say that, or are you just guessing?"*
 
 *   **If it's a guess:** CoVe throws it away so your memory doesn't get cluttered with junk.
-*   **If it's real:** CoVe gives it a "thumbs up" and lets it be saved.
+*   **If it's real:** CoVe gives it a "thumbs up" and lets it be saved or shown.
 
 It makes the AI's memory much more reliable and prevents it from "hallucinating" facts that aren't true.
 
@@ -25,7 +25,7 @@ Chain-of-Verification (CoVe) is a probabilistic filtering and prioritization lay
 - ✅ Reduces hallucinated memory candidates before storage
 - ✅ Ranks and filters candidate memories by confidence
 - ✅ Suppresses low-confidence extractions
-- ✅ Optionally filters recall results for relevance (advisory only)
+- ✅ Filters recall results for relevance (ensures the AI only sees what matters)
 
 ### What CoVe Does NOT Do
 - ❌ Decide truth (only evidence verification does this)
@@ -56,11 +56,11 @@ Filter by threshold (default: 0.6)
 Store only above threshold
 ```
 
-#### 2. Recall Filtering (Optional)
+#### 2. Recall Filtering
 ```
 Recall candidates (already bounded)
   ↓
-Optional CoVe relevance check ← [INTEGRATION POINT 2]
+CoVe relevance check ← [INTEGRATION POINT 2]
   ↓
 Re-rank or suppress
   ↓
@@ -68,6 +68,8 @@ Injection into prompt
 ```
 
 ## Configuration
+
+CoVe is **enabled by default** in all tinyMem builds. When enabled, it performs both extraction filtering and recall filtering.
 
 ### TOML Configuration
 
@@ -80,7 +82,6 @@ confidence_threshold = 0.6        # Minimum confidence to keep (default: 0.6)
 max_candidates = 20               # Max candidates per batch (default: 20)
 timeout_seconds = 30              # LLM call timeout (default: 30)
 model = ""                        # Model to use, empty = default (default: "")
-recall_filter_enabled = false     # Enable recall filtering (default: false)
 ```
 
 ### Disabling CoVe
@@ -113,7 +114,7 @@ If you're concerned about token usage or performance, you can disable CoVe or ad
 ### Environment Variables
 
 ```bash
-# Enable CoVe
+# Enable/Disable CoVe
 export TINYMEM_COVE_ENABLED=true
 
 # Set confidence threshold (0.0-1.0)
@@ -127,9 +128,6 @@ export TINYMEM_COVE_TIMEOUT_SECONDS=30
 
 # Set model (optional, empty = default)
 export TINYMEM_COVE_MODEL=""
-
-# Enable recall filtering (optional)
-export TINYMEM_COVE_RECALL_FILTER_ENABLED=false
 ```
 
 ## Example Configuration
@@ -141,7 +139,6 @@ enabled = true
 confidence_threshold = 0.7        # Higher threshold = fewer false positives
 max_candidates = 10               # Lower limit = faster processing
 timeout_seconds = 20              # Shorter timeout = fail-fast
-recall_filter_enabled = false     # Disabled for simpler behavior
 ```
 
 ### Aggressive (Experimental)
@@ -151,14 +148,12 @@ enabled = true
 confidence_threshold = 0.5        # Lower threshold = more permissive
 max_candidates = 50               # Higher limit = more thorough
 timeout_seconds = 60              # Longer timeout = more patience
-recall_filter_enabled = true      # Enable recall filtering
 ```
 
 ### Disabled
 ```toml
 [cove]
 enabled = false                   # CoVe completely disabled
-# Other settings ignored when disabled
 ```
 
 ## Verification Prompt
@@ -311,13 +306,13 @@ internal/extract/
 └── cove_integration_test.go      # Integration tests
 
 internal/inject/
-└── injector.go                   # Integration point 2 (optional)
+└── injector.go                   # Integration point 2
 ```
 
 ### Key Functions
 - `cove.NewVerifier()`: Creates CoVe verifier
 - `verifier.VerifyCandidates()`: Filters candidate memories
-- `verifier.FilterRecall()`: Optional recall filtering
+- `verifier.FilterRecall()`: filters recall results for relevance
 - `verifier.GetStats()`: Returns statistics
 
 ## Future Enhancements

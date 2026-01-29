@@ -80,6 +80,11 @@ func NewServer(a *app.App) *Server {
 		coveVerifier = cove.NewVerifier(a.Core.Config, llmClient)
 		coveVerifier.SetStatsStore(cove.NewSQLiteStatsStore(a.Core.DB.GetConnection()), a.Project.ID)
 		extractor.SetCoVeVerifier(coveVerifier)
+
+		a.Core.Logger.Info("CoVe enabled (extraction + recall filtering)",
+			zap.Float64("confidence_threshold", a.Core.Config.CoVeConfidenceThreshold),
+			zap.Int("max_candidates", a.Core.Config.CoVeMaxCandidates),
+		)
 	}
 
 	return &Server{
@@ -495,6 +500,41 @@ func (s *Server) handleMemoryQuery(req *MCPRequest, args json.RawMessage) {
 	if err != nil {
 		s.sendError(req.ID, -32603, fmt.Sprintf("Query failed: %v", err))
 		return
+	}
+
+	// Apply CoVe recall filtering if enabled
+	if s.coveVerifier != nil && len(results) > 0 {
+		// Convert results to CoVe format
+		recallMemories := make([]cove.RecallMemory, 0, len(results))
+		for i, result := range results {
+			recallMemories = append(recallMemories, cove.RecallMemory{
+				ID:      fmt.Sprintf("%d", i),
+				Type:    string(result.Memory.Type),
+				Summary: result.Memory.Summary,
+				Detail:  result.Memory.Detail,
+			})
+		}
+
+		// Apply CoVe filtering
+		filtered, err := s.coveVerifier.FilterRecall(s.ctx, recallMemories, queryReq.Query)
+		if err == nil {
+			// Build a map of accepted indices
+			accepted := make(map[int]bool)
+			for _, m := range filtered {
+				var idx int
+				fmt.Sscanf(m.ID, "%d", &idx)
+				accepted[idx] = true
+			}
+
+			// Filter results
+			filteredResults := make([]recall.RecallResult, 0, len(filtered))
+			for i, result := range results {
+				if accepted[i] {
+					filteredResults = append(filteredResults, result)
+				}
+			}
+			results = filteredResults
+		}
 	}
 
 	// Convert results to text content for MCP

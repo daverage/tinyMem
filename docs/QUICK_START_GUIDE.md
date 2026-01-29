@@ -111,5 +111,6 @@ Edit your config file (usually `~/Library/Application Support/Claude/claude_desk
 ## Next Steps
 
 *   **Read the full [README](../README.md)** for advanced configuration.
+*   **Learn about [Chain-of-Verification (CoVe)](COVE.md)** to understand how tinyMem filters hallucinations automatically (enabled by default).
 *   **Learn about Memory Types** to understand the difference between a `fact` (verified) and a `claim` (unverified).
 *   **Check `tinymem doctor`** if you run into any issues.

@@ -76,25 +76,18 @@ func NewServer(a *app.App) *Server {
 	llmClient := llm.NewClient(a.Core.Config)
 	extractor := extract.NewExtractor(evidenceService)
 
-	// Create CoVe verifier if enabled (safely disabled by default)
+	// Create CoVe verifier if enabled (safely enabled by default)
 	if a.Core.Config.CoVeEnabled {
 		coveVerifier := cove.NewVerifier(a.Core.Config, llmClient)
 		coveVerifier.SetStatsStore(cove.NewSQLiteStatsStore(a.Core.DB.GetConnection()), a.Project.ID)
 		extractor.SetCoVeVerifier(coveVerifier)
 
-		// Also set CoVe verifier for recall filtering if enabled
-		if a.Core.Config.CoVeRecallFilterEnabled {
-			injector.SetCoVeVerifier(coveVerifier)
-			a.Core.Logger.Info("CoVe enabled (extraction + recall filtering)",
-				zap.Float64("confidence_threshold", a.Core.Config.CoVeConfidenceThreshold),
-				zap.Int("max_candidates", a.Core.Config.CoVeMaxCandidates),
-			)
-		} else {
-			a.Core.Logger.Info("CoVe enabled (extraction only)",
-				zap.Float64("confidence_threshold", a.Core.Config.CoVeConfidenceThreshold),
-				zap.Int("max_candidates", a.Core.Config.CoVeMaxCandidates),
-			)
-		}
+		// Also set CoVe verifier for recall filtering
+		injector.SetCoVeVerifier(coveVerifier)
+		a.Core.Logger.Info("CoVe enabled (extraction + recall filtering)",
+			zap.Float64("confidence_threshold", a.Core.Config.CoVeConfidenceThreshold),
+			zap.Int("max_candidates", a.Core.Config.CoVeMaxCandidates),
+		)
 	}
 
 	server := &Server{

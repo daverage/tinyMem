@@ -61,7 +61,7 @@ Instead of the AI trying to remember everything in its limited "short-term memor
 ## ✨ Key Features
 
 *   **Evidence-Based Truth**: Typed memories (`fact`, `claim`, `decision`, etc.). Only verified claims become facts.
-*   **Chain-of-Verification (CoVe)**: Optional LLM-based quality filter to reduce hallucinations before storage.
+*   **Chain-of-Verification (CoVe)**: LLM-based quality filter to reduce hallucinations before storage and improve recall relevance (enabled by default).
 *   **Local & Private**: Runs as a single binary. Data lives in `.tinyMem/`.
 *   **Zero Configuration**: Works out of the box.
 *   **Dual Mode**: Works as an HTTP Proxy or Model Context Protocol (MCP) server.
@@ -302,7 +302,7 @@ max_items = 10
 semantic_enabled = false # Set true if you have an embedding model
 
 [cove]
-enabled = true           # Chain-of-Verification
+enabled = true           # Chain-of-Verification (Extraction + Recall filtering)
 confidence_threshold = 0.6
 ```
 

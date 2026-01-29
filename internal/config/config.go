@@ -148,7 +148,7 @@ func LoadConfig() (*Config, error) {
 		CoVeMaxCandidates:       DefaultCoVeMaxCandidates,
 		CoVeTimeoutSeconds:      DefaultCoVeTimeoutSeconds,
 		CoVeModel:               DefaultCoVeModel,
-		CoVeRecallFilterEnabled: false,
+		CoVeRecallFilterEnabled: true,
 	}
 
 	embeddingBaseURLSet := false

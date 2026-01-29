@@ -102,7 +102,6 @@ func printCoVeStatus(cfg *config.Config, db *storage.DB, projectID string) {
 	fmt.Fprintf(w, "Enabled:\t%t\n", cfg.CoVeEnabled)
 	fmt.Fprintf(w, "Confidence Threshold:\t%.2f\n", cfg.CoVeConfidenceThreshold)
 	fmt.Fprintf(w, "Max Candidates:\t%d\n", cfg.CoVeMaxCandidates)
-	fmt.Fprintf(w, "Recall Filter Enabled:\t%t\n", cfg.CoVeRecallFilterEnabled)
 
 	// Load persistent stats
 	store := cove.NewSQLiteStatsStore(db.GetConnection())

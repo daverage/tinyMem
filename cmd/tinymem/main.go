@@ -85,7 +85,7 @@ var versionCmd = &cobra.Command{
 }
 
 func runVersionCmd(a *app.App, cmd *cobra.Command, args []string) {
-	fmt.Printf("tinyMem v%s\n", version.Version)
+	fmt.Printf("tinyMem %s\n", version.Version)
 }
 
 var proxyCmd = &cobra.Command{
@@ -349,7 +349,6 @@ func runStatsCmd(a *app.App, cmd *cobra.Command, args []string) {
 	fmt.Printf("CoVe Confidence Threshold: %.2f\n", a.Core.Config.CoVeConfidenceThreshold)
 	fmt.Printf("CoVe Max Candidates: %d\n", a.Core.Config.CoVeMaxCandidates)
 	fmt.Printf("CoVe Timeout Seconds: %d\n", a.Core.Config.CoVeTimeoutSeconds)
-	fmt.Printf("CoVe Recall Filter Enabled: %t\n", a.Core.Config.CoVeRecallFilterEnabled)
 
 	store := cove.NewSQLiteStatsStore(a.Core.DB.GetConnection())
 	if stats, err := store.Load(a.Project.ID); err == nil && stats != nil && stats.CandidatesEvaluated > 0 {
