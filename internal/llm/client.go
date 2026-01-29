@@ -16,6 +16,7 @@ import (
 type Client struct {
 	baseURL    string
 	apiKey     string
+	config     *config.Config
 	httpClient *http.Client
 }
 
@@ -75,6 +76,7 @@ func NewClient(cfg *config.Config) *Client {
 	return &Client{
 		baseURL: baseURL,
 		apiKey:  cfg.LLMAPIKey,
+		config:  cfg,
 		httpClient: &http.Client{
 			Timeout: 120 * time.Second,
 		},
@@ -94,6 +96,7 @@ func NewClientWithConfig(baseURL, apiKey string) *Client {
 
 // ChatCompletions sends a chat completion request
 func (c *Client) ChatCompletions(ctx context.Context, req ChatCompletionRequest) (*ChatCompletionResponse, error) {
+	req.Model = c.normalizeModel(req.Model)
 	jsonData, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
@@ -130,6 +133,7 @@ func (c *Client) ChatCompletions(ctx context.Context, req ChatCompletionRequest)
 
 // ChatCompletionsRaw sends a chat completion request and returns the raw HTTP response.
 func (c *Client) ChatCompletionsRaw(ctx context.Context, req ChatCompletionRequest) (*http.Response, error) {
+	req.Model = c.normalizeModel(req.Model)
 	jsonData, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
@@ -162,6 +166,7 @@ func (c *Client) ChatCompletionsRaw(ctx context.Context, req ChatCompletionReque
 // StreamChatCompletions sends a streaming chat completion request
 func (c *Client) StreamChatCompletions(ctx context.Context, req ChatCompletionRequest) (<-chan StreamChunk, <-chan error) {
 	req.Stream = true
+	req.Model = c.normalizeModel(req.Model)
 
 	jsonData, err := json.Marshal(req)
 	if err != nil {
@@ -280,6 +285,26 @@ func (c *Client) ConvertStreamToText(ctx context.Context, chunks <-chan StreamCh
 	}()
 
 	return textChan, errChan
+}
+
+// normalizeModel ensures the model name is correct for the backend.
+// It applies overrides from config and strips common provider prefixes (e.g., "openai/")
+// which are often added by clients like LiteLLM/Aider but not recognized by local servers.
+func (c *Client) normalizeModel(model string) string {
+	// If a global model override is set in config, use it.
+	if c.config != nil && c.config.LLMModel != "" {
+		return c.config.LLMModel
+	}
+
+	// Strip common provider prefixes
+	prefixes := []string{"openai/", "ollama/", "huggingface/", "anthropic/", "google/"}
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(strings.ToLower(model), prefix) {
+			return model[len(prefix):]
+		}
+	}
+
+	return model
 }
 
 func chatCompletionURL(baseURL string) string {
