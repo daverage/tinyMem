@@ -44,7 +44,7 @@ Before publishing can occur:
 4. **Tag Creation**: A Git tag is created for the new version
 5. **Push Operations**: Code and tags are pushed to the remote repository
 6. **Container Publish (GHCR)**: GitHub Actions publishes the container image to `ghcr.io/<owner>/<repo>` with `:latest` and version tags on `v*` tags/releases
-7. **GitHub Release**: A release is created on GitHub with assets attached
+7. **GitHub Release**: Releases are created by your GitHub Actions workflow on tag/release events
 
 ### Container Publishing (GHCR)
 

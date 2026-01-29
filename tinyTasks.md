@@ -1,5 +1,5 @@
-# Tasks – Add update check to `tinymem version`
+# Tasks – Remove GitHub Release creation from build scripts
 
-- [x] Find `version` command implementation
-- [x] Add update check and user-facing message
-- [x] Ensure behavior is safe when offline
+- [x] Remove release creation from build/build.sh
+- [x] Remove release creation from build/build.bat
+- [x] Update docs to reflect release creation handled elsewhere

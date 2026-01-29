@@ -185,18 +185,6 @@ if "%IS_RELEASE%"=="true" (
     git push origin main
     git push origin "!VERSION!" --force
 
-    echo 📦 Creating GitHub Release...
-    gh release view "!VERSION!" >nul 2>nul
-    if not errorlevel 1 (
-        echo ⚠️  Release !VERSION! already exists. Uploading assets...
-        gh release upload "!VERSION!" "%OUT_DIR%\*" --clobber
-    ) else (
-        gh release create "!VERSION!" ^
-          --title "tinyMem !VERSION!" ^
-          --notes "!COMMIT_MSG!" ^
-          "%OUT_DIR%\*"
-    )
-
     echo.
     echo ✅ Release !VERSION! processed successfully!
 ) else (

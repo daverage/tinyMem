@@ -156,17 +156,6 @@ if [ "$IS_RELEASE" = true ]; then
   git push origin main
   git push origin "$VERSION" --force
 
-  echo "📦 Creating GitHub Release..."
-  if gh release view "$VERSION" >/dev/null 2>&1; then
-    echo "⚠️  Release $VERSION already exists. Uploading assets..."
-    gh release upload "$VERSION" "$OUT_DIR"/* --clobber
-  else
-    gh release create "$VERSION" \
-      --title "tinyMem $VERSION" \
-      --notes "$COMMIT_MSG" \
-      "$OUT_DIR"/*
-  fi
-
   echo "✅ Release $VERSION processed successfully!"
 else
   echo
