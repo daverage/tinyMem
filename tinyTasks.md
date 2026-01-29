@@ -25,6 +25,7 @@
   - [x] Implement "Repair Phase" logic (internal LLM coordination)
   - [x] Add `memory_ralph` to MCP server
 - [x] Fix `memory_ralph` to bypass global command evidence policy (since it is an authorized tool)
+- [x] Fix "command is empty" errors in `memory_ralph` by providing more specific error messages and clarifying evidence format
 
 # Tasks - Documentation & Cleanup
 
@@ -37,6 +38,7 @@
 - [x] Implement logic to replace old contracts with the new version in `addContract` (always replace with a warning)
 - [x] Update `addContract` to check both root and `docs/agents/` directories
 - [x] Ensure `docs/agents/AGENT_CONTRACT.md` is the source of truth for all agent files
+- [x] Extend `addContract` to support `CODEX.md` and `settings.json` files for Gemini and other agents
 
 # Tasks - README Review (User Request)
 

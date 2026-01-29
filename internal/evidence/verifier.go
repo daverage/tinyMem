@@ -182,13 +182,13 @@ func runWhitelistedCommand(command string, cfg *config.Config) (bool, error) {
 		return false, fmt.Errorf("command evidence is disabled by policy")
 	}
 	if strings.TrimSpace(command) == "" {
-		return false, fmt.Errorf("command is empty")
+		return false, fmt.Errorf("evidence command is empty")
 	}
 
 	// Use proper shell command parsing to prevent injection
 	parts := strings.Fields(command)
 	if len(parts) == 0 {
-		return false, fmt.Errorf("command is empty")
+		return false, fmt.Errorf("evidence command is empty (no fields)")
 	}
 
 	allowed := false

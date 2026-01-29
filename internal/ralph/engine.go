@@ -130,7 +130,7 @@ func (e *Engine) execute(ctx context.Context, opt Options, i int) (*IterationSta
 
 	command := strings.TrimSpace(opt.Command)
 	if command == "" {
-		return nil, fmt.Errorf("command is empty")
+		return nil, fmt.Errorf("main command is empty")
 	}
 
 	// Prepare the command with safety gating.
@@ -145,7 +145,7 @@ func (e *Engine) execute(ctx context.Context, opt Options, i int) (*IterationSta
 	} else {
 		parts := strings.Fields(command)
 		if len(parts) == 0 {
-			return nil, fmt.Errorf("command is empty")
+			return nil, fmt.Errorf("main command is empty (no fields)")
 		}
 		cmd = exec.CommandContext(ctx, parts[0], parts[1:]...)
 	}
@@ -230,7 +230,7 @@ func (e *Engine) checkEvidence(opt Options) (bool, map[string]interface{}) {
 
 func (e *Engine) verifyCommandEvidence(command string, allowShell bool) (bool, error) {
 	if strings.TrimSpace(command) == "" {
-		return false, fmt.Errorf("command is empty")
+		return false, fmt.Errorf("evidence command is empty")
 	}
 
 	// We use a shorter timeout for evidence checks than the main command
@@ -252,7 +252,7 @@ func (e *Engine) verifyCommandEvidence(command string, allowShell bool) (bool, e
 	} else {
 		parts := strings.Fields(command)
 		if len(parts) == 0 {
-			return false, fmt.Errorf("command is empty")
+			return false, fmt.Errorf("evidence command is empty (no fields)")
 		}
 		cmd = exec.CommandContext(ctx, parts[0], parts[1:]...)
 	}

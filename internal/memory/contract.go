@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,20 +10,21 @@ import (
 	"strings"
 )
 
-// AddContract adds the MANDATORY TINYMEM CONTROL PROTOCOL to agent markdown files
+// AddContract adds the MANDATORY TINYMEM CONTROL PROTOCOL to agent markdown and JSON settings files
 func AddContract() error {
 	fmt.Println("This function will add the MANDATORY TINYMEM CONTROL PROTOCOL to the following files:")
 	fmt.Println("- AGENTS.md")
-	fmt.Println("- QWEN.md")
-	fmt.Println("- GEMINI.md")
+	fmt.Println("- QWEN.md / .qwen/settings.json")
+	fmt.Println("- GEMINI.md / .gemini/settings.json")
 	fmt.Println("- CLAUDE.md")
+	fmt.Println("- CODEX.md / .codex/settings.json")
 	fmt.Println()
 	fmt.Println("Source of truth: docs/agents/AGENT_CONTRACT.md")
 	fmt.Println()
 	fmt.Println("It will:")
 	fmt.Println("1. Replace the contract in existing files (with a warning).")
-	fmt.Println("2. Append the contract to existing files that don't have it.")
-	fmt.Println("3. Create missing files in docs/agents/.")
+	fmt.Println("2. Append the contract to existing markdown files that don't have it.")
+	fmt.Println("3. Create missing markdown files in docs/agents/.")
 	fmt.Println()
 
 	var response string
@@ -34,7 +36,13 @@ func AddContract() error {
 		return nil
 	}
 
-	files := []string{"AGENTS.md", "QWEN.md", "GEMINI.md", "CLAUDE.md"}
+	files := []string{"AGENTS.md", "QWEN.md", "GEMINI.md", "CLAUDE.md", "CODEX.md"}
+	jsonTargets := []string{
+		filepath.Join(".qwen", "settings.json"),
+		filepath.Join(".gemini", "settings.json"),
+		filepath.Join(".codex", "settings.json"),
+	}
+
 	contractContent, err := getContractContent()
 	if err != nil {
 		return fmt.Errorf("error fetching contract content: %w", err)
@@ -46,9 +54,8 @@ func AddContract() error {
 		return fmt.Errorf("error creating directory %s: %w", agentsDir, err)
 	}
 
-	// Check root and docs/agents
+	// 1. Process Markdown files
 	locations := []string{".", agentsDir}
-
 	for _, dir := range locations {
 		for _, filename := range files {
 			targetPath := filepath.Join(dir, filename)
@@ -66,6 +73,15 @@ func AddContract() error {
 		}
 	}
 
+	// 2. Process JSON settings files
+	for _, targetPath := range jsonTargets {
+		if _, err := os.Stat(targetPath); err == nil {
+			if err := updateContractInJson(targetPath, contractContent); err != nil {
+				fmt.Printf("Warning: failed to update JSON file %s: %v\n", targetPath, err)
+			}
+		}
+	}
+
 	// Update README.md
 	if err := updateReadme(); err != nil {
 		return fmt.Errorf("error updating README.md: %w", err)
@@ -73,6 +89,36 @@ func AddContract() error {
 
 	fmt.Println("Operation completed successfully!")
 	return nil
+}
+
+func updateContractInJson(filename, contractContent string) error {
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal(content, &data); err != nil {
+		// If it's not valid JSON or unexpected format, try string replacement if the marker is there
+		fileContent := string(content)
+		if strings.Contains(fileContent, "# TINYMEM CONTROL PROTOCOL") {
+			return updateContractInFile(filename, contractContent)
+		}
+		return fmt.Errorf("file is not a valid JSON object")
+	}
+
+	fmt.Printf("Updating existing contract in JSON file %s...\n", filename)
+
+	// We'll store the contract in a dedicated "tinymem_protocol" field
+	// This ensures it doesn't break other tools but is visible to the agent
+	data["tinymem_protocol"] = strings.TrimSpace(contractContent)
+
+	newContent, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(filename, newContent, 0644)
 }
 
 func getContractContent() (string, error) {

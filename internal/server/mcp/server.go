@@ -313,7 +313,7 @@ func (s *Server) handleToolsList(req *MCPRequest) {
 							"type": "string",
 						},
 						"minItems":    1,
-						"description": "List of evidence predicates that must all pass to terminate the loop.",
+						"description": "List of evidence predicates that must all pass to terminate the loop. Format: 'type::content' (e.g., 'test_pass::go test ./...', 'file_exists::src/main.go', 'grep_hit::Error::logs/app.log').",
 					},
 					"max_iterations": map[string]interface{}{
 						"type":        "integer",
@@ -441,6 +441,8 @@ func (s *Server) handleToolCall(req *MCPRequest) {
 
 // handleMemoryRalph handles the Ralph autonomous repair loop request
 func (s *Server) handleMemoryRalph(req *MCPRequest, args json.RawMessage) {
+	s.app.Core.Logger.Debug("Received memory_ralph request", zap.String("args", string(args)))
+
 	var options ralph.Options
 	if err := json.Unmarshal(args, &options); err != nil {
 		s.sendError(req.ID, -32602, fmt.Sprintf("Invalid arguments for memory_ralph: %v", err))

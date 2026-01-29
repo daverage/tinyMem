@@ -2,12 +2,11 @@
   "$version": 2,
   "mcpServers": {
     "tinymem": {
-      "args": [
-        "mcp"
-      ],
+      "args": ["mcp"],
       "command": "tinymem",
       "env": {
-        "TINYMEM_METRICS_ENABLED": "true"
+        "TINYMEM_METRICS_ENABLED": "true",
+        "TINYMEM_LOGGING": "debug"
       },
       "timeout": 30000,
       "trust": false

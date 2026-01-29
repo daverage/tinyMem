@@ -113,4 +113,24 @@ If you are using a Gemini CLI that supports MCP (Meta-Code Protocol), you can co
 3.  Ensure `tinymem` is in your system's PATH, or provide the absolute path to the executable in the `command` field.
 4.  Once configured, the Gemini CLI will be able to access `tinyMem`'s memory tools (e.g., `memory_query`, `memory_write`).
 
+## Enabling Full Logging
+
+To enable detailed debug logging for troubleshooting `tinyMem` within Gemini:
+
+Update your `settings.json` file to set the `TINYMEM_LOG_LEVEL` environment variable to `debug`:
+
+```json
+{
+  "mcpServers": {
+    "tinymem": {
+      "command": "tinymem",
+      "args": ["mcp"],
+      "env": {
+        "TINYMEM_LOG_LEVEL": "debug"
+      }
+    }
+  }
+}
+```
+
 The Gemini CLI configuration guide (late 2025) describes exactly this `mcpServers` structure within `.gemini/settings.json`, so copying the above snippet matches the official schema.

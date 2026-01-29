@@ -248,9 +248,26 @@ See extension documentation for configuration format.
 
 3. **Enable debug logging** (temporary):
 
-   Edit `.tinyMem/config.toml`:
+   **Option A: Edit `.tinyMem/config.toml`**:
    ```toml
-   log_level = "debug"
+   [logging]
+   level = "debug"
+   ```
+
+   **Option B: Edit `settings.json` / `claude_desktop_config.json`**:
+   Add the environment variable directly to your server configuration:
+   ```json
+   {
+     "mcpServers": {
+       "tinymem": {
+         "command": "tinymem",
+         "args": ["mcp"],
+         "env": {
+           "TINYMEM_LOG_LEVEL": "debug"
+         }
+       }
+     }
+   }
    ```
 
    Then check logs after attempting MCP connection:

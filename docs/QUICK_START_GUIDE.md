@@ -108,6 +108,17 @@ Edit your config file (usually `~/Library/Application Support/Claude/claude_desk
 
 ---
 
+## 🛠 Troubleshooting & Logging
+
+If things aren't working as expected, you can enable **full debug logging**:
+
+1.  **Environment Variable**: `export TINYMEM_LOG_LEVEL=debug`
+2.  **Config File**: Set `level = "debug"` in the `[logging]` section of `.tinyMem/config.toml`.
+
+Logs are stored by default in `.tinyMem/logs/tinymem-<date>.log`.
+
+---
+
 ## Next Steps
 
 *   **Read the full [README](../README.md)** for advanced configuration.

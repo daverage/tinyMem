@@ -31,6 +31,7 @@ tinyMem gives small and medium language models (7B–13B) reliable long-term mem
   - [Writing Memories](#writing-memories)
   - [Memory Types & Truth](#memory-types--truth)
 - [The Ralph Loop](#-the-ralph-loop-autonomous-repair)
+- [tinyTasks](#-tinytasks-autonomous-task-tracking)
 - [Integration](#-integration)
   - [Proxy Mode](#proxy-mode)
   - [MCP Server (IDE Integration)](#mcp-server-ide-integration)
@@ -201,6 +202,21 @@ The **Ralph Loop** (`memory_ralph`) is a deterministic governor for autonomous c
 
 ---
 
+## 📝 tinyTasks: Autonomous Task Tracking
+
+<div align="center">
+  <img src="assets/tinyTasks-logo.png" alt="tinyTasks logo" width="200" />
+</div>
+
+tinyTasks is a built-in task management system that lives alongside your code in `tinyTasks.md`. Unlike static TODO lists, tinyTasks is an **autonomous ledger** that tinyMem uses to track project state and goals.
+
+-   **File-Authoritative**: `tinyTasks.md` is the source of truth. Changes to the file are automatically synced to the memory database.
+-   **Dashboard Sync**: Your task progress is automatically visualized in the `tinymem dashboard`, complete with completion rates and trend analysis.
+-   **Agent-Aware**: AI agents follow the MANDATORY TINYMEM CONTROL PROTOCOL to update tasks as they progress, ensuring you always know exactly what has been done.
+-   **Contextual Recall**: Completed and pending tasks are injected into the LLM's context, providing a "Project Memory" of what was tried and what remains.
+
+---
+
 ## 🔌 Integration
 
 ### Proxy Mode
@@ -316,7 +332,18 @@ semantic_enabled = false # Set true if you have an embedding model
 [cove]
 enabled = true           # Chain-of-Verification (Extraction + Recall filtering)
 confidence_threshold = 0.6
+
+[logging]
+level = "info"           # "debug", "info", "warn", "error", "off"
+file = "tinymem.log"     # Relative to .tinyMem/logs/
+
 ```
+
+### Environment Variables
+For quick overrides, you can use:
+- `TINYMEM_LOG_LEVEL=debug`
+- `TINYMEM_LLM_API_KEY=sk-...`
+- `TINYMEM_PROXY_PORT=8080`
 
 See [Configuration Docs](docs/QUICK_START_GUIDE.md) for details.
 

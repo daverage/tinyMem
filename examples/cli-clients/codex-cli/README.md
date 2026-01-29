@@ -118,3 +118,29 @@ codex mcp add tinymem \
 2.  The `codex` CLI will then be able to use `tinyMem`'s MCP tools (like `memory_query`, `memory_write`, etc.).
 3.  The `--` separates the `codex mcp add` arguments from the actual command that `codex` will execute to start the MCP server (`tinymem mcp`).
 4.  Ensure that `tinymem` is in your system's PATH.
+
+## Enabling Full Logging
+
+To enable detailed debug logging for troubleshooting `tinyMem` within Codex:
+
+### When Adding the Server
+Add the `--env` flag during registration:
+```bash
+codex mcp add tinymem --env TINYMEM_LOG_LEVEL=debug -- tinymem mcp
+```
+
+### Manual Configuration
+If already registered, edit your `.codex/settings.json` file:
+```json
+{
+  "mcpServers": {
+    "tinymem": {
+      "command": "tinymem",
+      "args": ["mcp"],
+      "env": {
+        "TINYMEM_LOG_LEVEL": "debug"
+      }
+    }
+  }
+}
+```
