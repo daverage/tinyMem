@@ -22,6 +22,7 @@ import (
 	"github.com/daverage/tinymem/internal/memory"
 	"github.com/daverage/tinymem/internal/recall"
 	"github.com/daverage/tinymem/internal/semantic"
+	"github.com/daverage/tinymem/internal/tasks"
 	"go.uber.org/zap"
 )
 
@@ -56,6 +57,7 @@ type Server struct {
 	evidenceService *evidence.Service
 	recallEngine    recall.Recaller
 	extractor       *extract.Extractor
+	taskService     *tasks.Service
 	responseBuffer  chan ResponseCapture // Channel for capturing responses for extraction
 	shutdownCh      chan struct{}
 	shutdownOnce    sync.Once
@@ -75,6 +77,7 @@ func NewServer(a *app.App) *Server {
 	injector := inject.NewMemoryInjector(recallEngine)
 	llmClient := llm.NewClient(a.Core.Config)
 	extractor := extract.NewExtractor(evidenceService)
+	taskService := tasks.NewService(a.Core.DB, a.Memory, a.Project.ID)
 
 	// Create CoVe verifier if enabled (safely enabled by default)
 	if a.Core.Config.CoVeEnabled {
@@ -99,6 +102,7 @@ func NewServer(a *app.App) *Server {
 		evidenceService: evidenceService,
 		recallEngine:    recallEngine,
 		extractor:       extractor,
+		taskService:     taskService,
 		responseBuffer:  make(chan ResponseCapture, 10), // Buffered channel to prevent blocking
 		shutdownCh:      make(chan struct{}),
 	}
@@ -192,6 +196,9 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Check if the user explicitly requested to continue tasks
+	explicitTaskContinuation := s.taskService.HasExplicitTaskContinuationIntent(userMessage)
+
 	// Inject memories into the prompt
 	if userMessage != "" {
 		// Perform recall to get relevant memories
@@ -206,14 +213,18 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 			notification.RecallStatus = recallStatusFailed
 		} else {
 			recallResults = s.injector.FilterRecallResults(r.Context(), recallResults, userMessage)
-			notifyCount := len(recallResults)
+
+			// Apply task safety filtering: filter out tasks that shouldn't be acted upon
+			safeRecallResults := s.filterRecallResultsForTaskSafety(recallResults, userMessage, explicitTaskContinuation)
+
+			notifyCount := len(safeRecallResults)
 			notification.RecallCount = notifyCount
 			if notifyCount > 0 {
 				notification.RecallStatus = recallStatusInjected
 			}
 			// Format memories and prepend to the last user message
 			var memories []*memory.Memory
-			for _, result := range recallResults {
+			for _, result := range safeRecallResults {
 				memories = append(memories, result.Memory)
 			}
 
@@ -444,4 +455,48 @@ func estimateTokenCount(text string) int {
 		return conservativeEstimate
 	}
 	return wordBasedEstimate
+}
+
+// filterRecallResultsForTaskSafety filters out tasks that shouldn't be acted upon based on safety rules
+func (s *Server) filterRecallResultsForTaskSafety(results []recall.RecallResult, query string, explicitTaskContinuation bool) []recall.RecallResult {
+	if explicitTaskContinuation {
+		// If user explicitly requested task continuation, allow all tasks
+		return results
+	}
+
+	// Otherwise, filter out unfinished tasks that are in dormant mode
+	var safeResults []recall.RecallResult
+
+	for _, result := range results {
+		if result.Memory.Type == memory.Task {
+			// Check if this is an unfinished task that should be filtered out
+			if s.isUnfinishedDormantTask(result.Memory) {
+				// Skip this task - it's an unfinished dormant task and user didn't explicitly request continuation
+				continue
+			}
+		}
+		// Include non-task memories or tasks that are completed
+		safeResults = append(safeResults, result)
+	}
+
+	return safeResults
+}
+
+// isUnfinishedDormantTask checks if a memory is an unfinished task in dormant mode
+func (s *Server) isUnfinishedDormantTask(mem *memory.Memory) bool {
+	if mem.Type != memory.Task {
+		return false
+	}
+
+	// Check if task is completed
+	if strings.Contains(mem.Detail, "Completed: true") {
+		return false // Completed tasks are fine to include
+	}
+
+	// Check if task is in dormant mode
+	if strings.Contains(mem.Detail, "Mode: dormant") {
+		return true // Unfinished dormant task - should be filtered
+	}
+
+	return false
 }

@@ -25,6 +25,7 @@ type Service struct {
 	db        *storage.DB
 	memory    *memory.Service
 	projectID string
+	enforcer  *TaskSafetyEnforcer
 }
 
 // NewService creates a new task service
@@ -33,6 +34,7 @@ func NewService(db *storage.DB, memoryService *memory.Service, projectID string)
 		db:        db,
 		memory:    memoryService,
 		projectID: projectID,
+		enforcer:  NewTaskSafetyEnforcer(),
 	}
 }
 
@@ -54,15 +56,15 @@ func (s *Service) CreateOrUpdateTask(task *Task) error {
 		ProjectID: s.projectID,
 		Type:      memory.Task,
 		Summary:   task.Title,
-		Detail: fmt.Sprintf("Section: %s\nIndex: %d\nSteps Total: %d\nSteps Done: %d\nCompleted: %t\nFile Path: %s\nLast Updated: %s",
-			task.Section, task.Index, task.StepsTotal, task.StepsDone, task.Completed, task.FilePath, task.LastUpdated),
+		Detail: fmt.Sprintf("Section: %s\nIndex: %d\nSteps Total: %d\nSteps Done: %d\nCompleted: %t\nState: %s\nMode: %s\nFile Path: %s\nLast Updated: %s",
+			task.Section, task.Index, task.StepsTotal, task.StepsDone, task.Completed, task.State, task.Mode, task.FilePath, task.LastUpdated),
 		Key:    &task.ID,
 		Source: &task.FilePath,
 	}
 
 	// Add extra fields as needed
-	extraDetails := fmt.Sprintf("Section: %s\nIndex: %d\nSteps Total: %d\nSteps Done: %d\nCompleted: %t\nFile Path: %s\nLast Updated: %s",
-		task.Section, task.Index, task.StepsTotal, task.StepsDone, task.Completed, task.FilePath, task.LastUpdated)
+	extraDetails := fmt.Sprintf("Section: %s\nIndex: %d\nSteps Total: %d\nSteps Done: %d\nCompleted: %t\nState: %s\nMode: %s\nFile Path: %s\nLast Updated: %s",
+		task.Section, task.Index, task.StepsTotal, task.StepsDone, task.Completed, task.State, task.Mode, task.FilePath, task.LastUpdated)
 
 	if task.LastSeenHash != "" {
 		extraDetails += fmt.Sprintf("\nHash: %s", task.LastSeenHash)
@@ -78,6 +80,47 @@ func (s *Service) CreateOrUpdateTask(task *Task) error {
 		// Create new task
 		return s.memory.CreateMemory(memObj)
 	}
+}
+
+// CanActOnTask checks if an action can be performed on a task based on safety rules
+func (s *Service) CanActOnTask(taskID string, query string) (bool, error) {
+	task, err := s.GetTaskByKey(taskID)
+	if err != nil {
+		return false, err
+	}
+
+	// Parse the task details to extract mode
+	mode := TaskModeDormant // Default
+	if task.Detail != "" {
+		lines := strings.Split(task.Detail, "\n")
+		for _, line := range lines {
+			if strings.HasPrefix(line, "Mode: ") {
+				modeStr := strings.TrimPrefix(line, "Mode: ")
+				mode = TaskMode(modeStr)
+				break
+			}
+		}
+	}
+
+	// Create a temporary task object for the safety check
+	tempTask := &Task{
+		ID:        taskID,
+		Completed: strings.Contains(task.Detail, "Completed: true"),
+		State:     TaskStateOpen, // Default
+		Mode:      mode,
+	}
+
+	return s.enforcer.CanActOnTask(tempTask, query), nil
+}
+
+// CanCreateNewTask checks if a new task can be created based on the query
+func (s *Service) CanCreateNewTask(query string) bool {
+	return s.enforcer.CanCreateNewTask(query)
+}
+
+// HasExplicitTaskContinuationIntent checks if the query explicitly requests task continuation
+func (s *Service) HasExplicitTaskContinuationIntent(query string) bool {
+	return s.enforcer.HasExplicitTaskContinuationIntent(query)
 }
 
 // GetTaskByKey retrieves a task by its key

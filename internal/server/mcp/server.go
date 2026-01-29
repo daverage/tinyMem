@@ -21,6 +21,7 @@ import (
 	"github.com/daverage/tinymem/internal/recall"
 	"github.com/daverage/tinymem/internal/semantic"
 	"github.com/daverage/tinymem/internal/storage"
+	"github.com/daverage/tinymem/internal/tasks"
 	"go.uber.org/zap" // Add zap import
 )
 
@@ -34,6 +35,7 @@ type Server struct {
 	recallEngine    recall.Recaller
 	extractor       *extract.Extractor
 	coveVerifier    *cove.Verifier
+	taskService     *tasks.Service
 	ctx             context.Context
 	cancel          context.CancelFunc
 }
@@ -72,6 +74,7 @@ func NewServer(a *app.App) *Server {
 		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Core.Config, a.Core.Logger, a.Core.DB.GetConnection())
 	}
 	extractor := extract.NewExtractor(evidenceService)
+	taskService := tasks.NewService(a.Core.DB, a.Memory, a.Project.ID)
 
 	// Initialize CoVe (Chain-of-Verification) for memory extraction filtering
 	var coveVerifier *cove.Verifier
@@ -96,6 +99,7 @@ func NewServer(a *app.App) *Server {
 		recallEngine:    recallEngine,
 		extractor:       extractor,
 		coveVerifier:    coveVerifier,
+		taskService:     taskService,
 		ctx:             ctx,
 		cancel:          cancel,
 	}
@@ -539,6 +543,11 @@ func (s *Server) handleMemoryQuery(req *MCPRequest, args json.RawMessage) {
 		}
 	}
 
+	// Apply task safety filtering: filter out tasks that shouldn't be acted upon
+	explicitTaskContinuation := s.taskService.HasExplicitTaskContinuationIntent(queryReq.Query)
+	safeResults := s.filterRecallResultsForTaskSafety(results, queryReq.Query, explicitTaskContinuation)
+	results = safeResults
+
 	// Convert results to text content for MCP
 	var content strings.Builder
 	content.WriteString(fmt.Sprintf("Found %d memories matching '%s':\n\n", len(results), queryReq.Query))
@@ -893,6 +902,50 @@ func (s *Server) handleShutdown(req *MCPRequest) {
 	s.sendResponse(response)
 	// Do not os.Exit(0) here. Let the main goroutine handle the exit
 	// after all deferred cleanups are done.
+}
+
+// filterRecallResultsForTaskSafety filters out tasks that shouldn't be acted upon based on safety rules
+func (s *Server) filterRecallResultsForTaskSafety(results []recall.RecallResult, query string, explicitTaskContinuation bool) []recall.RecallResult {
+	if explicitTaskContinuation {
+		// If user explicitly requested task continuation, allow all tasks
+		return results
+	}
+
+	// Otherwise, filter out unfinished tasks that are in dormant mode
+	var safeResults []recall.RecallResult
+
+	for _, result := range results {
+		if result.Memory.Type == memory.Task {
+			// Check if this is an unfinished task that should be filtered out
+			if s.isUnfinishedDormantTask(result.Memory) {
+				// Skip this task - it's an unfinished dormant task and user didn't explicitly request continuation
+				continue
+			}
+		}
+		// Include non-task memories or tasks that are completed
+		safeResults = append(safeResults, result)
+	}
+
+	return safeResults
+}
+
+// isUnfinishedDormantTask checks if a memory is an unfinished task in dormant mode
+func (s *Server) isUnfinishedDormantTask(mem *memory.Memory) bool {
+	if mem.Type != memory.Task {
+		return false
+	}
+
+	// Check if task is completed
+	if strings.Contains(mem.Detail, "Completed: true") {
+		return false // Completed tasks are fine to include
+	}
+
+	// Check if task is in dormant mode
+	if strings.Contains(mem.Detail, "Mode: dormant") {
+		return true // Unfinished dormant task - should be filtered
+	}
+
+	return false
 }
 
 // Close gracefully shuts down the MCP server and its resources.

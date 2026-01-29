@@ -23,6 +23,22 @@ import (
 	"strings"
 )
 
+// TaskState represents the state of a task
+type TaskState string
+
+const (
+	TaskStateOpen      TaskState = "open"
+	TaskStateCompleted TaskState = "completed"
+)
+
+// TaskMode represents how the task should be treated
+type TaskMode string
+
+const (
+	TaskModeDormant TaskMode = "dormant" // Default - read-only, no execution
+	TaskModeActive  TaskMode = "active"  // Only when explicitly requested by user
+)
+
 // Task represents a parsed task from tinyTasks.md
 type Task struct {
 	ID           string            `json:"id"`
@@ -32,6 +48,8 @@ type Task struct {
 	StepsTotal   int               `json:"steps_total"`
 	StepsDone    int               `json:"steps_done"`
 	Completed    bool              `json:"completed"`
+	State        TaskState         `json:"state"`
+	Mode         TaskMode          `json:"mode"`
 	LastSeenHash string            `json:"last_seen_hash"`
 	FilePath     string            `json:"file_path"`
 	LastUpdated  string            `json:"last_updated"`
@@ -89,6 +107,8 @@ func ParseTasks(r io.Reader) ([]*Task, error) {
 				StepsTotal:   stepsTotal,
 				StepsDone:    stepsDone,
 				Completed:    completed,
+				State:        TaskStateOpen,  // Default state
+				Mode:         TaskModeDormant, // Default mode - read-only
 				LastSeenHash: "",             // Will be set by caller
 				FilePath:     "tinyTasks.md", // Fixed path
 				LastUpdated:  "",             // Will be set by caller
