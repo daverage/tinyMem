@@ -23,7 +23,7 @@ tinymem proxy
 
 ## 3. Run Aider through tinyMem
 
-Aider uses LiteLLM internally. To route Aider through tinyMem, you should point Aider's API base to tinyMem's proxy.
+Aider uses LiteLLM internally. LiteLLM requires a provider prefix (like `openai/`) when using a custom API base.
 
 ### Option A: Command Line Arguments
 
@@ -31,7 +31,9 @@ Aider uses LiteLLM internally. To route Aider through tinyMem, you should point 
 aider --openai-api-base http://localhost:8080/v1 --model openai/qwen2.5-coder-7b-instruct
 ```
 
-*Note: The `openai/` prefix might be required by LiteLLM to treat the local endpoint as OpenAI-compatible.*
+**CRITICAL**: If you omit `openai/` and only pass `--model qwen2.5-coder-7b-instruct`, LiteLLM will throw a `BadRequestError: LLM Provider NOT provided`. Always include the prefix.
+
+tinyMem will automatically strip the `openai/` prefix before sending the request to LM Studio, ensuring compatibility.
 
 ### Option B: Environment Variables
 
