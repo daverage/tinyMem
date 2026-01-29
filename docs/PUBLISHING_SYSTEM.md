@@ -43,20 +43,12 @@ Before publishing can occur:
 3. **Commit Creation**: Changes are committed with a release message
 4. **Tag Creation**: A Git tag is created for the new version
 5. **Push Operations**: Code and tags are pushed to the remote repository
-6. **Container Publish (GHCR)**: A container image is built and pushed to `ghcr.io/<owner>/<repo>` with `:latest` and version tags
+6. **Container Publish (GHCR)**: GitHub Actions publishes the container image to `ghcr.io/<owner>/<repo>` with `:latest` and version tags on `v*` tags/releases
 7. **GitHub Release**: A release is created on GitHub with assets attached
 
 ### Container Publishing (GHCR)
 
-Release mode publishes a Docker image if Docker is available and logged in to GHCR.
-
-**Requirements:**
-- Docker CLI installed and daemon running
-- Authenticated to GHCR (`docker login ghcr.io`)
-
-**Image naming:**
-- Default: `ghcr.io/<repo_owner>/<repo>`
-- Override via `TINYMEM_IMAGE` environment variable
+Container publishing is handled by GitHub Actions on tag/release events. Local release scripts do not push images.
 
 ### Cross-Platform Compilation
 

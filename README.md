@@ -107,11 +107,11 @@ tinymem mcp
 See the [Quick Start Guide for Beginners](docs/QUICK_START_GUIDE.md) for a detailed walkthrough.
 
 ### Option 1: Pre-built Binary (Recommended)
-Download from the [Releases Page](https://github.com/andrzejmarczewski/tinyMem/releases).
+Download from the [Releases Page](https://github.com/daverage/tinyMem/releases).
 
 **macOS / Linux**:
 ```bash
-curl -L "https://github.com/andrzejmarczewski/tinyMem/releases/latest/download/tinymem-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)" -o tinymem
+curl -L "https://github.com/daverage/tinyMem/releases/latest/download/tinymem-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)" -o tinymem
 chmod +x tinymem
 sudo mv tinymem /usr/local/bin/
 ```

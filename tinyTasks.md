@@ -1,6 +1,4 @@
-# Tasks – Add GHCR labels to Dockerfile
+# Tasks – Confirm binary naming in install docs
 
-- [x] Add recommended GHCR OCI labels
-  - [x] Set org.opencontainers.image.source
-  - [x] Set org.opencontainers.image.description
-  - [x] Set org.opencontainers.image.licenses
+- [x] Verify install instructions ensure binary name `tinymem`
+- [x] Adjust docs or release artifacts if needed

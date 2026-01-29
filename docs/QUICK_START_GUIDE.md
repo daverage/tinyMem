@@ -11,7 +11,7 @@ tinyMem is a local tool that sits between your code and your AI assistant. It cr
 First, get the single executable file. No complex installers or dependencies required.
 
 ### Windows
-1.  Download the **[latest release](https://github.com/andrzejmarczewski/tinyMem/releases)** (`tinymem-windows-amd64.exe`).
+1.  Download the **[latest release](https://github.com/daverage/tinyMem/releases)** (`tinymem-windows-amd64.exe`).
 2.  Create a folder `C:\Tools` (or use an existing one) and put the file there.
 3.  Rename it to `tinymem.exe` for convenience.
 4.  **Important:** Add this folder to your PATH so you can run it from anywhere.
@@ -21,7 +21,7 @@ First, get the single executable file. No complex installers or dependencies req
 1.  Open your terminal.
 2.  Run this command to download and install to `/usr/local/bin`:
     ```bash
-    curl -L "https://github.com/andrzejmarczewski/tinyMem/releases/latest/download/tinymem-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)" -o tinymem
+    curl -L "https://github.com/daverage/tinyMem/releases/latest/download/tinymem-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)" -o tinymem
     chmod +x tinymem
     sudo mv tinymem /usr/local/bin/
     ```

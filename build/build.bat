@@ -44,18 +44,6 @@ if "%IS_RELEASE%"=="true" (
         echo ❌ Error: GitHub CLI (gh) not installed. Required for releases.
         exit /b 1
     )
-
-    where docker >nul 2>nul
-    if errorlevel 1 (
-        echo ❌ Error: Docker CLI not installed. Required for container publishing.
-        exit /b 1
-    )
-
-    docker info >nul 2>nul
-    if errorlevel 1 (
-        echo ❌ Error: Docker daemon not available. Start Docker and try again.
-        exit /b 1
-    )
 )
 
 REM ------------------------------------------------
@@ -108,26 +96,6 @@ if not "%TINYMEM_EXTRA_BUILD_TAGS%"=="" (
 
 set TAGS_FLAG=-tags "%BUILD_TAGS%"
 set LDFLAGS=-X github.com/daverage/tinymem/internal/version.Version=%VERSION%
-
-REM ------------------------------------------------
-REM Container publish (release mode)
-REM ------------------------------------------------
-set IMAGE_NAME=
-for /f "tokens=*" %%i in ('git config --get remote.origin.url 2^>nul') do set REMOTE_URL=%%i
-if not "%REMOTE_URL%"=="" (
-    for /f "tokens=1,2 delims=/" %%a in ("%REMOTE_URL:github.com/=%") do (
-        set OWNER=%%a
-        set REPO=%%b
-    )
-    for /f "tokens=1 delims=." %%a in ("%REPO%") do set REPO=%%a
-)
-if "%OWNER%"=="" set OWNER=daverage
-if "%REPO%"=="" set REPO=tinymem
-if not "%TINYMEM_IMAGE%"=="" (
-    set IMAGE_NAME=%TINYMEM_IMAGE%
-) else (
-    set IMAGE_NAME=ghcr.io/%OWNER%/%REPO%
-)
 
 REM Clear previous releases
 if exist "%OUT_DIR%\*" del /q "%OUT_DIR%\*"
@@ -216,13 +184,6 @@ if "%IS_RELEASE%"=="true" (
     echo ⬆️  Pushing to origin...
     git push origin main
     git push origin "!VERSION!" --force
-
-    echo 🐳 Building container: %IMAGE_NAME%
-    docker build -t "%IMAGE_NAME%:!VERSION!" -t "%IMAGE_NAME%:latest" .
-
-    echo ⬆️  Pushing container to GHCR...
-    docker push "%IMAGE_NAME%:!VERSION!"
-    docker push "%IMAGE_NAME%:latest"
 
     echo 📦 Creating GitHub Release...
     gh release view "!VERSION!" >nul 2>nul
