@@ -163,7 +163,7 @@ func setupServices(a *app.App) (*evidence.Service, recall.Recaller, *inject.Memo
 	} else {
 		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Core.Config, a.Core.Logger, a.Core.DB.GetConnection())
 	}
-	injector := inject.NewMemoryInjector(recallEngine)
+	injector := inject.NewMemoryInjector(recallEngine, a.Core.Logger, a.Core.Config.AlwaysIncludeUserPrompt)
 	return evidenceService, recallEngine, injector
 }
 

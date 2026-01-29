@@ -47,6 +47,7 @@ type Config struct {
 	ExtractionBufferBytes         int
 	RecallMaxItems                int
 	RecallMaxTokens               int
+	AlwaysIncludeUserPrompt       bool
 	// Metrics configuration
 	MetricsEnabled bool
 	// CoVe (Chain-of-Verification) configuration
@@ -91,6 +92,9 @@ type fileConfig struct {
 		BaseURL string `toml:"base_url"`
 		Model   string `toml:"model"`
 	} `toml:"embedding"`
+	Prompt struct {
+		AlwaysIncludeUserPrompt *bool `toml:"always_include_user_prompt"`
+	} `toml:"prompt"`
 	Metrics struct {
 		Enabled bool `toml:"enabled"`
 	} `toml:"metrics"`
@@ -141,6 +145,7 @@ func LoadConfig() (*Config, error) {
 		ExtractionBufferBytes:         DefaultExtractionBufferBytes,
 		RecallMaxItems:                10,
 		RecallMaxTokens:               2000,
+		AlwaysIncludeUserPrompt:       true,
 		MetricsEnabled:                false,
 		// CoVe defaults (enabled by default)
 		CoVeEnabled:             true,
@@ -213,6 +218,9 @@ func LoadConfig() (*Config, error) {
 		}
 		if parsed.Embedding.Model != "" {
 			cfg.EmbeddingModel = parsed.Embedding.Model
+		}
+		if parsed.Prompt.AlwaysIncludeUserPrompt != nil {
+			cfg.AlwaysIncludeUserPrompt = *parsed.Prompt.AlwaysIncludeUserPrompt
 		}
 		// Metrics configuration
 		cfg.MetricsEnabled = parsed.Metrics.Enabled

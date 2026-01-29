@@ -6,21 +6,28 @@ import (
 	"github.com/daverage/tinymem/internal/cove"
 	"github.com/daverage/tinymem/internal/memory"
 	"github.com/daverage/tinymem/internal/recall"
+	"go.uber.org/zap"
 	"strconv"
 	"strings"
 )
 
+const noMemorySentinel = "[no memory found; continue with user request]"
+
 // MemoryInjector handles injecting memories into prompts
 type MemoryInjector struct {
-	recallEngine recall.Recaller
-	coveVerifier *cove.Verifier
+	recallEngine            recall.Recaller
+	coveVerifier            *cove.Verifier
+	logger                  *zap.Logger
+	alwaysIncludeUserPrompt bool
 }
 
 // NewMemoryInjector creates a new memory injector
-func NewMemoryInjector(recallEngine recall.Recaller) *MemoryInjector {
+func NewMemoryInjector(recallEngine recall.Recaller, logger *zap.Logger, alwaysIncludeUserPrompt bool) *MemoryInjector {
 	return &MemoryInjector{
-		recallEngine: recallEngine,
-		coveVerifier: nil, // Can be set later via SetCoVeVerifier
+		recallEngine:            recallEngine,
+		coveVerifier:            nil, // Can be set later via SetCoVeVerifier
+		logger:                  logger,
+		alwaysIncludeUserPrompt: alwaysIncludeUserPrompt,
 	}
 }
 
@@ -45,10 +52,12 @@ func (mi *MemoryInjector) FilterRecallResults(ctx context.Context, results []rec
 
 // InjectMemoriesIntoPrompt injects relevant memories into a prompt
 func (mi *MemoryInjector) InjectMemoriesIntoPrompt(prompt string, projectID string, maxItems int, maxTokens int) (string, error) {
+	basePrompt := prompt
+
 	// Perform recall to find relevant memories
 	results, err := mi.recallEngine.Recall(recall.RecallOptions{
 		ProjectID: projectID,
-		Query:     prompt,
+		Query:     basePrompt,
 		MaxItems:  maxItems,
 		MaxTokens: maxTokens,
 	})
@@ -56,21 +65,44 @@ func (mi *MemoryInjector) InjectMemoriesIntoPrompt(prompt string, projectID stri
 		return "", err
 	}
 
-	if len(results) == 0 {
-		// No relevant memories found, return original prompt
-		return prompt, nil
+	if !mi.alwaysIncludeUserPrompt {
+		if len(results) == 0 {
+			return prompt, nil
+		}
+
+		results = mi.FilterRecallResults(context.Background(), results, basePrompt)
+		if len(results) == 0 {
+			return prompt, nil
+		}
+
+		memorySection := buildMemorySection(results)
+		return memorySection + prompt, nil
 	}
 
-	// COVE INTEGRATION POINT 2: Optional recall filtering (advisory only)
-	// This can only remove memories, never add new ones.
-	results = mi.FilterRecallResults(context.Background(), results, prompt)
-
+	results = mi.FilterRecallResults(context.Background(), results, basePrompt)
 	if len(results) == 0 {
-		// All memories filtered out, return original prompt
-		return prompt, nil
+		mi.logZeroMemoryPath()
+		finalBuilder := strings.Builder{}
+		finalBuilder.WriteString(basePrompt)
+		finalBuilder.WriteString("\n\n")
+		finalBuilder.WriteString(noMemorySentinel)
+		finalBuilder.WriteString("\n")
+		return finalBuilder.String(), nil
 	}
 
-	// Build memory section
+	memorySection := buildMemorySection(results)
+
+	var finalBuilder strings.Builder
+	finalBuilder.WriteString(basePrompt)
+	finalBuilder.WriteString("\n\n")
+	finalBuilder.WriteString(noMemorySentinel)
+	finalBuilder.WriteString("\n")
+	finalBuilder.WriteString(memorySection)
+
+	return finalBuilder.String(), nil
+}
+
+func buildMemorySection(results []recall.RecallResult) string {
 	var memorySection strings.Builder
 	memorySection.WriteString("\n\n=== RELEVANT MEMORY ===\n")
 
@@ -96,10 +128,14 @@ func (mi *MemoryInjector) InjectMemoriesIntoPrompt(prompt string, projectID stri
 
 	memorySection.WriteString("=== END MEMORY ===\n")
 
-	// Prepend memories to the original prompt
-	injectedPrompt := memorySection.String() + prompt
+	return memorySection.String()
+}
 
-	return injectedPrompt, nil
+func (mi *MemoryInjector) logZeroMemoryPath() {
+	if mi.logger == nil {
+		return
+	}
+	mi.logger.Info("zero-memory prompt path", zap.String("layer", "memory_injector"))
 }
 
 // FormatMemoriesForSystemMessage formats memories in a structured way for system messages
