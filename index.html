@@ -610,8 +610,10 @@
             
             <div class="terminal">
                 <div class="terminal-content">
-                    <span class="comment"># 1. Install tinyMem</span><br>
-                    <span class="command">curl -L "https://github.com/daverage/tinyMem/releases/latest/download/tinymem" -o tinymem</span><br>
+                    <span class="comment"># 1. Install tinyMem (macOS/Linux)</span><br>
+                    <span class="command">os="$(uname -s | tr '[:upper:]' '[:lower:]')"</span><br>
+                    <span class="command">arch="$(uname -m)"; [ "$arch" = "x86_64" ] && arch="amd64"; [ "$arch" = "aarch64" ] && arch="arm64"</span><br>
+                    <span class="command">curl -L "https://github.com/daverage/tinyMem/releases/latest/download/tinymem-${os}-${arch}" -o tinymem</span><br>
                     <span class="command">chmod +x tinymem && sudo mv tinymem /usr/local/bin/</span><br><br>
                     
                     <span class="comment"># 2. Initialize in your project</span><br>

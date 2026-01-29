@@ -43,7 +43,7 @@ The build system calculates versions based on Git tags:
 
 During the build process:
 1. The calculated version is injected into the binary using linker flags (Go's `-ldflags`)
-2. For Go specifically: `-X github.com/andrzejmarczewski/tinyMem/internal/version.Version=vX.Y.Z`
+2. For Go specifically: `-X github.com/daverage/tinymem/internal/version.Version=vX.Y.Z`
 3. Binaries are compiled for multiple platforms (macOS, Linux, Windows) with appropriate naming
 
 ### Release Process
@@ -53,7 +53,7 @@ When creating a release:
 2. Changes are committed to the repository
 3. A Git tag is created with the new version
 4. The tag and changes are pushed to the remote repository
-5. A GitHub release is created with the compiled binaries attached
+5. GitHub Actions publishes the release artifacts (and container image, if configured) based on the tag
 
 ## Adapting for Other Languages
 

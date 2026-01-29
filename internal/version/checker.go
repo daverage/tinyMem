@@ -21,7 +21,7 @@ func CheckForUpdates() (string, error) {
 		Timeout: 5 * time.Second,
 	}
 
-	req, err := http.NewRequest("GET", "https://api.github.com/repos/daverage/tinymem/releases/latest", nil)
+	req, err := http.NewRequest("GET", "https://api.github.com/repos/daverage/tinyMem/releases/latest", nil)
 	if err != nil {
 		return "", err
 	}
@@ -46,8 +46,9 @@ func CheckForUpdates() (string, error) {
 		return "", err
 	}
 
+	currentVersion := strings.TrimPrefix(Version, "v")
 	latestVersion := strings.TrimPrefix(release.TagName, "v")
-	if IsNewer(Version, latestVersion) {
+	if IsNewer(currentVersion, latestVersion) {
 		return latestVersion, nil
 	}
 

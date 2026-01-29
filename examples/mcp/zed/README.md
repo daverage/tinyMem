@@ -1,15 +1,15 @@
 # Configuring Zed IDE with tinyMem (MCP)
 
-Zed IDE exposes an `agent_servers` section in its configuration that can launch external executables in addition to the built-in LLM providers, so you can now register `tinyMem` directly as an MCP-aware agent. The Zed documentation (late 2025) describes this `agent_servers` structure, including `command`, `args`, and optional `env` blocks for each entry.
+Zed supports connecting to MCP servers via `context_servers`. This lets Zed use `tinymem` as an MCP server (stdio).
 
-## Register tinyMem through `agent_servers`
+## Register tinyMem through `context_servers`
 
-Add or merge an entry like the following into the `agent_servers` map inside your Zed `settings.json` or the Agent Panel configuration file:
+Add or merge an entry like the following into your Zed `settings.json`:
 
 ```json
 {
-  "agent_servers": {
-    "tinymem_mcp": {
+  "context_servers": {
+    "tinymem": {
       "command": "/path/to/tinymem",
       "args": ["mcp"],
       "env": {
@@ -20,12 +20,8 @@ Add or merge an entry like the following into the `agent_servers` map inside you
 }
 ```
 
-The `command` value should point to the `tinymem` binary (absolute path or a directory on your `PATH`), and `args` must include `["mcp"]` so the binary runs in MCP server mode. You can also set any necessary environment variables inside `env`, just like other MCP integrations documented throughout this repo.
+The `command` value should point to the `tinymem` binary (absolute path, or a command on your `PATH`). `args` must include `["mcp"]` so the binary runs in MCP server mode.
 
-## When agent_servers is not an option
+## Proxy mode (when you want an OpenAI-compatible API base)
 
-If your Zed build still exposes only custom API base URLs (e.g., inside `settings.json`'s `language_models` entries), you can send the provider requests through tinyMem's proxy instead. Point the provider's API base URL at `http://localhost:8080/v1` (or whatever port you choose) and keep your actual LLM backend configured inside `tinyMem`'s `config.toml`.
-
-## Where to find updates
-
-Monitor the Zed release notes and configuration docs for new MCP/agent-server capabilities (`agent_servers`, `context_servers`, etc.), and follow the same procedure above whenever a new mechanism is added.
+If you want Zed (or a Zed extension/tooling) to send OpenAI-compatible requests through tinyMem's proxy instead, point the client at `http://localhost:8080/v1` (or your configured port) and keep your actual LLM backend configured inside `.tinyMem/config.toml`.

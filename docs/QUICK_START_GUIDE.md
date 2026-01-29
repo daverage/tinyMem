@@ -21,7 +21,14 @@ First, get the single executable file. No complex installers or dependencies req
 1.  Open your terminal.
 2.  Run this command to download and install to `/usr/local/bin`:
     ```bash
-    curl -L "https://github.com/daverage/tinyMem/releases/latest/download/tinymem-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)" -o tinymem
+    os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+    arch="$(uname -m)"
+    case "$arch" in
+      x86_64|amd64) arch="amd64" ;;
+      aarch64|arm64) arch="arm64" ;;
+      *) echo "Unsupported arch: $arch" >&2; exit 1 ;;
+    esac
+    curl -L "https://github.com/daverage/tinyMem/releases/latest/download/tinymem-${os}-${arch}" -o tinymem
     chmod +x tinymem
     sudo mv tinymem /usr/local/bin/
     ```

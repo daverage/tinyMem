@@ -4,11 +4,11 @@
   <img src="assets/tinymem-logo.png" alt="tinyMem logo" width="280" />
 
   <p>
-    <a href="https://github.com/andrzejmarczewski/tinyMem/blob/main/LICENSE">
+    <a href="https://github.com/daverage/tinyMem/blob/main/LICENSE">
       <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" />
     </a>
     <a href="https://go.dev/dl/">
-      <img src="https://img.shields.io/badge/Go-1.22+-00ADD8.svg" alt="Go 1.22+" />
+      <img src="https://img.shields.io/badge/Go-1.25.6+-00ADD8.svg" alt="Go 1.25.6+" />
     </a>
     <img src="https://img.shields.io/badge/Build-Passing-brightgreen.svg" alt="Build Status" />
   </p>
@@ -111,7 +111,14 @@ Download from the [Releases Page](https://github.com/daverage/tinyMem/releases).
 
 **macOS / Linux**:
 ```bash
-curl -L "https://github.com/daverage/tinyMem/releases/latest/download/tinymem-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)" -o tinymem
+os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+arch="$(uname -m)"
+case "$arch" in
+  x86_64|amd64) arch="amd64" ;;
+  aarch64|arm64) arch="arm64" ;;
+  *) echo "Unsupported arch: $arch" >&2; exit 1 ;;
+esac
+curl -L "https://github.com/daverage/tinyMem/releases/latest/download/tinymem-${os}-${arch}" -o tinymem
 chmod +x tinymem
 sudo mv tinymem /usr/local/bin/
 ```
@@ -122,7 +129,7 @@ Download `tinymem-windows-amd64.exe`, rename to `tinymem.exe`, and add to your s
 ### Option 2: Build from Source
 Requires Go 1.25.6+.
 ```bash
-git clone https://github.com/andrzejmarczewski/tinyMem.git
+git clone https://github.com/daverage/tinyMem.git
 cd tinyMem
 ./build/build.sh   # Build only
 # or

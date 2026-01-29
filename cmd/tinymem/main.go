@@ -599,7 +599,7 @@ func checkUpdateWithContext(ctx context.Context, a *app.App) {
 		}
 
 		if result.newVersion != "" {
-			msg := fmt.Sprintf("A new version of tinyMem is available: v%s (current: v%s). Download it from: https://github.com/daverage/tinymem/releases", result.newVersion, version.Version)
+			msg := fmt.Sprintf("A new version of tinyMem is available: v%s (current: v%s). Download it from: https://github.com/daverage/tinyMem/releases", result.newVersion, version.Version)
 			a.Core.Logger.Info(msg)
 			// Also print to stderr to ensure user sees it in CLI
 			fmt.Fprintf(os.Stderr, "\n🔔 %s\n\n", msg)

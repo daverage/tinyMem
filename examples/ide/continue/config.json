@@ -1,0 +1,11 @@
+{
+  "models": [
+    {
+      "title": "tinyMem Proxy",
+      "provider": "openai",
+      "model": "your-model",
+      "apiBase": "http://localhost:8080/v1",
+      "apiKey": "dummy"
+    }
+  ]
+}
