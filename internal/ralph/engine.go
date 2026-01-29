@@ -196,11 +196,13 @@ func (e *Engine) checkEvidence(opt Options) (bool, map[string]interface{}) {
 	for _, p := range opt.Evidence {
 		// Parse predicate (e.g., "test_pass::./...")
 		parts := strings.SplitN(p, "::", 2)
-		eType := parts[0]
-		eContent := ""
-		if len(parts) > 1 {
-			eContent = parts[1]
+		if len(parts) < 2 {
+			results[p] = "error: invalid format, expected 'type::content'"
+			allPass = false
+			continue
 		}
+		eType := parts[0]
+		eContent := parts[1]
 
 		var passed bool
 		var err error

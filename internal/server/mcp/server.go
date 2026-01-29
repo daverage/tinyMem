@@ -313,7 +313,7 @@ func (s *Server) handleToolsList(req *MCPRequest) {
 							"type": "string",
 						},
 						"minItems":    1,
-						"description": "List of evidence predicates that must all pass to terminate the loop. Format: 'type::content' (e.g., 'test_pass::go test ./...', 'file_exists::src/main.go', 'grep_hit::Error::logs/app.log').",
+						"description": "MANDATORY: List of evidence predicates using 'type::content' format. Supported types: 'cmd_exit0', 'test_pass', 'file_exists', 'grep_hit'. Example: 'test_pass::go test ./...'.",
 					},
 					"max_iterations": map[string]interface{}{
 						"type":        "integer",
