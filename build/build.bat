@@ -1,70 +1,79 @@
 @echo off
-REM tinyMem Build Script for Windows
-REM Builds all platform binaries and places them in the releases folder
+REM tinyMem Build Script (Windows)
+REM Builds platform binaries into build\releases (never tracked by git)
 
-echo Building tinyMem binaries...
+setlocal enabledelayedexpansion
 
-REM Get the directory where the script is located
-set "SCRIPT_DIR=%~dp0"
-cd /d "%SCRIPT_DIR%.."
+REM ------------------------------------------------
+REM Resolve project root
+REM ------------------------------------------------
+set SCRIPT_DIR=%~dp0
+set PROJECT_ROOT=%SCRIPT_DIR%..
+cd /d "%PROJECT_ROOT%"
 
-REM Create releases directory if it doesn't exist
-if not exist build\releases mkdir build\releases
+set OUT_DIR=build\releases
+if not exist "%OUT_DIR%" mkdir "%OUT_DIR%"
 
-REM Determine version from git
-for /f "tokens=*" %%i in ('git describe --tags --always --dirty 2^>nul') do set VERSION=%%i
+REM ------------------------------------------------
+REM Determine version (prefer code, fallback to git)
+REM ------------------------------------------------
+set VERSION=
+
+for /f "tokens=3 delims= " %%v in (
+  'findstr /R "var Version = " internal\version\version.go'
+) do (
+  set VERSION=%%~v
+)
+
+REM Strip quotes
+set VERSION=%VERSION:"=%
+
+if "%VERSION%"=="" (
+  for /f %%v in ('git describe --tags --always --dirty 2^>nul') do set VERSION=%%v
+)
+
 if "%VERSION%"=="" set VERSION=dev
-echo Building version: %VERSION%
 
-REM Set up linker flags to inject version
+echo Building tinyMem version: %VERSION%
+
+REM ------------------------------------------------
+REM Build tags
+REM ------------------------------------------------
+set BUILD_TAGS=fts5
+if not "%TINYMEM_EXTRA_BUILD_TAGS%"=="" (
+  set BUILD_TAGS=%BUILD_TAGS% %TINYMEM_EXTRA_BUILD_TAGS%
+)
+
+set TAGS_FLAG=-tags "%BUILD_TAGS%"
 set LDFLAGS=-X github.com/andrzejmarczewski/tinyMem/internal/version.Version=%VERSION%
 
-REM Build Windows AMD64
-echo Building Windows AMD64 (with icon and metadata)...
-set GOOS=windows
-set GOARCH=amd64
-go build -tags fts5 -ldflags "%LDFLAGS%" -o build\releases\tinymem-windows-amd64.exe ./cmd/tinymem
-echo.✓ Built build\releases\tinymem-windows-amd64.exe
-
-REM Build Windows ARM64
-echo Building Windows ARM64...
-set GOOS=windows
-set GOARCH=arm64
-go build -tags fts5 -ldflags "%LDFLAGS%" -o build\releases\tinymem-windows-arm64.exe ./cmd/tinymem
-echo.✓ Built build\releases\tinymem-windows-arm64.exe
-
-REM Build Linux AMD64
-echo Building Linux AMD64...
-set GOOS=linux
-set GOARCH=amd64
-go build -tags fts5 -ldflags "%LDFLAGS%" -o build\releases\tinymem-linux-amd64 ./cmd/tinymem
-echo.✓ Built build\releases\tinymem-linux-amd64
-
-REM Build Linux ARM64
-echo Building Linux ARM64...
-set GOOS=linux
-set GOARCH=arm64
-go build -tags fts5 -ldflags "%LDFLAGS%" -o build\releases\tinymem-linux-arm64 ./cmd/tinymem
-echo.✓ Built build\releases\tinymem-linux-arm64
-
-REM Build macOS AMD64
-echo Building macOS AMD64...
-set GOOS=darwin
-set GOARCH=amd64
-go build -tags fts5 -ldflags "%LDFLAGS%" -o build\releases\tinymem-darwin-amd64 ./cmd/tinymem
-echo.✓ Built build\releases\tinymem-darwin-amd64
-
-REM Build macOS ARM64
-echo Building macOS ARM64...
-set GOOS=darwin
-set GOARCH=arm64
-go build -tags fts5 -ldflags "%LDFLAGS%" -o build\releases\tinymem-darwin-arm64 ./cmd/tinymem
-echo.✓ Built build\releases\tinymem-darwin-arm64
+REM ------------------------------------------------
+REM Build helper
+REM ------------------------------------------------
+call :build_target "Windows AMD64" windows amd64 "%OUT_DIR%\tinymem-windows-amd64.exe"
+call :build_target "Windows ARM64" windows arm64 "%OUT_DIR%\tinymem-windows-arm64.exe"
 
 echo.
-echo Build completed successfully!
-echo.
-echo Binaries created in build\releases\:
-dir build\releases\
-echo.
-echo Build script completed.
+echo Build complete. Artifacts:
+dir "%OUT_DIR%"
+exit /b 0
+
+REM =================================================
+REM Functions
+REM =================================================
+:build_target
+set LABEL=%~1
+set GOOS=%~2
+set GOARCH=%~3
+set OUTPUT=%~4
+
+echo → %LABEL%
+set CGO_ENABLED=1
+set GOOS=%GOOS%
+set GOARCH=%GOARCH%
+
+go build %TAGS_FLAG% -ldflags "%LDFLAGS%" -o "%OUTPUT%" .\cmd\tinymem
+if errorlevel 1 exit /b 1
+
+echo ✓ Built %OUTPUT%
+exit /b 0

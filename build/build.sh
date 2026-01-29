@@ -1,88 +1,83 @@
 #!/bin/bash
 
 # tinyMem Build Script
-# Builds all platform binaries and places them in the releases folder
+# Builds platform binaries into build/releases (never tracked by git)
 
-set -e  # Exit immediately if a command exits with a non-zero status
+set -euo pipefail
 
-# Get the directory where the script is located
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
-
-# Change to project root to ensure consistent path resolution
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
-# Create releases directory if it doesn't exist
-mkdir -p build/releases
+OUT_DIR="build/releases"
+mkdir -p "$OUT_DIR"
 
-# Determine default build tags (FTS5 required)
-build_tags=("fts5")
-if [[ -n "$TINYMEM_EXTRA_BUILD_TAGS" ]]; then
-    read -r -a extra_tags <<< "$TINYMEM_EXTRA_BUILD_TAGS"
-    for tag in "${extra_tags[@]}"; do
-        if [[ -n "$tag" ]]; then
-            build_tags+=("$tag")
-        fi
-    done
+# ------------------------------------------------------------
+# Determine version (prefer code, fallback to git)
+# ------------------------------------------------------------
+VERSION="$(grep -E 'var Version =' internal/version/version.go \
+  | sed -E 's/.*"([^"]+)".*/\1/' || true)"
+
+if [[ -z "$VERSION" ]]; then
+  VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
 fi
 
-# Determine version from git
-VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
-echo "Building version: ${VERSION}"
+echo "Building tinyMem version: $VERSION"
 
-# Set up linker flags to inject version
+# ------------------------------------------------------------
+# Build tags
+# ------------------------------------------------------------
+BUILD_TAGS=("fts5")
+
+if [[ -n "${TINYMEM_EXTRA_BUILD_TAGS:-}" ]]; then
+  read -r -a EXTRA <<< "$TINYMEM_EXTRA_BUILD_TAGS"
+  BUILD_TAGS+=("${EXTRA[@]}")
+fi
+
+TAGS_FLAG=(-tags "${BUILD_TAGS[*]}")
 LDFLAGS="-X github.com/andrzejmarczewski/tinyMem/internal/version.Version=${VERSION}"
 
-tags_flag=(-tags "${build_tags[*]}")
-tag_summary="${build_tags[*]}"
-
-echo "Building tinyMem binaries (tags: ${tag_summary})..."
-
+# ------------------------------------------------------------
+# Build helper
+# ------------------------------------------------------------
 build_target() {
-    local platform_label=$1
-    local goos=$2
-    local goarch=$3
-    local output=$4
+  local label=$1
+  local goos=$2
+  local goarch=$3
+  local out=$4
 
-    local env_vars=(CGO_ENABLED=1)
-    if [[ -n "$goos" ]]; then
-        env_vars+=("GOOS=${goos}")
-    fi
-    if [[ -n "$goarch" ]]; then
-        env_vars+=("GOARCH=${goarch}")
-    fi
-
-    echo "Building ${platform_label} (including icons for Windows)..."
-    env "${env_vars[@]}" go build "${tags_flag[@]}" -ldflags "${LDFLAGS}" -o "${output}" ./cmd/tinymem
-    echo "✓ Built ${output}"
+  echo "→ $label"
+  CGO_ENABLED=1 GOOS="$goos" GOARCH="$goarch" \
+    go build "${TAGS_FLAG[@]}" -ldflags "$LDFLAGS" \
+    -o "$out" ./cmd/tinymem
 }
 
-# Build macOS binaries
-build_target "macOS ARM64" darwin arm64 build/releases/tinymem-darwin-arm64
-build_target "macOS AMD64" darwin amd64 build/releases/tinymem-darwin-amd64
+# ------------------------------------------------------------
+# macOS
+# ------------------------------------------------------------
+build_target "macOS ARM64" darwin arm64 "$OUT_DIR/tinymem-darwin-arm64"
+build_target "macOS AMD64" darwin amd64 "$OUT_DIR/tinymem-darwin-amd64"
 
-# Build Windows binaries only if we're on a Windows-compatible system
-if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
-    build_target "Windows AMD64" windows amd64 build/releases/tinymem-windows-amd64.exe
-    build_target "Windows ARM64" windows arm64 build/releases/tinymem-windows-arm64.exe
+# ------------------------------------------------------------
+# Linux (only when on Linux)
+# ------------------------------------------------------------
+if [[ "$OSTYPE" == linux* ]]; then
+  build_target "Linux AMD64" linux amd64 "$OUT_DIR/tinymem-linux-amd64"
+  build_target "Linux ARM64" linux arm64 "$OUT_DIR/tinymem-linux-arm64"
 else
-    echo "Skipping Windows builds (not on Windows system)"
-    echo "  To build for Windows, run this script from a Windows system with appropriate toolchain"
+  echo "Skipping Linux builds (not on Linux)"
 fi
 
-# Build Linux binaries only if we're on a Linux-compatible system
-if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    build_target "Linux AMD64" linux amd64 build/releases/tinymem-linux-amd64
-    build_target "Linux ARM64" linux arm64 build/releases/tinymem-linux-arm64
+# ------------------------------------------------------------
+# Windows (only when on Windows-like env)
+# ------------------------------------------------------------
+if [[ "$OSTYPE" == msys* || "$OSTYPE" == cygwin* ]]; then
+  build_target "Windows AMD64" windows amd64 "$OUT_DIR/tinymem-windows-amd64.exe"
+  build_target "Windows ARM64" windows arm64 "$OUT_DIR/tinymem-windows-arm64.exe"
 else
-    echo "Skipping Linux builds (not on Linux system)"
-    echo "  To build for Linux, run this script from a Linux system with appropriate toolchain"
+  echo "Skipping Windows builds (not on Windows)"
 fi
 
-echo ""
-echo "Build completed successfully!"
-echo ""
-echo "Binaries created in build/releases/:"
-ls -la build/releases/
-echo ""
-echo "Build script completed."
+echo
+echo "Build complete. Artifacts:"
+ls -lh "$OUT_DIR"
