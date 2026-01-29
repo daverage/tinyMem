@@ -1,12 +1,7 @@
-# Tasks – Package for GitHub Packages
+# Tasks – Update release script to publish Docker image
 
-- [ ] Decide package type and target registry (blocked: need package type from user)
-  - [ ] Choose between Container (ghcr.io), npm, Maven, NuGet, RubyGems, etc. (blocked)
-  - [ ] Confirm scope/namespace (user or org) (blocked)
-- [ ] Set up publish configuration (blocked: depends on package type)
-  - [ ] Add registry config files or metadata as needed (blocked)
-  - [ ] Configure versioning and package name (blocked)
-- [ ] Add GitHub Actions workflow for publish (blocked: depends on package type)
-  - [ ] Configure permissions and authentication (blocked)
-  - [ ] Set triggers (tag/release) (blocked)
-- [ ] Verify publish steps and document usage (blocked: depends on package type)
+- [ ] Add Docker publish step to release script
+  - [ ] Define image name and tags in build/build.sh
+  - [ ] Build and push image during release mode
+  - [ ] Guard with presence of docker CLI and registry login
+- [ ] Ensure release docs mention Docker publish via script

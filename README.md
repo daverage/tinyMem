@@ -141,6 +141,13 @@ To build macOS or Linux binaries on Windows, you need Zig:
 
 *Tip: `zig` is the recommended way to enable cross-compilation for all platforms with a single tool, regardless of whether you are on Mac or Windows.*
 
+### Option 3: Container Image (GHCR)
+Use the GitHub Container Registry image. Replace `OWNER` with your GitHub username or org (for this repo, `daverage`).
+```bash
+docker pull ghcr.io/OWNER/tinymem:latest
+docker run --rm ghcr.io/OWNER/tinymem:latest health
+```
+
 ---
 
 ## 💻 Usage

@@ -1,0 +1,11 @@
+.git
+.github
+build
+docs
+examples
+test
+assets
+*.md
+*.png
+*.ico
+*.icns
