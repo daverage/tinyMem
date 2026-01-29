@@ -17,8 +17,12 @@ func AddContract() error {
 	fmt.Println("- GEMINI.md")
 	fmt.Println("- CLAUDE.md")
 	fmt.Println()
-	fmt.Println("It will append the contract to the end of each file if it doesn't already exist.")
-	fmt.Println("It will also update README.md to include setup instructions for MCP usage.")
+	fmt.Println("Source of truth: docs/agents/AGENT_CONTRACT.md")
+	fmt.Println()
+	fmt.Println("It will:")
+	fmt.Println("1. Replace the contract in existing files (with a warning).")
+	fmt.Println("2. Append the contract to existing files that don't have it.")
+	fmt.Println("3. Create missing files in docs/agents/.")
 	fmt.Println()
 
 	var response string
@@ -42,17 +46,22 @@ func AddContract() error {
 		return fmt.Errorf("error creating directory %s: %w", agentsDir, err)
 	}
 
-	for _, filename := range files {
-		targetPath := filepath.Join(agentsDir, filename)
-		if _, err := os.Stat(targetPath); err == nil {
-			// File exists, append contract if not already present
-			if err := appendContractToFile(targetPath, contractContent); err != nil {
-				return fmt.Errorf("error appending to %s: %w", targetPath, err)
-			}
-		} else {
-			// File doesn't exist, create it with contract
-			if err := createFileWithContract(targetPath, contractContent); err != nil {
-				return fmt.Errorf("error creating %s: %w", targetPath, err)
+	// Check root and docs/agents
+	locations := []string{".", agentsDir}
+
+	for _, dir := range locations {
+		for _, filename := range files {
+			targetPath := filepath.Join(dir, filename)
+			if _, err := os.Stat(targetPath); err == nil {
+				// File exists, update/append contract
+				if err := updateContractInFile(targetPath, contractContent); err != nil {
+					return fmt.Errorf("error updating %s: %w", targetPath, err)
+				}
+			} else if dir == agentsDir {
+				// File doesn't exist but it's in the primary agents directory, create it
+				if err := createFileWithContract(targetPath, contractContent); err != nil {
+					return fmt.Errorf("error creating %s: %w", targetPath, err)
+				}
 			}
 		}
 	}
@@ -67,16 +76,16 @@ func AddContract() error {
 }
 
 func getContractContent() (string, error) {
-	// 1. Try local file first
+	// 1. Try local file first (Primary source of truth)
 	localPath := filepath.Join("docs", "agents", "AGENT_CONTRACT.md")
 	if data, err := os.ReadFile(localPath); err == nil {
 		fmt.Printf("Using local contract from %s\n", localPath)
 		return string(data), nil
 	}
 
-	// 2. Fall back to GitHub
+	// 2. Fall back to GitHub (Remote fallback)
 	url := "https://raw.githubusercontent.com/daverage/tinyMem/refs/heads/main/docs/agents/AGENT_CONTRACT.md"
-	fmt.Printf("Local contract not found, fetching from %s...\n", url)
+	fmt.Printf("Local contract not found at %s, fetching from %s...\n", localPath, url)
 
 	resp, err := http.Get(url)
 	if err != nil {
@@ -96,7 +105,7 @@ func getContractContent() (string, error) {
 	return string(body), nil
 }
 
-func appendContractToFile(filename, contractContent string) error {
+func updateContractInFile(filename, contractContent string) error {
 	content, err := os.ReadFile(filename)
 	if err != nil {
 		return err
@@ -109,14 +118,7 @@ func appendContractToFile(filename, contractContent string) error {
 	idx := strings.Index(fileContent, marker)
 
 	if idx != -1 {
-		// Check if it's already identical to avoid unnecessary writes
-		existingContract := fileContent[idx:]
-		if existingContract == contractContent {
-			fmt.Printf("Contract in %s is already up to date, skipping.\n", filename)
-			return nil
-		}
-
-		fmt.Printf("Updating existing contract in %s...\n", filename)
+		fmt.Printf("WARNING: Existing contract found in %s. Replacing with latest version.\n", filename)
 		// Remove old contract (from marker to end)
 		fileContent = fileContent[:idx]
 	} else {
@@ -127,7 +129,7 @@ func appendContractToFile(filename, contractContent string) error {
 		}
 	}
 
-	newContent := fileContent + contractContent
+	newContent := strings.TrimSpace(fileContent) + "\n\n" + strings.TrimSpace(contractContent) + "\n"
 	err = os.WriteFile(filename, []byte(newContent), 0644)
 	if err != nil {
 		return err
@@ -137,8 +139,8 @@ func appendContractToFile(filename, contractContent string) error {
 }
 
 func createFileWithContract(filename, contractContent string) error {
-	content := "# Agent Contract for tinyMem\n\n" + contractContent
-	err := os.WriteFile(filename, []byte(content), 0644)
+	// For new files, we just write the contract content directly
+	err := os.WriteFile(filename, []byte(strings.TrimSpace(contractContent)+"\n"), 0644)
 	if err != nil {
 		return err
 	}

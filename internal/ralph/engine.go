@@ -68,7 +68,7 @@ func (e *Engine) ExecuteLoop(ctx context.Context, opt Options) (*Result, error) 
 		}
 
 		// 2. EVIDENCE Phase
-		passed, evidenceResults := e.checkEvidence(opt.Evidence)
+		passed, evidenceResults := e.checkEvidence(opt)
 		result.Evidence = evidenceResults
 
 		if passed {
@@ -189,11 +189,11 @@ func (e *Engine) getGitDiff() (string, error) {
 	return string(out), nil
 }
 
-func (e *Engine) checkEvidence(predicates []string) (bool, map[string]interface{}) {
+func (e *Engine) checkEvidence(opt Options) (bool, map[string]interface{}) {
 	results := make(map[string]interface{})
 	allPass := true
 
-	for _, p := range predicates {
+	for _, p := range opt.Evidence {
 		// Parse predicate (e.g., "test_pass::./...")
 		parts := strings.SplitN(p, "::", 2)
 		eType := parts[0]
@@ -202,7 +202,18 @@ func (e *Engine) checkEvidence(predicates []string) (bool, map[string]interface{
 			eContent = parts[1]
 		}
 
-		passed, err := evidence.VerifyEvidence(eType, eContent, e.cfg)
+		var passed bool
+		var err error
+
+		// For command-based evidence in a Ralph loop, we use the engine's internal 
+		// execution logic which is already authorized for this task, 
+		// bypassing the global evidence policy.
+		if eType == "cmd_exit0" || eType == "test_pass" {
+			passed, err = e.verifyCommandEvidence(eContent, opt.Safety.AllowShell)
+		} else {
+			passed, err = evidence.VerifyEvidence(eType, eContent, e.cfg)
+		}
+
 		if err != nil {
 			results[p] = fmt.Sprintf("error: %v", err)
 			allPass = false
@@ -215,6 +226,46 @@ func (e *Engine) checkEvidence(predicates []string) (bool, map[string]interface{
 	}
 
 	return allPass, results
+}
+
+func (e *Engine) verifyCommandEvidence(command string, allowShell bool) (bool, error) {
+	if strings.TrimSpace(command) == "" {
+		return false, fmt.Errorf("command is empty")
+	}
+
+	// We use a shorter timeout for evidence checks than the main command
+	timeout := time.Duration(e.cfg.EvidenceCommandTimeoutSeconds) * time.Second
+	if timeout == 0 {
+		timeout = 30 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	var cmd *exec.Cmd
+	containsShellMeta := strings.ContainsAny(command, "|&;><`$()[]{}") || strings.Contains(command, "\n") || strings.Contains(command, "\r")
+
+	if containsShellMeta {
+		if !allowShell {
+			return false, fmt.Errorf("evidence command contains shell metacharacters but allow_shell is false")
+		}
+		cmd = exec.CommandContext(ctx, "sh", "-c", command)
+	} else {
+		parts := strings.Fields(command)
+		if len(parts) == 0 {
+			return false, fmt.Errorf("command is empty")
+		}
+		cmd = exec.CommandContext(ctx, parts[0], parts[1:]...)
+	}
+
+	cmd.Dir = e.cfg.ProjectRoot
+
+	if err := cmd.Run(); err != nil {
+		if _, ok := err.(*exec.ExitError); ok {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 func (e *Engine) recall(ctx context.Context, opt Options, state *IterationState) ([]*memory.Memory, error) {

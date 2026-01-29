@@ -1,4 +1,4 @@
-
+# Agent Contract for tinyMem
 
 # TINYMEM CONTROL PROTOCOL
 

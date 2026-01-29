@@ -24,6 +24,7 @@
   - [x] Implement Safety Layer (path/command blacklists)
   - [x] Implement "Repair Phase" logic (internal LLM coordination)
   - [x] Add `memory_ralph` to MCP server
+- [x] Fix `memory_ralph` to bypass global command evidence policy (since it is an authorized tool)
 
 # Tasks - Documentation & Cleanup
 
@@ -33,7 +34,9 @@
 - [x] Update `AddContract` command to use new directory structure
 - [x] Remove redundant `cmd/add_contract/` utility
 - [x] Fix `addContract` to look for local `AGENT_CONTRACT.md` first and update GitHub URL
-- [x] Implement logic to replace old contracts with the new version in `addContract`
+- [x] Implement logic to replace old contracts with the new version in `addContract` (always replace with a warning)
+- [x] Update `addContract` to check both root and `docs/agents/` directories
+- [x] Ensure `docs/agents/AGENT_CONTRACT.md` is the source of truth for all agent files
 
 # Tasks - README Review (User Request)
 

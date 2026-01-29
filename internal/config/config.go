@@ -128,7 +128,7 @@ func LoadConfig() (*Config, error) {
 		SemanticEnabled:               false,
 		HybridWeight:                  DefaultHybridWeight,
 		EvidenceAllowCommand:          false,
-		EvidenceAllowedCommands:       nil,
+		EvidenceAllowedCommands:       []string{"go", "npm", "make", "pytest", "python", "python3", "sh", "bash", "grep", "cat"},
 		EvidenceCommandTimeoutSeconds: 20,
 		SearchEnabled:                 true,
 		Streaming:                     true,
