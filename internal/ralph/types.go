@@ -34,6 +34,7 @@ type RecallOptions struct {
 type SafetyOptions struct {
 	ForbidPaths       []string `json:"forbid_paths"`
 	ForbidCommands    []string `json:"forbid_commands"`
+	AllowShell        bool     `json:"allow_shell"`
 	RequireDiffReview bool     `json:"require_diff_review"`
 }
 

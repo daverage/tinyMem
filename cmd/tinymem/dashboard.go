@@ -15,6 +15,7 @@ import (
 	"github.com/daverage/tinymem/internal/config"
 	"github.com/daverage/tinymem/internal/cove"
 	"github.com/daverage/tinymem/internal/memory"
+	"github.com/daverage/tinymem/internal/storage"
 	"github.com/daverage/tinymem/internal/tasks"
 	"github.com/spf13/cobra"
 
@@ -40,7 +41,7 @@ func runDashboardCmd(a *app.App, cmd *cobra.Command, args []string) {
 	dbPath := filepath.Join(tinyMemDir, "store.sqlite3")
 
 	// Use the existing database connection from the app instance
-	dbConn := a.DB.GetConnection()
+	dbConn := a.Core.DB.GetConnection()
 
 	// Check if database is accessible
 	if err := dbConn.Ping(); err != nil {
@@ -49,7 +50,7 @@ func runDashboardCmd(a *app.App, cmd *cobra.Command, args []string) {
 	}
 
 	// Synchronize tasks from tinyTasks.md if it exists
-	taskService := tasks.NewService(a.DB, a.Memory, a.ProjectID)
+	taskService := tasks.NewService(a.Core.DB, a.Memory, a.Project.ID)
 	taskFilePath := filepath.Join(projectRoot, "tinyTasks.md")
 	if _, err := os.Stat(taskFilePath); err == nil {
 		if err := taskService.SyncTasksFromFile(taskFilePath); err != nil {
@@ -69,12 +70,6 @@ func runDashboardCmd(a *app.App, cmd *cobra.Command, args []string) {
 	// Section 1: Header / Project Status
 	printHeaderSection(projectRoot, tinyMemDir, dbPath, dbConn)
 
-	// Section 1b: CoVe Status
-	printCoVeStatus(a.Config)
-
-	// Section 1c: CoVe Runtime Stats
-	printCoVeRuntimeStats(dbConn, a.ProjectID)
-
 	// Section 2: Integrity Summary
 	printIntegritySummary(dbConn)
 
@@ -88,57 +83,44 @@ func runDashboardCmd(a *app.App, cmd *cobra.Command, args []string) {
 	printNeedsAttention(dbConn)
 
 	// Section 6: Task Analytics with Enhanced Visualizations
-	printEnhancedTaskAnalytics(taskAnalytics, a.ProjectID)
+	printEnhancedTaskAnalytics(taskAnalytics, a.Project.ID)
 
 	// Section 7: Recall Effectiveness
 	printRecallEffectiveness(dbConn)
+
+	// Section 8: CoVe Status
+	printCoVeStatus(a.Core.Config, a.Core.DB, a.Project.ID)
 }
 
-// printCoVeStatus prints CoVe configuration status
-func printCoVeStatus(cfg *config.Config) {
+// printCoVeStatus prints the CoVe configuration and runtime stats
+func printCoVeStatus(cfg *config.Config, db *storage.DB, projectID string) {
 	fmt.Println("┌─────────────────────────────────────────────────────────────┐")
-	fmt.Println("│ 1️⃣  CoVe Status                                              │")
+	fmt.Println("│ 8️⃣  CoVe Status                                              │")
 	fmt.Println("└─────────────────────────────────────────────────────────────┘")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "CoVe Enabled:\t%t\n", cfg.CoVeEnabled)
+	fmt.Fprintf(w, "Enabled:\t%t\n", cfg.CoVeEnabled)
 	fmt.Fprintf(w, "Confidence Threshold:\t%.2f\n", cfg.CoVeConfidenceThreshold)
 	fmt.Fprintf(w, "Max Candidates:\t%d\n", cfg.CoVeMaxCandidates)
-	fmt.Fprintf(w, "Timeout Seconds:\t%d\n", cfg.CoVeTimeoutSeconds)
 	fmt.Fprintf(w, "Recall Filter Enabled:\t%t\n", cfg.CoVeRecallFilterEnabled)
-	w.Flush()
-	fmt.Println()
-}
 
-// printCoVeRuntimeStats prints persisted CoVe runtime stats, if available.
-func printCoVeRuntimeStats(db *sql.DB, projectID string) {
-	fmt.Println("┌─────────────────────────────────────────────────────────────┐")
-	fmt.Println("│ 1️⃣  CoVe Runtime Stats                                      │")
-	fmt.Println("└─────────────────────────────────────────────────────────────┘")
-
-	store := cove.NewSQLiteStatsStore(db)
+	// Load persistent stats
+	store := cove.NewSQLiteStatsStore(db.GetConnection())
 	stats, err := store.Load(projectID)
-	if err != nil {
-		fmt.Printf("Error loading CoVe stats: %v\n\n", err)
-		return
-	}
-	if stats == nil || stats.CandidatesEvaluated == 0 {
-		fmt.Println("No CoVe runtime stats recorded yet.\n")
-		return
-	}
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "Candidates Evaluated:\t%d\n", stats.CandidatesEvaluated)
-	fmt.Fprintf(w, "Candidates Discarded:\t%d\n", stats.CandidatesDiscarded)
-	fmt.Fprintf(w, "Average Confidence:\t%.2f\n", stats.AvgConfidence)
-	if stats.CandidatesEvaluated > 0 {
+	if err == nil && stats != nil && stats.CandidatesEvaluated > 0 {
+		fmt.Fprintf(w, "Evaluated:\t%d\n", stats.CandidatesEvaluated)
+		fmt.Fprintf(w, "Discarded:\t%d\n", stats.CandidatesDiscarded)
+		fmt.Fprintf(w, "Avg Confidence:\t%.2f\n", stats.AvgConfidence)
 		discardRate := float64(stats.CandidatesDiscarded) / float64(stats.CandidatesEvaluated) * 100
 		fmt.Fprintf(w, "Discard Rate:\t%.1f%%\n", discardRate)
+		fmt.Fprintf(w, "Errors:\t%d\n", stats.CoVeErrors)
+		if !stats.LastUpdated.IsZero() {
+			fmt.Fprintf(w, "Last Updated:\t%s\n", stats.LastUpdated.Format("2006-01-02 15:04:05"))
+		}
+	} else {
+		fmt.Fprintf(w, "Runtime Stats:\tNone recorded\n")
 	}
-	fmt.Fprintf(w, "Errors:\t%d\n", stats.CoVeErrors)
-	if !stats.LastUpdated.IsZero() {
-		fmt.Fprintf(w, "Last Updated:\t%s\n", stats.LastUpdated.Format(time.RFC3339))
-	}
+
 	w.Flush()
 	fmt.Println()
 }

@@ -57,47 +57,49 @@ type Server struct {
 	recallEngine    recall.Recaller
 	extractor       *extract.Extractor
 	responseBuffer  chan ResponseCapture // Channel for capturing responses for extraction
+	shutdownCh      chan struct{}
+	shutdownOnce    sync.Once
 	server          *http.Server
 }
 
 // NewServer creates a new proxy server
 func NewServer(a *app.App) *Server {
 	// Create new instances of services using app.App's components
-	evidenceService := evidence.NewService(a.DB, a.Config)
+	evidenceService := evidence.NewService(a.Core.DB, a.Core.Config)
 	var recallEngine recall.Recaller
-	if a.Config.SemanticEnabled {
-		recallEngine = semantic.NewSemanticEngine(a.DB, a.Memory, evidenceService, a.Config, a.Logger)
+	if a.Core.Config.SemanticEnabled {
+		recallEngine = semantic.NewSemanticEngine(a.Core.DB, a.Memory, evidenceService, a.Core.Config, a.Core.Logger)
 	} else {
-		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config, a.Logger, a.DB.GetConnection())
+		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Core.Config, a.Core.Logger, a.Core.DB.GetConnection())
 	}
 	injector := inject.NewMemoryInjector(recallEngine)
-	llmClient := llm.NewClient(a.Config)
+	llmClient := llm.NewClient(a.Core.Config)
 	extractor := extract.NewExtractor(evidenceService)
 
 	// Create CoVe verifier if enabled (safely disabled by default)
-	if a.Config.CoVeEnabled {
-		coveVerifier := cove.NewVerifier(a.Config, llmClient)
-		coveVerifier.SetStatsStore(cove.NewSQLiteStatsStore(a.DB.GetConnection()), a.ProjectID)
+	if a.Core.Config.CoVeEnabled {
+		coveVerifier := cove.NewVerifier(a.Core.Config, llmClient)
+		coveVerifier.SetStatsStore(cove.NewSQLiteStatsStore(a.Core.DB.GetConnection()), a.Project.ID)
 		extractor.SetCoVeVerifier(coveVerifier)
 
 		// Also set CoVe verifier for recall filtering if enabled
-		if a.Config.CoVeRecallFilterEnabled {
+		if a.Core.Config.CoVeRecallFilterEnabled {
 			injector.SetCoVeVerifier(coveVerifier)
-			a.Logger.Info("CoVe enabled (extraction + recall filtering)",
-				zap.Float64("confidence_threshold", a.Config.CoVeConfidenceThreshold),
-				zap.Int("max_candidates", a.Config.CoVeMaxCandidates),
+			a.Core.Logger.Info("CoVe enabled (extraction + recall filtering)",
+				zap.Float64("confidence_threshold", a.Core.Config.CoVeConfidenceThreshold),
+				zap.Int("max_candidates", a.Core.Config.CoVeMaxCandidates),
 			)
 		} else {
-			a.Logger.Info("CoVe enabled (extraction only)",
-				zap.Float64("confidence_threshold", a.Config.CoVeConfidenceThreshold),
-				zap.Int("max_candidates", a.Config.CoVeMaxCandidates),
+			a.Core.Logger.Info("CoVe enabled (extraction only)",
+				zap.Float64("confidence_threshold", a.Core.Config.CoVeConfidenceThreshold),
+				zap.Int("max_candidates", a.Core.Config.CoVeMaxCandidates),
 			)
 		}
 	}
 
 	server := &Server{
 		app:             a, // Store the app instance
-		config:          a.Config,
+		config:          a.Core.Config,
 		injector:        injector,
 		llmClient:       llmClient,
 		memoryService:   a.Memory,
@@ -105,6 +107,7 @@ func NewServer(a *app.App) *Server {
 		recallEngine:    recallEngine,
 		extractor:       extractor,
 		responseBuffer:  make(chan ResponseCapture, 10), // Buffered channel to prevent blocking
+		shutdownCh:      make(chan struct{}),
 	}
 
 	// Start a goroutine to process response captures
@@ -115,13 +118,18 @@ func NewServer(a *app.App) *Server {
 
 // processResponseCaptures processes captured responses for memory extraction
 func (s *Server) processResponseCaptures() {
-	for capture := range s.responseBuffer {
-		// Extract memories from the response text
-		if s.extractor != nil {
-			err := s.extractor.ExtractAndQueueForVerification(capture.ResponseText, s.memoryService, s.evidenceService, s.app.ProjectID)
-			if err != nil {
-				s.app.Logger.Error("Error extracting memories from response", zap.Error(err), zap.String("model", capture.Model))
+	for {
+		select {
+		case capture := <-s.responseBuffer:
+			// Extract memories from the response text
+			if s.extractor != nil {
+				err := s.extractor.ExtractAndQueueForVerification(capture.ResponseText, s.memoryService, s.evidenceService, s.app.Project.ID)
+				if err != nil {
+					s.app.Core.Logger.Error("Error extracting memories from response", zap.Error(err), zap.String("model", capture.Model))
+				}
 			}
+		case <-s.shutdownCh:
+			return
 		}
 	}
 }
@@ -155,8 +163,7 @@ func (s *Server) Stop() error {
 	}
 
 	if s.server != nil {
-		// Close the response buffer channel to stop the processing goroutine
-		close(s.responseBuffer)
+		s.shutdownOnce.Do(func() { close(s.shutdownCh) })
 		return s.server.Shutdown(context.Background())
 	}
 	return nil
@@ -169,17 +176,12 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse the request body
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		s.app.Logger.Error("Unable to read request body", zap.Error(err))
-		http.Error(w, "Unable to read request body", http.StatusBadRequest)
-		return
-	}
-
+	// Parse the request body with a size limit to prevent memory exhaustion
+	const maxBodyBytes = 1 << 20 // 1 MiB
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 	var req llm.ChatCompletionRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		s.app.Logger.Error("Invalid JSON in request body", zap.Error(err))
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.app.Core.Logger.Error("Invalid JSON in request body", zap.Error(err))
 		http.Error(w, "Invalid JSON in request", http.StatusBadRequest)
 		return
 	}
@@ -201,13 +203,13 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if userMessage != "" {
 		// Perform recall to get relevant memories
 		recallResults, err := s.recallEngine.Recall(recall.RecallOptions{
-			ProjectID: s.app.ProjectID,
+			ProjectID: s.app.Project.ID,
 			Query:     userMessage,
 			MaxItems:  s.config.RecallMaxItems,
 			MaxTokens: s.config.RecallMaxTokens,
 		})
 		if err != nil {
-			s.app.Logger.Warn("Failed to recall memories for prompt injection", zap.Error(err), zap.String("user_message", userMessage))
+			s.app.Core.Logger.Warn("Failed to recall memories for prompt injection", zap.Error(err), zap.String("user_message", userMessage))
 			notification.RecallStatus = recallStatusFailed
 		} else {
 			notifyCount := len(recallResults)
@@ -270,7 +272,7 @@ func (s *Server) handleStreamingRequest(w http.ResponseWriter, ctx context.Conte
 				// Log response token count if metrics are enabled
 				if s.config.MetricsEnabled {
 					tokenCount := estimateTokenCount(finalText)
-					s.app.Logger.Info("Response metrics",
+					s.app.Core.Logger.Info("Response metrics",
 						zap.String("model", req.Model),
 						zap.Int("response_tokens", tokenCount),
 					)
@@ -283,8 +285,9 @@ func (s *Server) handleStreamingRequest(w http.ResponseWriter, ctx context.Conte
 					Model:        req.Model,
 					Timestamp:    time.Now(),
 				}:
+				case <-s.shutdownCh:
 				default:
-					s.app.Logger.Warn("Response buffer is full, skipping extraction for streaming request", zap.String("model", req.Model))
+					s.app.Core.Logger.Warn("Response buffer is full, skipping extraction for streaming request", zap.String("model", req.Model))
 				}
 
 				return
@@ -310,7 +313,7 @@ func (s *Server) handleStreamingRequest(w http.ResponseWriter, ctx context.Conte
 			responseMutex.Unlock()
 		case err, ok := <-errChan:
 			if ok && err != nil {
-				s.app.Logger.Error("Error from LLM streaming channel", zap.Error(err))
+				s.app.Core.Logger.Error("Error from LLM streaming channel", zap.Error(err))
 
 				// Provide a more helpful error message
 				errMsg := err.Error()
@@ -334,7 +337,7 @@ func (s *Server) handleStreamingRequest(w http.ResponseWriter, ctx context.Conte
 func (s *Server) handleNonStreamingRequest(w http.ResponseWriter, ctx context.Context, req llm.ChatCompletionRequest, notification MemoryNotification) {
 	resp, err := s.llmClient.ChatCompletionsRaw(ctx, req)
 	if err != nil {
-		s.app.Logger.Error("LLM ChatCompletions failed for non-streaming request", zap.Error(err))
+		s.app.Core.Logger.Error("LLM ChatCompletions failed for non-streaming request", zap.Error(err))
 
 		// Provide a more helpful error message if it's a connection error
 		errMsg := err.Error()
@@ -363,7 +366,7 @@ func (s *Server) handleNonStreamingRequest(w http.ResponseWriter, ctx context.Co
 
 	tee := io.TeeReader(resp.Body, rollingBuffer)
 	if _, err := io.Copy(w, tee); err != nil {
-		s.app.Logger.Error("Failed to proxy non-streaming response", zap.Error(err))
+		s.app.Core.Logger.Error("Failed to proxy non-streaming response", zap.Error(err))
 		return
 	}
 
@@ -372,7 +375,7 @@ func (s *Server) handleNonStreamingRequest(w http.ResponseWriter, ctx context.Co
 	// Log response token count if metrics are enabled
 	if s.config.MetricsEnabled {
 		tokenCount := estimateTokenCount(finalText)
-		s.app.Logger.Info("Response metrics",
+		s.app.Core.Logger.Info("Response metrics",
 			zap.String("model", req.Model),
 			zap.Int("response_tokens", tokenCount),
 		)
@@ -385,8 +388,9 @@ func (s *Server) handleNonStreamingRequest(w http.ResponseWriter, ctx context.Co
 		Model:        req.Model,
 		Timestamp:    time.Now(),
 	}:
+	case <-s.shutdownCh:
 	default:
-		s.app.Logger.Warn("Response buffer is full, skipping extraction for non-streaming request", zap.String("model", req.Model))
+		s.app.Core.Logger.Warn("Response buffer is full, skipping extraction for non-streaming request", zap.String("model", req.Model))
 	}
 
 	// Response already forwarded to client.
@@ -412,7 +416,7 @@ func (s *Server) emitMemoryNotificationEvent(w http.ResponseWriter, notification
 
 	data, err := json.Marshal(payload)
 	if err != nil {
-		s.app.Logger.Warn("Failed to encode memory notification", zap.Error(err))
+		s.app.Core.Logger.Warn("Failed to encode memory notification", zap.Error(err))
 		return
 	}
 

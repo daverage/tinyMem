@@ -16,16 +16,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// App holds the core components of the application.
-type App struct {
-	Config      *config.Config
-	Logger      *zap.Logger
-	DB          *storage.DB
-	Memory      *memory.Service
-	ProjectPath string
-	ProjectID   string            // New field for the current project's ID
-	ServerMode  doctor.ServerMode // Track the server mode
-}
+// App holds the core components of the application with better separation of concerns.
+// This addresses the God Object pattern by grouping related functionality into modules.
 
 // NewApp initializes and returns a new App instance.
 func NewApp() (*App, error) {
@@ -68,28 +60,44 @@ func NewApp() (*App, error) {
 
 	projectID := config.GenerateProjectID(cfg.ProjectRoot) // Generate project ID from project root
 
+	// Create context for managing goroutines
+	ctx, cancel := context.WithCancel(context.Background())
+
 	return &App{
-		Config:      cfg,
-		Logger:      logger,
-		DB:          db,
-		Memory:      memoryService,
-		ProjectPath: cfg.ProjectRoot,        // Use project root as the project path
-		ProjectID:   projectID,             // Store the generated project ID
-		ServerMode:  doctor.StandaloneMode, // Default to standalone mode
+		Core: CoreModule{
+			Config: cfg,
+			Logger: logger,
+			DB:     db,
+		},
+		Project: ProjectModule{
+			Path: cfg.ProjectRoot,        // Use project root as the project path
+			ID:   projectID,             // Store the generated project ID
+		},
+		Server: ServerModule{
+			Mode: doctor.StandaloneMode, // Default to standalone mode
+		},
+		Memory: memoryService,
+		Ctx:    ctx,
+		Cancel: cancel,
 	}, nil
 }
 
 // Close gracefully shuts down the application resources.
 func (a *App) Close() {
-	if a.DB != nil {
-		if err := a.DB.Close(); err != nil {
-			a.Logger.Error("Failed to close database connection", zap.Error(err))
+	// Cancel the context to stop any running goroutines
+	if a.Cancel != nil {
+		a.Cancel()
+	}
+
+	if a.Core.DB != nil {
+		if err := a.Core.DB.Close(); err != nil {
+			a.Core.Logger.Error("Failed to close database connection", zap.Error(err))
 		} else {
-			a.Logger.Info("Database connection closed.")
+			a.Core.Logger.Info("Database connection closed.")
 		}
 	}
-	if a.Logger != nil {
-		if err := a.Logger.Sync(); err != nil {
+	if a.Core.Logger != nil {
+		if err := a.Core.Logger.Sync(); err != nil {
 			// Zap's Sync can return an error if the underlying writer fails
 			// For os.Stderr or regular files, it's usually safe to ignore certain errors.
 			// However, it's good practice to log unexpected errors.
@@ -104,7 +112,7 @@ func (a *App) Close() {
 
 // ContextWithLogger returns a new context with the application's logger.
 func (a *App) ContextWithLogger(ctx context.Context) context.Context {
-	return logging.ContextWithLogger(ctx, a.Logger)
+	return logging.ContextWithLogger(ctx, a.Core.Logger)
 }
 
 // LoggerFromContext retrieves the logger from the given context, or returns the default app logger.
@@ -112,5 +120,5 @@ func (a *App) LoggerFromContext(ctx context.Context) *zap.Logger {
 	if logger, ok := logging.LoggerFromContext(ctx); ok {
 		return logger
 	}
-	return a.Logger
+	return a.Core.Logger
 }

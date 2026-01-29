@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -40,6 +41,8 @@ type MetricsWriter struct {
 	metrics chan RecallMetric
 	wg      sync.WaitGroup
 	done    chan struct{}
+	closeOnce sync.Once
+	closed    atomic.Bool
 }
 
 // NewMetricsWriter creates a new async metrics writer.
@@ -64,7 +67,7 @@ func NewMetricsWriter(db *sql.DB, logger *zap.Logger) *MetricsWriter {
 
 // Write queues a metric for async writing. Non-blocking; drops if buffer full.
 func (mw *MetricsWriter) Write(metric RecallMetric) {
-	if mw == nil {
+	if mw == nil || mw.closed.Load() {
 		return
 	}
 
@@ -88,7 +91,10 @@ func (mw *MetricsWriter) Close() {
 		return
 	}
 
-	close(mw.done)
+	mw.closeOnce.Do(func() {
+		mw.closed.Store(true)
+		close(mw.done)
+	})
 	mw.wg.Wait()
 }
 

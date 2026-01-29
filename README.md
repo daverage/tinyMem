@@ -184,6 +184,7 @@ The **Ralph Loop** (`memory_ralph`) is a deterministic governor for autonomous c
 ### 📜 Execution Contract
 - **Evidence is King**: Only successful evidence checks can terminate the loop.
 - **Safety First**: Supports path blacklisting (`forbid_paths`) and command blocking.
+- **Shell Pipelines Are Opt-In**: Commands containing shell metacharacters (pipes, redirects, subshells) are rejected unless `allow_shell: true` is explicitly set in `memory_ralph` safety options.
 - **Durable Memory**: The loop results are stored even if the agent is reset.
 
 ---

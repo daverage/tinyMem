@@ -64,28 +64,28 @@ func NewServer(a *app.App) *Server {
 
 	// Create new instances of services using app.App's components
 	// These will now receive the logger from the app.App instance automatically
-	evidenceService := evidence.NewService(a.DB, a.Config)
+	evidenceService := evidence.NewService(a.Core.DB, a.Core.Config)
 	var recallEngine recall.Recaller
-	if a.Config.SemanticEnabled {
-		recallEngine = semantic.NewSemanticEngine(a.DB, a.Memory, evidenceService, a.Config, a.Logger)
+	if a.Core.Config.SemanticEnabled {
+		recallEngine = semantic.NewSemanticEngine(a.Core.DB, a.Memory, evidenceService, a.Core.Config, a.Core.Logger)
 	} else {
-		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config, a.Logger, a.DB.GetConnection())
+		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Core.Config, a.Core.Logger, a.Core.DB.GetConnection())
 	}
 	extractor := extract.NewExtractor(evidenceService)
 
 	// Initialize CoVe (Chain-of-Verification) for memory extraction filtering
 	var coveVerifier *cove.Verifier
-	if a.Config.CoVeEnabled {
-		llmClient := llm.NewClient(a.Config)
-		coveVerifier = cove.NewVerifier(a.Config, llmClient)
-		coveVerifier.SetStatsStore(cove.NewSQLiteStatsStore(a.DB.GetConnection()), a.ProjectID)
+	if a.Core.Config.CoVeEnabled {
+		llmClient := llm.NewClient(a.Core.Config)
+		coveVerifier = cove.NewVerifier(a.Core.Config, llmClient)
+		coveVerifier.SetStatsStore(cove.NewSQLiteStatsStore(a.Core.DB.GetConnection()), a.Project.ID)
 		extractor.SetCoVeVerifier(coveVerifier)
 	}
 
 	return &Server{
 		app:             a, // Store the app instance
-		config:          a.Config,
-		db:              a.DB,
+		config:          a.Core.Config,
+		db:              a.Core.DB,
 		memoryService:   a.Memory,
 		evidenceService: evidenceService,
 		recallEngine:    recallEngine,
@@ -443,7 +443,7 @@ func (s *Server) handleMemoryRalph(req *MCPRequest, args json.RawMessage) {
 	}
 
 	// Initialize Ralph engine
-	engine := ralph.NewEngine(s.config, s.memoryService, s.app.ProjectID, s.app.Logger)
+	engine := ralph.NewEngine(s.config, s.memoryService, s.app.Project.ID, s.app.Core.Logger)
 
 	// Execute the loop
 	result, err := engine.ExecuteLoop(context.Background(), options)
@@ -488,7 +488,7 @@ func (s *Server) handleMemoryQuery(req *MCPRequest, args json.RawMessage) {
 	}
 
 	results, err := s.recallEngine.Recall(recall.RecallOptions{
-		ProjectID: s.app.ProjectID,
+		ProjectID: s.app.Project.ID,
 		Query:     queryReq.Query,
 		MaxItems:  queryReq.Limit,
 	})
@@ -541,7 +541,7 @@ func (s *Server) handleMemoryRecent(req *MCPRequest, args json.RawMessage) {
 		recentReq.Count = 10
 	}
 
-	memories, err := s.memoryService.GetAllMemories(s.app.ProjectID) // In real impl, get from context
+	memories, err := s.memoryService.GetAllMemories(s.app.Project.ID) // In real impl, get from context
 	if err != nil {
 		s.sendError(req.ID, -32603, fmt.Sprintf("Failed to get recent memories: %v", err))
 		return
@@ -643,7 +643,7 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 	}
 
 	newMemory := &memory.Memory{
-		ProjectID: s.app.ProjectID, // Use s.app.ProjectID
+		ProjectID: s.app.Project.ID, // Use s.app.Project.ID
 		Type:      memType,
 		Summary:   writeReq.Summary,
 		Detail:    writeReq.Detail,
@@ -708,9 +708,9 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 // handleMemoryStats handles memory statistics requests
 func (s *Server) handleMemoryStats(req *MCPRequest) {
 	// Get all memories to calculate stats
-	memories, err := s.memoryService.GetAllMemories(s.app.ProjectID)
+	memories, err := s.memoryService.GetAllMemories(s.app.Project.ID)
 	if err != nil {
-		s.app.Logger.Error("Failed to get memory stats for MCP", zap.Error(err))
+		s.app.Core.Logger.Error("Failed to get memory stats for MCP", zap.Error(err))
 		s.sendError(req.ID, -32603, "Failed to retrieve memory statistics")
 		return
 	}
@@ -766,14 +766,14 @@ func (s *Server) handleMemoryStats(req *MCPRequest) {
 func (s *Server) handleMemoryHealth(req *MCPRequest) {
 	// Check database connectivity
 	if err := s.db.GetConnection().Ping(); err != nil {
-		s.app.Logger.Error("Database health check failed for MCP", zap.Error(err))
+		s.app.Core.Logger.Error("Database health check failed for MCP", zap.Error(err))
 		s.sendError(req.ID, -32603, "Database health check failed")
 		return
 	}
 
 	// Check if we can perform a simple query
-	if _, err := s.memoryService.GetAllMemories(s.app.ProjectID); err != nil {
-		s.app.Logger.Error("Memory service health check failed for MCP", zap.Error(err))
+	if _, err := s.memoryService.GetAllMemories(s.app.Project.ID); err != nil {
+		s.app.Core.Logger.Error("Memory service health check failed for MCP", zap.Error(err))
 		s.sendError(req.ID, -32603, "Memory service health check failed")
 		return
 	}
@@ -799,7 +799,7 @@ func (s *Server) handleMemoryHealth(req *MCPRequest) {
 
 // handleMemoryDoctor handles memory doctor diagnostic requests
 func (s *Server) handleMemoryDoctor(req *MCPRequest) {
-	doctorRunner := doctor.NewRunnerWithMode(s.app.Config, s.app.DB, s.app.ProjectID, s.app.Memory, doctor.MCPMode)
+	doctorRunner := doctor.NewRunnerWithMode(s.app.Core.Config, s.app.Core.DB, s.app.Project.ID, s.app.Memory, doctor.MCPMode)
 	diagnostics := doctorRunner.RunAll()
 
 	var content strings.Builder
@@ -839,7 +839,7 @@ func (s *Server) handleMemoryDoctor(req *MCPRequest) {
 
 // handleShutdown handles shutdown requests
 func (s *Server) handleShutdown(req *MCPRequest) {
-	s.app.Logger.Info("MCP server received shutdown request.")
+	s.app.Core.Logger.Info("MCP server received shutdown request.")
 	s.Close()
 
 	response := map[string]interface{}{
@@ -866,7 +866,7 @@ func (s *Server) Close() {
 func (s *Server) sendResponse(response map[string]interface{}) {
 	responseBytes, err := json.Marshal(response)
 	if err != nil {
-		s.app.Logger.Error("Failed to marshal MCP response", zap.Error(err))
+		s.app.Core.Logger.Error("Failed to marshal MCP response", zap.Error(err))
 		return
 	}
 	// MCP protocol communicates over stdout

@@ -128,10 +128,27 @@ func (e *Engine) execute(ctx context.Context, opt Options, i int) (*IterationSta
 
 	startTime := time.Now()
 
-	// Prepare the command
-	// Note: We use /bin/sh -c to allow for complex commands/pipes if needed,
-	// but this requires careful safety gating which we do above.
-	cmd := exec.CommandContext(ctx, "sh", "-c", opt.Command)
+	command := strings.TrimSpace(opt.Command)
+	if command == "" {
+		return nil, fmt.Errorf("command is empty")
+	}
+
+	// Prepare the command with safety gating.
+	// Allow shell usage only when explicitly permitted.
+	containsShellMeta := strings.ContainsAny(command, "|&;><`$()[]{}") || strings.Contains(command, "\n") || strings.Contains(command, "\r")
+	var cmd *exec.Cmd
+	if containsShellMeta {
+		if !opt.Safety.AllowShell {
+			return nil, fmt.Errorf("command contains shell metacharacters but allow_shell is false")
+		}
+		cmd = exec.CommandContext(ctx, "sh", "-c", command)
+	} else {
+		parts := strings.Fields(command)
+		if len(parts) == 0 {
+			return nil, fmt.Errorf("command is empty")
+		}
+		cmd = exec.CommandContext(ctx, parts[0], parts[1:]...)
+	}
 	cmd.Dir = e.cfg.ProjectRoot
 
 	var stdout, stderr strings.Builder

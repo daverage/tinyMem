@@ -61,7 +61,7 @@ func (s *Service) CreateMemory(memory *Memory) error {
 	)
 
 	if err := row.Scan(&memory.ID); err != nil {
-		return err
+		return fmt.Errorf("failed to create memory: %w", err)
 	}
 
 	memory.CreatedAt = time.Now()
@@ -123,12 +123,12 @@ func (s *Service) UpdateMemory(memory *Memory) error {
 	)
 
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to update memory with ID %d: %w", memory.ID, err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get affected rows when updating memory with ID %d: %w", memory.ID, err)
 	}
 
 	if rowsAffected == 0 {
@@ -173,9 +173,9 @@ func (s *Service) GetMemory(id int64, projectID string) (*Memory, error) {
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("memory with ID %d not found", id)
+			return nil, fmt.Errorf("memory with ID %d not found in project %s: %w", id, projectID, err)
 		}
-		return nil, err
+		return nil, fmt.Errorf("failed to retrieve memory with ID %d: %w", id, err)
 	}
 
 	if key.Valid {

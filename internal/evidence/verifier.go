@@ -108,35 +108,49 @@ func (v *TestPassVerifier) Verify(testIdentifier string, cfg *config.Config) (bo
 }
 
 func resolveSafePath(path string, baseDir string) (string, error) {
-	cleaned := filepath.Clean(path)
-	if cleaned == "." || cleaned == "" {
-		return "", fmt.Errorf("invalid path: %s", path)
-	}
 	if baseDir == "" {
 		return "", fmt.Errorf("project root is not set")
 	}
 
-	if filepath.IsAbs(cleaned) {
-		rel, err := filepath.Rel(baseDir, cleaned)
-		if err != nil {
-			return "", err
-		}
-		if strings.HasPrefix(rel, "..") {
-			return "", fmt.Errorf("path escapes project root: %s", path)
-		}
-		return cleaned, nil
+	// Normalize the input path
+	normalizedPath := filepath.Clean(path)
+	if normalizedPath == "." || normalizedPath == "" {
+		return "", fmt.Errorf("invalid path: %s", path)
 	}
 
-	if strings.HasPrefix(cleaned, "..") {
-		return "", fmt.Errorf("unsafe relative path: %s", path)
-	}
-
-	absPath := filepath.Join(baseDir, cleaned)
-	rel, err := filepath.Rel(baseDir, absPath)
+	// Ensure the base directory is absolute
+	absBaseDir, err := filepath.Abs(baseDir)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to get absolute base directory: %w", err)
 	}
-	if strings.HasPrefix(rel, "..") {
+
+	var fullPath string
+	if filepath.IsAbs(normalizedPath) {
+		fullPath = normalizedPath
+	} else {
+		fullPath = filepath.Join(absBaseDir, normalizedPath)
+	}
+
+	// Get the absolute path to resolve any symbolic links
+	absPath, err := filepath.EvalSymlinks(fullPath)
+	if err != nil {
+		// If EvalSymlinks fails, fall back to Abs
+		absPath, err = filepath.Abs(fullPath)
+		if err != nil {
+			return "", fmt.Errorf("failed to get absolute path: %w", err)
+		}
+	}
+
+	// Check if the resolved path is within the base directory
+	rel, err := filepath.Rel(absBaseDir, absPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to compute relative path: %w", err)
+	}
+
+	// Check for path traversal
+	if strings.HasPrefix(rel, ".."+string(filepath.Separator)) ||
+	   strings.HasSuffix(rel, "..") ||
+	   rel == ".." {
 		return "", fmt.Errorf("path escapes project root: %s", path)
 	}
 
@@ -170,10 +184,8 @@ func runWhitelistedCommand(command string, cfg *config.Config) (bool, error) {
 	if strings.TrimSpace(command) == "" {
 		return false, fmt.Errorf("command is empty")
 	}
-	if strings.ContainsAny(command, "|&;><`$") || strings.Contains(command, "\n") || strings.Contains(command, "\r") {
-		return false, fmt.Errorf("command contains unsafe characters")
-	}
 
+	// Use proper shell command parsing to prevent injection
 	parts := strings.Fields(command)
 	if len(parts) == 0 {
 		return false, fmt.Errorf("command is empty")
@@ -191,12 +203,21 @@ func runWhitelistedCommand(command string, cfg *config.Config) (bool, error) {
 		return false, fmt.Errorf("command not in allowlist: %s", cmdBase)
 	}
 
+	// Additional validation: ensure no shell metacharacters in arguments
+	for _, arg := range parts[1:] {
+		if strings.ContainsAny(arg, "|&;><`$()[]{};") {
+			return false, fmt.Errorf("argument contains unsafe characters: %s", arg)
+		}
+	}
+
 	timeout := time.Duration(cfg.EvidenceCommandTimeoutSeconds) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
+	// Use exec.Command directly with validated parts to prevent shell injection
 	cmd := exec.CommandContext(ctx, parts[0], parts[1:]...)
 	cmd.Dir = cfg.ProjectRoot
+
 	if err := cmd.Run(); err != nil {
 		return false, err
 	}

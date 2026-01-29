@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -93,18 +94,18 @@ var proxyCmd = &cobra.Command{
 }
 
 func runProxyCmd(a *app.App, cmd *cobra.Command, args []string) {
-	// Check for updates in a separate goroutine
+	// Check for updates in a separate goroutine with context management
 	go checkUpdate(a)
 
 	// Set the server mode to ProxyMode
-	a.ServerMode = doctor.ProxyMode
+	a.Server.Mode = doctor.ProxyMode
 
 	// Create and start proxy server
 	proxyServer := proxy.NewServer(a) // Pass the app instance directly
-	a.Logger.Info("Starting proxy server", zap.Int("port", a.Config.ProxyPort))
+	a.Core.Logger.Info("Starting proxy server", zap.Int("port", a.Core.Config.ProxyPort))
 
 	if err := proxyServer.Start(); err != nil {
-		a.Logger.Error("Failed to start proxy server", zap.Error(err))
+		a.Core.Logger.Error("Failed to start proxy server", zap.Error(err))
 	}
 }
 
@@ -114,35 +115,35 @@ var mcpCmd = &cobra.Command{
 }
 
 func runMcpCmd(a *app.App, cmd *cobra.Command, args []string) {
-	// Check for updates in a separate goroutine
+	// Check for updates in a separate goroutine with context management
 	go checkUpdate(a)
 
 	// Set the server mode to MCPMode
-	a.ServerMode = doctor.MCPMode
+	a.Server.Mode = doctor.MCPMode
 
-	if a.Logger != nil {
-		_ = a.Logger.Sync()
+	if a.Core.Logger != nil {
+		_ = a.Core.Logger.Sync()
 	}
 
-	logFile := a.Config.LogFile
+	logFile := a.Core.Config.LogFile
 	if logFile == "" {
-		logDir := filepath.Join(a.Config.TinyMemDir, "logs")
+		logDir := filepath.Join(a.Core.Config.TinyMemDir, "logs")
 		logFile = filepath.Join(logDir, fmt.Sprintf("tinymem-%s.log", time.Now().Format("2006-01-02")))
 	} else if !filepath.IsAbs(logFile) {
-		logFile = filepath.Join(a.Config.TinyMemDir, logFile)
+		logFile = filepath.Join(a.Core.Config.TinyMemDir, logFile)
 	}
 	if err := os.MkdirAll(filepath.Dir(logFile), 0755); err == nil {
-		if logger, err := logging.NewLoggerWithStderr(a.Config.LogLevel, logFile, false); err == nil {
-			a.Logger = logger
+		if logger, err := logging.NewLoggerWithStderr(a.Core.Config.LogLevel, logFile, false); err == nil {
+			a.Core.Logger = logger
 		}
 	}
 
 	// Create and start MCP server
 	mcpServer := mcp.NewServer(a) // Pass the app instance directly
-	a.Logger.Info("Starting MCP server")
+	a.Core.Logger.Info("Starting MCP server")
 
 	if err := mcpServer.Start(); err != nil {
-		a.Logger.Error("Failed to start MCP server", zap.Error(err))
+		a.Core.Logger.Error("Failed to start MCP server", zap.Error(err))
 	}
 }
 
@@ -152,17 +153,23 @@ var runCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 }
 
+// setupServices creates and returns the common services used across different commands
+func setupServices(a *app.App) (*evidence.Service, recall.Recaller, *inject.MemoryInjector) {
+	evidenceService := evidence.NewService(a.Core.DB, a.Core.Config)
+	var recallEngine recall.Recaller
+	if a.Core.Config.SemanticEnabled {
+		recallEngine = semantic.NewSemanticEngine(a.Core.DB, a.Memory, evidenceService, a.Core.Config, a.Core.Logger)
+	} else {
+		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Core.Config, a.Core.Logger, a.Core.DB.GetConnection())
+	}
+	injector := inject.NewMemoryInjector(recallEngine)
+	return evidenceService, recallEngine, injector
+}
+
 func runRunCmd(a *app.App, cmd *cobra.Command, args []string) {
 	// Set up services using the app instance
-	evidenceService := evidence.NewService(a.DB, a.Config)
-	var recallEngine recall.Recaller
-	if a.Config.SemanticEnabled {
-		recallEngine = semantic.NewSemanticEngine(a.DB, a.Memory, evidenceService, a.Config, a.Logger)
-	} else {
-		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config, a.Logger, a.DB.GetConnection())
-	}
+	_, recallEngine, injector := setupServices(a)
 	defer recallEngine.Close()
-	injector := inject.NewMemoryInjector(recallEngine)
 
 	// Perform recall based on the command
 	commandStr := fmt.Sprintf("Running command: %s", args[0])
@@ -170,9 +177,9 @@ func runRunCmd(a *app.App, cmd *cobra.Command, args []string) {
 		commandStr += fmt.Sprintf(" with arguments: %s", strings.Join(args[1:], " "))
 	}
 
-	injectedPrompt, err := injector.InjectMemoriesIntoPrompt(commandStr, a.ProjectID, a.Config.RecallMaxItems, a.Config.RecallMaxTokens)
+	injectedPrompt, err := injector.InjectMemoriesIntoPrompt(commandStr, a.Project.ID, a.Core.Config.RecallMaxItems, a.Core.Config.RecallMaxTokens)
 	if err != nil {
-		a.Logger.Warn("Failed to inject memories", zap.Error(err))
+		a.Core.Logger.Warn("Failed to inject memories", zap.Error(err))
 		injectedPrompt = commandStr
 	}
 
@@ -183,7 +190,7 @@ func runRunCmd(a *app.App, cmd *cobra.Command, args []string) {
 	cmdToRun.Stdin = os.Stdin
 
 	if err := cmdToRun.Run(); err != nil {
-		a.Logger.Error("Command failed", zap.Error(err))
+		a.Core.Logger.Error("Command failed", zap.Error(err))
 	}
 }
 
@@ -193,49 +200,49 @@ var healthCmd = &cobra.Command{
 }
 
 func runHealthCmd(a *app.App, cmd *cobra.Command, args []string) {
-	a.Logger.Info("Checking health...", zap.String("mode", string(a.ServerMode)))
+	a.Core.Logger.Info("Checking health...", zap.String("mode", string(a.Server.Mode)))
 
 	// Check database connectivity
-	if err := a.DB.GetConnection().Ping(); err != nil {
-		a.Logger.Error("Database connectivity check failed", zap.Error(err))
+	if err := a.Core.DB.GetConnection().Ping(); err != nil {
+		a.Core.Logger.Error("Database connectivity check failed", zap.Error(err))
 		fmt.Printf("❌ Database connectivity: %v\n", err)
 	} else {
-		a.Logger.Info("Database connectivity: OK")
+		a.Core.Logger.Info("Database connectivity: OK")
 		fmt.Println("✅ Database connectivity: OK")
 	}
 
 	// Check if we can perform a simple query
-	if _, err := a.DB.GetConnection().Exec("SELECT 1"); err != nil {
-		a.Logger.Error("Database query check failed", zap.Error(err))
+	if _, err := a.Core.DB.GetConnection().Exec("SELECT 1"); err != nil {
+		a.Core.Logger.Error("Database query check failed", zap.Error(err))
 		fmt.Printf("❌ Database query: %v\n", err)
 	} else {
-		a.Logger.Info("Database query: OK")
+		a.Core.Logger.Info("Database query: OK")
 		fmt.Println("✅ Database query: OK")
 	}
 
 	// Mode-specific health checks
-	switch a.ServerMode {
+	switch a.Server.Mode {
 	case doctor.MCPMode:
 		// For MCP mode, check if we can access memories
-		if _, err := a.Memory.GetAllMemories(a.ProjectID); err != nil {
-			a.Logger.Error("Memory service health check failed", zap.Error(err))
+		if _, err := a.Memory.GetAllMemories(a.Project.ID); err != nil {
+			a.Core.Logger.Error("Memory service health check failed", zap.Error(err))
 			fmt.Printf("❌ Memory service: %v\n", err)
 		} else {
-			a.Logger.Info("Memory service health check passed")
+			a.Core.Logger.Info("Memory service health check passed")
 			fmt.Println("✅ Memory service: OK")
 		}
 	case doctor.ProxyMode:
 		// For proxy mode, check if proxy is listening (attempt to connect to proxy port)
-		if err := checkProxyListening(a.Config.ProxyPort); err != nil {
-			a.Logger.Warn("Proxy not listening", zap.Error(err), zap.Int("port", a.Config.ProxyPort))
-			fmt.Printf("! Proxy not listening on port %d: %v\n", a.Config.ProxyPort, err)
+		if err := checkProxyListening(a.Core.Config.ProxyPort); err != nil {
+			a.Core.Logger.Warn("Proxy not listening", zap.Error(err), zap.Int("port", a.Core.Config.ProxyPort))
+			fmt.Printf("! Proxy not listening on port %d: %v\n", a.Core.Config.ProxyPort, err)
 		} else {
-			a.Logger.Info("Proxy is listening", zap.Int("port", a.Config.ProxyPort))
-			fmt.Printf("✅ Proxy listening on port %d\n", a.Config.ProxyPort)
+			a.Core.Logger.Info("Proxy is listening", zap.Int("port", a.Core.Config.ProxyPort))
+			fmt.Printf("✅ Proxy listening on port %d\n", a.Core.Config.ProxyPort)
 		}
 	}
 
-	a.Logger.Info("Health check complete.")
+	a.Core.Logger.Info("Health check complete.")
 	fmt.Println("Health check complete.")
 }
 
@@ -258,9 +265,9 @@ var statsCmd = &cobra.Command{
 }
 
 func runStatsCmd(a *app.App, cmd *cobra.Command, args []string) {
-	memories, err := a.Memory.GetAllMemories(a.ProjectID)
+	memories, err := a.Memory.GetAllMemories(a.Project.ID)
 	if err != nil {
-		a.Logger.Error("Failed to get memories for stats", zap.Error(err))
+		a.Core.Logger.Error("Failed to get memories for stats", zap.Error(err))
 		fmt.Printf("❌ Error retrieving memories: %v\n", err)
 		return
 	}
@@ -282,10 +289,10 @@ func runStatsCmd(a *app.App, cmd *cobra.Command, args []string) {
 		fmt.Printf("\nTask Statistics:\n")
 
 		// Initialize analytics service
-		taskAnalytics := analytics.NewTaskAnalytics(a.DB.GetConnection())
+		taskAnalytics := analytics.NewTaskAnalytics(a.Core.DB.GetConnection())
 
 		// Get comprehensive task metrics
-		metrics, err := taskAnalytics.GetTaskMetrics(a.ProjectID)
+		metrics, err := taskAnalytics.GetTaskMetrics(a.Project.ID)
 		if err != nil {
 			fmt.Printf("  Error getting detailed task metrics: %v\n", err)
 
@@ -328,24 +335,24 @@ func runStatsCmd(a *app.App, cmd *cobra.Command, args []string) {
 	}
 
 	// Mode-specific stats
-	switch a.ServerMode {
+	switch a.Server.Mode {
 	case doctor.MCPMode:
 		fmt.Println("\nMode: MCP (Model Context Protocol)")
 	case doctor.ProxyMode:
 		fmt.Println("\nMode: Proxy")
 		// Additional proxy-specific stats could be added here
-		fmt.Printf("Proxy Port: %d\n", a.Config.ProxyPort)
+		fmt.Printf("Proxy Port: %d\n", a.Core.Config.ProxyPort)
 	}
 
 	// CoVe configuration summary
-	fmt.Printf("\nCoVe Enabled: %t\n", a.Config.CoVeEnabled)
-	fmt.Printf("CoVe Confidence Threshold: %.2f\n", a.Config.CoVeConfidenceThreshold)
-	fmt.Printf("CoVe Max Candidates: %d\n", a.Config.CoVeMaxCandidates)
-	fmt.Printf("CoVe Timeout Seconds: %d\n", a.Config.CoVeTimeoutSeconds)
-	fmt.Printf("CoVe Recall Filter Enabled: %t\n", a.Config.CoVeRecallFilterEnabled)
+	fmt.Printf("\nCoVe Enabled: %t\n", a.Core.Config.CoVeEnabled)
+	fmt.Printf("CoVe Confidence Threshold: %.2f\n", a.Core.Config.CoVeConfidenceThreshold)
+	fmt.Printf("CoVe Max Candidates: %d\n", a.Core.Config.CoVeMaxCandidates)
+	fmt.Printf("CoVe Timeout Seconds: %d\n", a.Core.Config.CoVeTimeoutSeconds)
+	fmt.Printf("CoVe Recall Filter Enabled: %t\n", a.Core.Config.CoVeRecallFilterEnabled)
 
-	store := cove.NewSQLiteStatsStore(a.DB.GetConnection())
-	if stats, err := store.Load(a.ProjectID); err == nil && stats != nil && stats.CandidatesEvaluated > 0 {
+	store := cove.NewSQLiteStatsStore(a.Core.DB.GetConnection())
+	if stats, err := store.Load(a.Project.ID); err == nil && stats != nil && stats.CandidatesEvaluated > 0 {
 		fmt.Printf("\nCoVe Runtime Stats:\n")
 		fmt.Printf("  Candidates Evaluated: %d\n", stats.CandidatesEvaluated)
 		fmt.Printf("  Candidates Discarded: %d\n", stats.CandidatesDiscarded)
@@ -369,7 +376,7 @@ var doctorCmd = &cobra.Command{
 func runDoctorCmd(a *app.App, cmd *cobra.Command, args []string) {
 	// Use the server mode from the app instance
 	// This allows the doctor command to behave appropriately based on how tinyMem was started
-	doctorRunner := doctor.NewRunnerWithMode(a.Config, a.DB, a.ProjectID, a.Memory, a.ServerMode)
+	doctorRunner := doctor.NewRunnerWithMode(a.Core.Config, a.Core.DB, a.Project.ID, a.Memory, a.Server.Mode)
 	diagnostics := doctorRunner.RunAll()
 	diagnostics.PrintReport()
 }
@@ -381,9 +388,9 @@ var recentCmd = &cobra.Command{
 
 func runRecentCmd(a *app.App, cmd *cobra.Command, args []string) {
 	// Get recent memories
-	memories, err := a.Memory.GetAllMemories(a.ProjectID)
+	memories, err := a.Memory.GetAllMemories(a.Project.ID)
 	if err != nil {
-		a.Logger.Error("Failed to get recent memories", zap.Error(err))
+		a.Core.Logger.Error("Failed to get recent memories", zap.Error(err))
 		fmt.Printf("❌ Error retrieving memories: %v\n", err)
 		return
 	}
@@ -406,7 +413,7 @@ func runRecentCmd(a *app.App, cmd *cobra.Command, args []string) {
 	}
 
 	// Mode-specific info
-	switch a.ServerMode {
+	switch a.Server.Mode {
 	case doctor.MCPMode:
 		fmt.Println("Mode: MCP (Model Context Protocol)")
 	case doctor.ProxyMode:
@@ -422,24 +429,18 @@ var queryCmd = &cobra.Command{
 
 func runQueryCmd(a *app.App, cmd *cobra.Command, args []string) {
 	// Set up services using the app instance
-	evidenceService := evidence.NewService(a.DB, a.Config)
-	var recallEngine recall.Recaller
-	if a.Config.SemanticEnabled {
-		recallEngine = semantic.NewSemanticEngine(a.DB, a.Memory, evidenceService, a.Config, a.Logger)
-	} else {
-		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config, a.Logger, a.DB.GetConnection())
-	}
+	_, recallEngine, _ := setupServices(a)
 	defer recallEngine.Close()
 
 	// Perform search
 	query := strings.Join(args, " ")
 	results, err := recallEngine.Recall(recall.RecallOptions{
-		ProjectID: a.ProjectID,
+		ProjectID: a.Project.ID,
 		Query:     query,
-		MaxItems:  a.Config.RecallMaxItems,
+		MaxItems:  a.Core.Config.RecallMaxItems,
 	})
 	if err != nil {
-		a.Logger.Error("Search failed", zap.Error(err))
+		a.Core.Logger.Error("Search failed", zap.Error(err))
 		fmt.Printf("❌ Search failed: %v\n", err)
 		return
 	}
@@ -456,7 +457,7 @@ func runQueryCmd(a *app.App, cmd *cobra.Command, args []string) {
 	}
 
 	// Mode-specific info
-	switch a.ServerMode {
+	switch a.Server.Mode {
 	case doctor.MCPMode:
 		fmt.Println("Mode: MCP (Model Context Protocol)")
 	case doctor.ProxyMode:
@@ -515,7 +516,7 @@ func runWriteCmd(a *app.App, cmd *cobra.Command, args []string) {
 	}
 
 	newMemory := &memory.Memory{
-		ProjectID: a.ProjectID,
+		ProjectID: a.Project.ID,
 		Type:      memType,
 		Summary:   writeSummary,
 		Detail:    writeDetail,
@@ -529,7 +530,7 @@ func runWriteCmd(a *app.App, cmd *cobra.Command, args []string) {
 	}
 
 	if err := a.Memory.CreateMemory(newMemory); err != nil {
-		a.Logger.Error("Failed to create memory", zap.Error(err))
+		a.Core.Logger.Error("Failed to create memory", zap.Error(err))
 		fmt.Printf("❌ Failed to create memory: %v\n", err)
 		os.Exit(1)
 	}
@@ -555,7 +556,7 @@ var contractCmd = &cobra.Command{
 
 func runContractCmd(a *app.App, cmd *cobra.Command, args []string) {
 	if err := memory.AddContract(); err != nil {
-		a.Logger.Error("Failed to add contract", zap.Error(err))
+		a.Core.Logger.Error("Failed to add contract", zap.Error(err))
 		fmt.Printf("❌ Failed to add contract: %v\n", err)
 	}
 }
@@ -566,17 +567,46 @@ var dashboardCmd = &cobra.Command{
 }
 
 func checkUpdate(a *app.App) {
-	newVersion, err := version.CheckForUpdates()
-	if err != nil {
-		a.Logger.Debug("Failed to check for updates", zap.Error(err))
-		return
-	}
+	checkUpdateWithContext(a.Ctx, a)
+}
 
-	if newVersion != "" {
-		msg := fmt.Sprintf("A new version of tinyMem is available: v%s (current: v%s). Download it from: https://github.com/daverage/tinymem/releases", newVersion, version.Version)
-		a.Logger.Info(msg)
-		// Also print to stderr to ensure user sees it in CLI
-		fmt.Fprintf(os.Stderr, "\n🔔 %s\n\n", msg)
+func checkUpdateWithContext(ctx context.Context, a *app.App) {
+	// Create a context with timeout for the update check
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	// Use a channel to receive the result
+	resultChan := make(chan struct {
+		newVersion string
+		err        error
+	}, 1)
+
+	// Run the update check in a goroutine
+	go func() {
+		newVersion, err := version.CheckForUpdates()
+		resultChan <- struct {
+			newVersion string
+			err        error
+		}{newVersion, err}
+	}()
+
+	// Wait for either the result or context cancellation
+	select {
+	case result := <-resultChan:
+		if result.err != nil {
+			a.Core.Logger.Debug("Failed to check for updates", zap.Error(result.err))
+			return
+		}
+
+		if result.newVersion != "" {
+			msg := fmt.Sprintf("A new version of tinyMem is available: v%s (current: v%s). Download it from: https://github.com/daverage/tinymem/releases", result.newVersion, version.Version)
+			a.Core.Logger.Info(msg)
+			// Also print to stderr to ensure user sees it in CLI
+			fmt.Fprintf(os.Stderr, "\n🔔 %s\n\n", msg)
+		}
+	case <-ctxWithTimeout.Done():
+		a.Core.Logger.Debug("Update check timed out", zap.Error(ctxWithTimeout.Err()))
+		return
 	}
 }
 
@@ -593,7 +623,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to initialize application: %v\n", err)
 		os.Exit(1)
 	}
-	defer appInstance.Close()
+
+	// Ensure cleanup happens even if execution fails
+	defer func() {
+		appInstance.Close()
+	}()
 
 	// Wrap the Run functions with newAppRunner to pass the app instance
 	versionCmd.Run = newAppRunner(appInstance, runVersionCmd)
@@ -610,7 +644,7 @@ func main() {
 	writeCmd.Run = newAppRunner(appInstance, runWriteCmd)
 
 	if err := rootCmd.Execute(); err != nil {
-		appInstance.Logger.Error("Root command execution failed", zap.Error(err))
+		appInstance.Core.Logger.Error("Root command execution failed", zap.Error(err))
 		os.Exit(1)
 	}
 }

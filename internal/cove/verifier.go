@@ -65,7 +65,7 @@ func (v *Verifier) VerifyCandidates(candidates []CandidateMemory) ([]CandidateMe
 	defer cancel()
 
 	// Call LLM for verification
-	results, err := v.callLLMForVerification(ctx, candidates)
+	results, err := v.callLLMForCandidateVerification(ctx, candidates)
 	if err != nil {
 		// FAIL-SAFE: On error, return all candidates unfiltered
 		v.stats.RecordError()
@@ -102,8 +102,8 @@ func (v *Verifier) VerifyCandidates(candidates []CandidateMemory) ([]CandidateMe
 	return filtered, nil
 }
 
-// callLLMForVerification makes a single batched LLM call for all candidates
-func (v *Verifier) callLLMForVerification(ctx context.Context, candidates []CandidateMemory) ([]CandidateResult, error) {
+// callLLMForCandidateVerification makes a single batched LLM call for all candidates
+func (v *Verifier) callLLMForCandidateVerification(ctx context.Context, candidates []CandidateMemory) ([]CandidateResult, error) {
 	prompt := v.buildVerificationPrompt(candidates)
 
 	// Determine model to use
