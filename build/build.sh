@@ -51,8 +51,11 @@ if [ "$IS_RELEASE" = true ]; then
   echo "🚀 Preparing Release: $VERSION (Current: $LATEST_TAG)"
 else
   # Read current version from code for standard build
-  VERSION="$(grep -E 'var Version =' internal/version/version.go \
-    | sed -E 's/.*"([^"]+)".*/\1/' || true)"
+  VERSION="$(git describe --tags --dirty --always 2>/dev/null || true)"
+  if [[ -z "$VERSION" ]]; then
+    VERSION="$(grep -E 'var Version =' internal/version/version.go \
+      | sed -E 's/.*"([^"]+)".*/\1/' || true)"
+  fi
   if [[ -z "$VERSION" ]]; then
     VERSION="$LATEST_TAG"
   fi
@@ -69,7 +72,7 @@ if [[ -n "${TINYMEM_EXTRA_BUILD_TAGS:-}" ]]; then
 fi
 
 TAGS_FLAG=(-tags "${BUILD_TAGS[*]}")
-LDFLAGS="-X github.com/andrzejmarczewski/tinyMem/internal/version.Version=${VERSION}"
+LDFLAGS="-X github.com/daverage/tinymem/internal/version.Version=${VERSION}"
 
 build_target() {
   local label=$1

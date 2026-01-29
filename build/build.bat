@@ -77,11 +77,17 @@ if "%IS_RELEASE%"=="true" (
     set VERSION=v!MAJOR!.!MINOR!.!PATCH!
     echo 🚀 Preparing Release: !VERSION! (Current: %LATEST_TAG%)
 ) else (
-    REM Read current version from code
-    for /f "tokens=3 delims= " %%v in ('findstr /R "var Version = " internal\version\version.go') do (
-        set VERSION=%%~v
+    REM Prefer git tag for local builds
+    for /f "tokens=*" %%v in ('git describe --tags --dirty --always 2^>nul') do (
+        set VERSION=%%v
     )
-    set VERSION=!VERSION:"=!
+    if "!VERSION!"=="" (
+        REM Read current version from code
+        for /f "tokens=3 delims= " %%v in ('findstr /R "var Version = " internal\version\version.go') do (
+            set VERSION=%%~v
+        )
+        set VERSION=!VERSION:"=!
+    )
     if "!VERSION!"=="" set VERSION=%LATEST_TAG%
     echo Building tinyMem version: !VERSION!
 )

@@ -1,5 +1,5 @@
-# Tasks – Remove GitHub Release creation from build scripts
+# Tasks – Fix local build version lag
 
-- [x] Remove release creation from build/build.sh
-- [x] Remove release creation from build/build.bat
-- [x] Update docs to reflect release creation handled elsewhere
+- [x] Identify why local build version lags latest tag
+- [x] Update build scripts or version logic to match latest tag
+- [x] Verify behavior for release and non-release builds
