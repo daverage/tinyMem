@@ -51,7 +51,10 @@ If you've ever used an AI for a large project, you know it eventually starts to 
 
 **tinyMem is a "Hard Drive for your AI's Brain."**
 
-Instead of the AI trying to remember everything in its limited "short-term memory" (the chat window), tinyMem saves important facts and decisions to a local database on your computer. When the AI needs to answer a question or write code, tinyMem "reminds" it of the relevant facts.
+### 🧬 Evolution: From Memory to Protocol
+tinyMem was initially built to solve a specific problem: **improving the reliability of small, locally-hosted LLMs (7B–13B).** These models often suffer from "context drift" where they lose track of project decisions over long sessions.
+
+As the project grew, we realized that memory alone wasn't enough. Reliability requires **Truth Discipline**. This led to the expansion of tinyMem into what it is today: a comprehensive **Control Protocol** that mandates evidence-based validation and strict execution phases for any agent touching a repository.
 
 *   **No more repeating yourself**: "Remember, we use Go for the backend."
 *   **No more AI hallucinations**: If the AI isn't sure, it checks its memory.

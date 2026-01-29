@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>tinyMem - Repository-Aware AI Agent Control Protocol</title>
+    <meta name="description" content="tinyMem is a hard enforcement specification for repository-aware AI agents, ensuring reliable memory integration and protocol compliance.">
+    <meta name="keywords" content="AI agents, memory protocol, repository awareness, tinyMem, AI control, specification">
+    <meta name="author" content="tinyMem Project">
+    <meta property="og:title" content="tinyMem - Repository-Aware AI Agent Control Protocol">
+    <meta property="og:description" content="A hard enforcement specification for repository-aware AI agents">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="assets/tinyMem-logo-256.png">
+    <meta property="og:url" content="https://github.com/daverage/tinyMem">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="icon" href="assets/tinyMem-logo.ico" type="image/x-icon">
+    <style>
+        :root {
+            --primary: #2f6f6d;
+            --secondary: #5aa4a8;
+            --accent: #e08f62;
+            --dark: #1f2a2f;
+            --light: #f4f7f6;
+            --gray: #5f6b72;
+            --card-bg: rgba(255, 255, 255, 0.92);
+            --glass-bg: rgba(255, 255, 255, 0.4);
+            --glass-border: rgba(255, 255, 255, 0.35);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Manrope', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            line-height: 1.6;
+            color: var(--dark);
+            background: linear-gradient(180deg, #f7f9f9 0%, #edf2f3 100%);
+            background-attachment: fixed;
+            overflow-x: hidden;
+        }
+
+        /* Glassmorphism header */
+        header {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--glass-border);
+            padding: 2rem 0;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(47,111,109,0.08) 0%, rgba(90,164,168,0.08) 100%);
+            z-index: -1;
+            animation: none;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+            position: relative;
+            z-index: 2;
+        }
+
+        .logo {
+            width: 120px;
+            height: 120px;
+            margin-bottom: 1rem;
+            border-radius: 24px;
+            box-shadow: 0 8px 24px rgba(47, 111, 109, 0.18);
+            transition: transform 0.3s ease;
+        }
+
+        .logo:hover {
+            transform: scale(1.02);
+        }
+
+        .terminal {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            border-radius: 12px;
+            padding: 1.5rem;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            box-shadow: 0 12px 28px rgba(0,0,0,0.22);
+            margin: 3rem auto;
+            max-width: 800px;
+            text-align: left;
+            position: relative;
+            border: 1px solid #333;
+        }
+
+        .terminal::before {
+            content: '● ● ●';
+            position: absolute;
+            top: 12px;
+            left: 15px;
+            color: #ff5f56;
+            font-size: 12px;
+            letter-spacing: 3px;
+        }
+
+        .terminal-content {
+            margin-top: 1rem;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .command { color: #4ade80; }
+        .comment { color: #71717a; }
+        .keyword { color: #3b82f6; }
+
+        h1 {
+            font-size: 4.5rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        .subtitle {
+            font-size: 1.4rem;
+            color: var(--gray);
+            max-width: 800px;
+            margin: 0 auto 1.5rem;
+            font-weight: 400;
+        }
+
+        .repo-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            padding: 0.9rem 2rem;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 600;
+            margin-top: 1.5rem;
+            transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+            box-shadow: 0 8px 18px rgba(47, 111, 109, 0.25);
+            border: none;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .repo-link::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                90deg,
+                transparent,
+                rgba(255, 255, 255, 0.2),
+                transparent
+            );
+            transition: 0.5s;
+        }
+
+        .repo-link:hover::before {
+            left: 100%;
+        }
+
+        .repo-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 22px rgba(47, 111, 109, 0.32);
+        }
+
+        .repo-link:active {
+            transform: translateY(0);
+        }
+
+        main {
+            padding: 4rem 0;
+        }
+
+        .intro {
+            text-align: center;
+            max-width: 800px;
+            margin: 0 auto 4rem;
+        }
+
+        .intro h2 {
+            font-size: 2.2rem;
+            margin-bottom: 1.5rem;
+            color: var(--dark);
+            position: relative;
+            display: inline-block;
+        }
+
+        .intro h2::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80px;
+            height: 4px;
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            border-radius: 2px;
+        }
+
+        .intro p {
+            font-size: 1.2rem;
+            color: var(--gray);
+            margin-bottom: 1.5rem;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 2.5rem;
+            margin-bottom: 4rem;
+        }
+
+        .feature-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2.5rem;
+            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.07);
+            transition: all 0.3s ease;
+            border: 1px solid var(--glass-border);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+        }
+
+        .feature-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 14px 26px rgba(0, 0, 0, 0.12);
+        }
+
+        .feature-card h3 {
+            color: var(--dark);
+            margin-bottom: 1.2rem;
+            font-size: 1.6rem;
+            display: flex;
+            align-items: center;
+        }
+
+        .feature-card h3::before {
+            content: '';
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--primary);
+            margin-right: 12px;
+        }
+
+        .feature-card p {
+            color: var(--gray);
+            line-height: 1.7;
+        }
+
+        .repo-section {
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 3rem;
+            text-align: center;
+            margin: 4rem 0;
+            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.07);
+            border: 1px solid var(--glass-border);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .repo-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+        }
+
+        .repo-section h2 {
+            color: var(--dark);
+            margin-bottom: 1.2rem;
+            font-size: 2rem;
+        }
+
+        .repo-section p {
+            color: var(--gray);
+            font-size: 1.2rem;
+            max-width: 600px;
+            margin: 0 auto 1.5rem;
+        }
+
+        .cta-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            padding: 1.1rem 2.5rem;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-top: 1rem;
+            transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+            box-shadow: 0 8px 18px rgba(47, 111, 109, 0.25);
+            border: none;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cta-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                90deg,
+                transparent,
+                rgba(255, 255, 255, 0.2),
+                transparent
+            );
+            transition: 0.5s;
+        }
+
+        .cta-button:hover::before {
+            left: 100%;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 22px rgba(47, 111, 109, 0.32);
+        }
+
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin: 4rem 0;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 2rem 1rem;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+            border: 1px solid var(--glass-border);
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+
+        .stat-label {
+            color: var(--gray);
+            font-size: 1rem;
+        }
+
+        footer {
+            background: #1b2429;
+            color: white;
+            text-align: center;
+            padding: 3rem 0;
+            margin-top: 4rem;
+        }
+
+        footer p {
+            margin: 0.5rem 0;
+        }
+
+        footer a {
+            color: var(--secondary);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        .protocol-steps {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 1.5rem;
+            margin: 3rem 0;
+        }
+
+        .step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            max-width: 200px;
+        }
+
+        .step-number {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-bottom: 1rem;
+        }
+
+        .step-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--dark);
+        }
+
+        .step-desc {
+            font-size: 0.9rem;
+            color: var(--gray);
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2.5rem;
+            }
+
+            .subtitle {
+                font-size: 1.1rem;
+            }
+
+            header {
+                padding: 1.5rem 0;
+            }
+
+            .logo {
+                width: 96px;
+                height: 96px;
+            }
+
+            .repo-link {
+                width: 100%;
+                justify-content: center;
+                margin-top: 0.75rem;
+            }
+
+            .intro p {
+                font-size: 1.05rem;
+            }
+
+            .terminal {
+                padding: 1.1rem;
+                margin: 2rem auto;
+            }
+
+            .terminal-content {
+                font-size: 0.9rem;
+            }
+
+            .stats-container {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 1rem;
+                margin: 3rem 0;
+            }
+
+            .stat-number {
+                font-size: 1.6rem;
+            }
+
+            .feature-card {
+                padding: 2rem;
+            }
+
+            .repo-section {
+                padding: 2rem 1.5rem;
+            }
+
+            .cta-button {
+                width: 100%;
+            }
+
+            .features {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+            }
+
+            .repo-section {
+                padding: 2rem 1.5rem;
+            }
+
+            .protocol-steps {
+                flex-direction: column;
+                align-items: center;
+                gap: 1rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            h1 {
+                font-size: 2.1rem;
+            }
+
+            .subtitle {
+                font-size: 1rem;
+            }
+
+            .intro h2 {
+                font-size: 1.7rem;
+            }
+
+            .intro p {
+                font-size: 1rem;
+            }
+
+            .stats-container {
+                grid-template-columns: 1fr;
+            }
+
+            .stat-card {
+                padding: 1.5rem 1rem;
+            }
+
+            .feature-card {
+                padding: 1.6rem;
+            }
+
+            .repo-link,
+            .cta-button {
+                padding: 0.9rem 1.5rem;
+                font-size: 1rem;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation: none !important;
+                transition: none !important;
+                scroll-behavior: auto !important;
+            }
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <img src="assets/tinyMem-logo.png" alt="tinyMem Logo" class="logo">
+            <h1>tinyMem</h1>
+            <p class="subtitle">A Hard Drive for your AI's Brain</p>
+            <p style="color: var(--gray); margin-top: -1rem; margin-bottom: 2rem;">Local, project-scoped memory with evidence-based truth validation.</p>
+            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                <a href="#quick-start" class="repo-link" style="background: white; color: var(--primary);">
+                    Get Started
+                </a>
+                <a href="https://github.com/daverage/tinyMem" class="repo-link" target="_blank">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right: 8px;">
+                        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+                    </svg>
+                    GitHub Repository
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <section id="quick-start" class="intro">
+            <h2>The tinyMem Story</h2>
+            <p>Originally conceived as a targeted solution to solve <strong>memory drift</strong> and hallucinations in small, locally-hosted LLMs (7B-13B), tinyMem has evolved into a comprehensive control protocol for repository-aware AI agents.</p>
+            
+            <p>We discovered that giving an AI "perfect recall" was only half the battle. The other half was <strong>enforcement</strong>—ensuring that agents actually check their memory before acting and validate every claim against codebase evidence.</p>
+            
+            <div class="terminal">
+                <div class="terminal-content">
+                    <span class="comment"># 1. Install tinyMem</span><br>
+                    <span class="command">curl -L "https://github.com/daverage/tinyMem/releases/latest/download/tinymem" -o tinymem</span><br>
+                    <span class="command">chmod +x tinymem && sudo mv tinymem /usr/local/bin/</span><br><br>
+                    
+                    <span class="comment"># 2. Initialize in your project</span><br>
+                    <span class="command">tinymem health</span><br><br>
+                    
+                    <span class="comment"># 3. Start the "Brain" (MCP mode for IDEs)</span><br>
+                    <span class="command">tinymem mcp</span><br>
+                    <span class="comment">> [INFO] MCP Server listening on stdio...</span>
+                </div>
+            </div>
+
+            <p>Designed for the modern AI landscape, tinyMem provides a robust framework for repository-aware agents to operate with precision and reliability.</p>
+        </section>
+
+        <div class="stats-container">
+            <div class="stat-card">
+                <span class="stat-number">Local-first</span>
+                <span class="stat-label">Private by design</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number">Low-latency</span>
+                <span class="stat-label">Recall (env dependent)</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number">No</span>
+                <span class="stat-label">Model retraining required</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number">Multiple</span>
+                <span class="stat-label">Model integrations</span>
+            </div>
+        </div>
+
+        <div class="features">
+            <div class="feature-card">
+                <h3>Evidence-Based Truth</h3>
+                <p>TinyMem uses Typed memories (fact, decision, constraint). It doesn't just guess; it validates claims against your codebase using evidence like file existence, grep hits, and test results.</p>
+            </div>
+
+            <div class="feature-card">
+                <h3>The Ralph Loop</h3>
+                <p>An autonomous repair engine that iterates until your code works. It runs tests, recalls failure patterns, and applies fixes until the evidence predicates pass—all under your control.</p>
+            </div>
+
+            <div class="feature-card">
+                <h3>tinyTasks</h3>
+                <p>A built-in, file-authoritative task manager. Agents update <code>tinyTasks.md</code> so progress stays explicit, reviewable, and local to the repo.</p>
+            </div>
+        </div>
+
+        <section class="intro">
+            <h2>The Control Protocol</h2>
+            <p>tinyMem enforces a strict operational sequence that eliminates AI hallucinations and ensures every decision is grounded in codebase reality.</p>
+            <div class="protocol-steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-title">Memory Recall</div>
+                    <div class="step-desc">Agent retrieves relevant project context before any reasoning begins.</div>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-title">Truth Check</div>
+                    <div class="step-desc">Agent acknowledges state and verifies existing facts against evidence.</div>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-title">Task Lock</div>
+                    <div class="step-desc">Multi-step operations are locked to <code>tinyTasks.md</code> for persistent state.</div>
+                </div>
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <div class="step-title">Verified Action</div>
+                    <div class="step-desc">Execution occurs, followed by durable memory writeback of results.</div>
+                </div>
+            </div>
+        </section>
+
+        <div class="features">
+            <div class="feature-card">
+                <h3>MCP Server</h3>
+                <p>Works with MCP-capable clients (including Claude Desktop, Cursor, and VS Code via MCP adapters). tinyMem provides tools like <code>memory_query</code> and <code>memory_ralph</code> through the Model Context Protocol.</p>
+            </div>
+
+            <div class="feature-card">
+                <h3>HTTP Proxy</h3>
+                <p>OpenAI-compatible HTTP proxy for many SDKs. Point your base URL to <code>localhost:8080</code> and tinyMem can inject context into requests when configured.</p>
+            </div>
+
+            <div class="feature-card">
+                <h3>Agent Contracts</h3>
+                <p>Optional directives for common models like Claude, Gemini, and Qwen. Use the provided prompts as a starting point and tailor them to your workflow.</p>
+            </div>
+        </div>
+
+        <section class="repo-section">
+            <h2>Project Repository</h2>
+            <p>Access the complete tinyMem project, including source code, documentation, and contribution guidelines. Join our community of developers building the future of AI agent protocols.</p>
+            <a href="https://github.com/daverage/tinyMem" class="cta-button" target="_blank">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right: 8px;">
+                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+                </svg>
+                Visit GitHub Repository
+            </a>
+        </section>
+
+        <section class="intro">
+            <h2>Advanced Reliability</h2>
+            <p>Built for production-grade AI workflows where "maybe" isn't good enough.</p>
+            <ul style="text-align: left; max-width: 800px; margin: 1.5rem auto; padding-left: 1rem; list-style-type: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+                <li style="background: var(--card-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--glass-border);">
+                    <strong style="color: var(--primary); display: block; margin-bottom: 0.5rem;">Chain-of-Verification (CoVe)</strong>
+                    LLM-based quality filter that reduces hallucinations by verifying memories before they are stored or recalled.
+                </li>
+                <li style="background: var(--card-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--glass-border);">
+                    <strong style="color: var(--primary); display: block; margin-bottom: 0.5rem;">Recall Tiers</strong>
+                    Prioritizes information by importance: Facts & Constraints > Decisions > Claims & Notes.
+                </li>
+                <li style="background: var(--card-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--glass-border);">
+                    <strong style="color: var(--primary); display: block; margin-bottom: 0.5rem;">Evidence Predicates</strong>
+                    Truth validation via <code>file_exists</code>, <code>grep_hit</code>, <code>cmd_exit0</code>, and <code>test_pass</code>.
+                </li>
+                <li style="background: var(--card-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--glass-border);">
+                    <strong style="color: var(--primary); display: block; margin-bottom: 0.5rem;">Token Economics</strong>
+                    Optimized for efficiency, reducing the "Read All Files" waste by providing surgical context snippets.
+                </li>
+            </ul>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 tinyMem Project. All rights reserved.</p>
+            <p>A hard enforcement specification for repository-aware AI agents.</p>
+            <p>Join our <a href="https://github.com/daverage/tinyMem" target="_blank">GitHub community</a> to contribute and stay updated.</p>
+        </div>
+    </footer>
+</body>
+</html>
