@@ -10,11 +10,11 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/a-marczewski/tinymem/internal/analytics"
-	"github.com/a-marczewski/tinymem/internal/app"
-	"github.com/a-marczewski/tinymem/internal/config"
-	"github.com/a-marczewski/tinymem/internal/memory"
-	"github.com/a-marczewski/tinymem/internal/tasks"
+	"github.com/daverage/tinymem/internal/analytics"
+	"github.com/daverage/tinymem/internal/app"
+	"github.com/daverage/tinymem/internal/config"
+	"github.com/daverage/tinymem/internal/memory"
+	"github.com/daverage/tinymem/internal/tasks"
 	"github.com/spf13/cobra"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -202,7 +202,7 @@ func printIntegritySummary(db *sql.DB) {
 	}
 
 	// Count other memory types
-	types := []memory.Type{memory.Claim, memory.Plan, memory.Decision, memory.Constraint, memory.Observation, memory.Note}
+	types := []memory.Type{memory.Claim, memory.Plan, memory.Decision, memory.Constraint, memory.Observation, memory.Note, memory.Task}
 	for _, memType := range types {
 		var count int
 		err := db.QueryRow("SELECT COUNT(*) FROM memories WHERE type = ?;", string(memType)).Scan(&count)

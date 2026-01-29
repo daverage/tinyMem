@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/a-marczewski/tinymem/internal/config"
-	"github.com/a-marczewski/tinymem/internal/evidence"
-	"github.com/a-marczewski/tinymem/internal/llm"
-	"github.com/a-marczewski/tinymem/internal/memory"
+	"github.com/daverage/tinymem/internal/config"
+	"github.com/daverage/tinymem/internal/evidence"
+	"github.com/daverage/tinymem/internal/llm"
+	"github.com/daverage/tinymem/internal/memory"
 	"go.uber.org/zap"
 )
 
@@ -127,7 +127,7 @@ func (e *Engine) execute(ctx context.Context, opt Options, i int) (*IterationSta
 	}
 
 	startTime := time.Now()
-	
+
 	// Prepare the command
 	// Note: We use /bin/sh -c to allow for complex commands/pipes if needed,
 	// but this requires careful safety gating which we do above.
@@ -221,7 +221,7 @@ func (e *Engine) repair(ctx context.Context, opt Options, state *IterationState,
 	sb.WriteString("You are the repair engine for a 'Ralph Wiggum' autonomous loop.\n")
 	sb.WriteString(fmt.Sprintf("Your task is: %s\n\n", opt.Task))
 	sb.WriteString(fmt.Sprintf("The command '%s' failed with exit code %d.\n", opt.Command, state.ExitCode))
-	
+
 	if state.Stdout != "" {
 		sb.WriteString("STDOUT:\n---\n" + state.Stdout + "\n---\n")
 	}
@@ -293,7 +293,7 @@ func (e *Engine) applyChanges(content string, safety SafetyOptions) error {
 
 		// Safety check for forbidden paths
 		absPath := filepath.Join(e.cfg.ProjectRoot, relPath)
-		
+
 		for _, forbidden := range safety.ForbidPaths {
 			if strings.Contains(relPath, forbidden) || strings.Contains(absPath, forbidden) {
 				return fmt.Errorf("safety violation: attempt to modify forbidden path '%s'", relPath)

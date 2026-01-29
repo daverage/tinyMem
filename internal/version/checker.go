@@ -21,7 +21,7 @@ func CheckForUpdates() (string, error) {
 		Timeout: 5 * time.Second,
 	}
 
-	req, err := http.NewRequest("GET", "https://api.github.com/repos/a-marczewski/tinymem/releases/latest", nil)
+	req, err := http.NewRequest("GET", "https://api.github.com/repos/daverage/tinymem/releases/latest", nil)
 	if err != nil {
 		return "", err
 	}

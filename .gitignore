@@ -13,3 +13,4 @@
 .claude/
 tasks.md
 Makefile
+.aider*

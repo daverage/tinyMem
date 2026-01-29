@@ -28,6 +28,7 @@ type Config struct {
 	ProxyPort                     int
 	LLMBaseURL                    string
 	LLMAPIKey                     string
+	LLMModel                      string
 	EmbeddingBaseURL              string
 	EmbeddingModel                string
 	SemanticEnabled               bool
@@ -84,6 +85,7 @@ type fileConfig struct {
 	LLM struct {
 		BaseURL string `toml:"base_url"`
 		APIKey  string `toml:"api_key"`
+		Model   string `toml:"model"`
 	} `toml:"llm"`
 	Embedding struct {
 		BaseURL string `toml:"base_url"`
@@ -197,6 +199,9 @@ func LoadConfig() (*Config, error) {
 		if parsed.LLM.APIKey != "" {
 			cfg.LLMAPIKey = parsed.LLM.APIKey
 		}
+		if parsed.LLM.Model != "" {
+			cfg.LLMModel = parsed.LLM.Model
+		}
 		if parsed.Embedding.BaseURL != "" {
 			cfg.EmbeddingBaseURL = parsed.Embedding.BaseURL
 			embeddingBaseURLSet = true
@@ -242,6 +247,9 @@ func LoadConfig() (*Config, error) {
 	}
 	if apiKey := os.Getenv("TINYMEM_LLM_API_KEY"); apiKey != "" {
 		cfg.LLMAPIKey = apiKey
+	}
+	if llmModel := os.Getenv("TINYMEM_LLM_MODEL"); llmModel != "" {
+		cfg.LLMModel = llmModel
 	}
 	if embedBaseURL := os.Getenv("TINYMEM_EMBEDDING_BASE_URL"); embedBaseURL != "" {
 		cfg.EmbeddingBaseURL = embedBaseURL

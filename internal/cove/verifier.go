@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/a-marczewski/tinymem/internal/config"
-	"github.com/a-marczewski/tinymem/internal/llm"
+	"github.com/daverage/tinymem/internal/config"
+	"github.com/daverage/tinymem/internal/llm"
 )
 
 // LLMClient is an interface for LLM clients (for testing)
@@ -99,8 +99,11 @@ func (v *Verifier) callLLMForVerification(ctx context.Context, candidates []Cand
 	// Determine model to use
 	model := v.config.CoVeModel
 	if model == "" {
-		// Use a default lightweight model if available, or fall back to default
-		model = "gpt-3.5-turbo" // This can be overridden via config
+		model = v.config.LLMModel
+	}
+	if model == "" {
+		// Final fallback for cloud/generic environments
+		model = "gpt-3.5-turbo"
 	}
 
 	req := llm.ChatCompletionRequest{
@@ -263,6 +266,9 @@ func (v *Verifier) callLLMForRecallFilter(ctx context.Context, memories []Recall
 
 	// Determine model to use
 	model := v.config.CoVeModel
+	if model == "" {
+		model = v.config.LLMModel
+	}
 	if model == "" {
 		model = "gpt-3.5-turbo"
 	}

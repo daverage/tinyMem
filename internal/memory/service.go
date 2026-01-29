@@ -3,7 +3,7 @@ package memory
 import (
 	"database/sql"
 	"fmt"
-	"github.com/a-marczewski/tinymem/internal/storage"
+	"github.com/daverage/tinymem/internal/storage"
 	"strings"
 	"time"
 )

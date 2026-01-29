@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/a-marczewski/tinymem/internal/memory"
+	"github.com/daverage/tinymem/internal/memory"
 )
 
 // TaskAnalytics provides methods for analyzing task performance metrics
@@ -61,9 +61,9 @@ func (ta *TaskAnalytics) GetTaskMetrics(projectID string) (*TaskMetrics, error) 
 
 	// Get completed task count
 	err = ta.DB.QueryRow(`
-		SELECT COUNT(*) 
-		FROM memories 
-		WHERE project_id = ? AND type = ? AND detail LIKE '%Completed: true%';`, 
+		SELECT COUNT(*)
+		FROM memories
+		WHERE project_id = ? AND type = ? AND detail LIKE '%Completed: true%';`,
 		projectID, memory.Task).Scan(&metrics.CompletedTasks)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get completed task count: %w", err)
@@ -106,7 +106,7 @@ func (ta *TaskAnalytics) calculateAverageTimeToComplete(projectID string) (float
 	// This is a simplified calculation assuming we can determine completion time
 	// from the updated_at timestamp. A more sophisticated implementation would
 	// track when tasks were created vs when they were marked complete.
-	
+
 	rows, err := ta.DB.Query(`
 		SELECT created_at, updated_at
 		FROM memories
@@ -120,42 +120,42 @@ func (ta *TaskAnalytics) calculateAverageTimeToComplete(projectID string) (float
 
 	var totalDuration float64
 	var count int
-	
+
 	for rows.Next() {
 		var createdAt, updatedAt string
 		err := rows.Scan(&createdAt, &updatedAt)
 		if err != nil {
 			continue
 		}
-		
+
 		// Parse timestamps
 		createdTime, err := parseTimestamp(createdAt)
 		if err != nil {
 			continue
 		}
-		
+
 		updatedTime, err := parseTimestamp(updatedAt)
 		if err != nil {
 			continue
 		}
-		
+
 		// Calculate duration in hours
 		duration := updatedTime.Sub(createdTime).Hours()
 		totalDuration += duration
 		count++
 	}
-	
+
 	if count == 0 {
 		return 0, nil
 	}
-	
+
 	return totalDuration / float64(count), nil
 }
 
 // getTasksBySection gets task metrics grouped by section
 func (ta *TaskAnalytics) getTasksBySection(projectID string) (map[string]SectionMetrics, error) {
 	rows, err := ta.DB.Query(`
-		SELECT 
+		SELECT
 			COALESCE(source, 'Unknown Section') as section,
 			COUNT(*) as total,
 			SUM(CASE WHEN detail LIKE '%Completed: true%' THEN 1 ELSE 0 END) as completed
@@ -169,28 +169,28 @@ func (ta *TaskAnalytics) getTasksBySection(projectID string) (map[string]Section
 	defer rows.Close()
 
 	sectionMetrics := make(map[string]SectionMetrics)
-	
+
 	for rows.Next() {
 		var section string
 		var total, completed int
-		
+
 		err := rows.Scan(&section, &total, &completed)
 		if err != nil {
 			continue
 		}
-		
+
 		rate := 0.0
 		if total > 0 {
 			rate = float64(completed) / float64(total) * 100
 		}
-		
+
 		sectionMetrics[section] = SectionMetrics{
 			Total:     total,
 			Completed: completed,
 			Rate:      rate,
 		}
 	}
-	
+
 	return sectionMetrics, nil
 }
 
@@ -198,7 +198,7 @@ func (ta *TaskAnalytics) getTasksBySection(projectID string) (map[string]Section
 func (ta *TaskAnalytics) getCompletionTrend(projectID string) ([]CompletionTrendPoint, error) {
 	// Get daily completion counts for the last 30 days
 	rows, err := ta.DB.Query(`
-		SELECT 
+		SELECT
 			date(updated_at) as day,
 			SUM(CASE WHEN detail LIKE '%Completed: true%' THEN 1 ELSE 0 END) as completed,
 			COUNT(*) as total
@@ -214,21 +214,21 @@ func (ta *TaskAnalytics) getCompletionTrend(projectID string) ([]CompletionTrend
 	defer rows.Close()
 
 	var trend []CompletionTrendPoint
-	
+
 	for rows.Next() {
 		var date string
 		var completed, total int
-		
+
 		err := rows.Scan(&date, &completed, &total)
 		if err != nil {
 			continue
 		}
-		
+
 		percentage := 0.0
 		if total > 0 {
 			percentage = float64(completed) / float64(total) * 100
 		}
-		
+
 		trend = append(trend, CompletionTrendPoint{
 			Date:       date,
 			Completed:  completed,
@@ -236,7 +236,7 @@ func (ta *TaskAnalytics) getCompletionTrend(projectID string) ([]CompletionTrend
 			Percentage: percentage,
 		})
 	}
-	
+
 	return trend, nil
 }
 
@@ -250,53 +250,53 @@ func parseTimestamp(timestamp string) (time.Time, error) {
 		"2006-01-02 15:04:05",
 		time.RFC3339,
 	}
-	
+
 	for _, format := range formats {
 		if t, err := time.Parse(format, timestamp); err == nil {
 			return t, nil
 		}
 	}
-	
+
 	return time.Time{}, fmt.Errorf("unable to parse timestamp: %s", timestamp)
 }
 
 // GetTaskSummary provides a high-level summary of task status
 func (ta *TaskAnalytics) GetTaskSummary(projectID string) (map[string]interface{}, error) {
 	var total, completed, incomplete int
-	
+
 	err := ta.DB.QueryRow(`
-		SELECT 
+		SELECT
 			COUNT(*) as total,
 			SUM(CASE WHEN detail LIKE '%Completed: true%' THEN 1 ELSE 0 END) as completed,
 			SUM(CASE WHEN detail LIKE '%Completed: false%' OR detail NOT LIKE '%Completed%' THEN 1 ELSE 0 END) as incomplete
 		FROM memories
 		WHERE project_id = ? AND type = ?
 	`, projectID, memory.Task).Scan(&total, &completed, &incomplete)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get task summary: %w", err)
 	}
-	
+
 	// If the above query doesn't work properly, use individual queries
 	if total == 0 {
 		err = ta.DB.QueryRow("SELECT COUNT(*) FROM memories WHERE project_id = ? AND type = ?", projectID, memory.Task).Scan(&total)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get total task count: %w", err)
 		}
-		
+
 		err = ta.DB.QueryRow("SELECT COUNT(*) FROM memories WHERE project_id = ? AND type = ? AND detail LIKE '%Completed: true%'", projectID, memory.Task).Scan(&completed)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get completed task count: %w", err)
 		}
-		
+
 		incomplete = total - completed
 	}
-	
+
 	overallRate := 0.0
 	if total > 0 {
 		overallRate = float64(completed) / float64(total) * 100
 	}
-	
+
 	summary := map[string]interface{}{
 		"total_tasks":       total,
 		"completed_tasks":   completed,
@@ -304,7 +304,7 @@ func (ta *TaskAnalytics) GetTaskSummary(projectID string) (map[string]interface{
 		"overall_rate":      overallRate,
 		"project_id":        projectID,
 	}
-	
+
 	return summary, nil
 }
 

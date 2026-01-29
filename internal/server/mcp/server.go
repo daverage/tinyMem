@@ -9,16 +9,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/a-marczewski/tinymem/internal/app" // Add app import
-	"github.com/a-marczewski/tinymem/internal/config"
-	"github.com/a-marczewski/tinymem/internal/doctor" // Add doctor import
-	"github.com/a-marczewski/tinymem/internal/evidence"
-	"github.com/a-marczewski/tinymem/internal/extract"
-	"github.com/a-marczewski/tinymem/internal/memory"
-	"github.com/a-marczewski/tinymem/internal/ralph"
-	"github.com/a-marczewski/tinymem/internal/recall"
-	"github.com/a-marczewski/tinymem/internal/semantic"
-	"github.com/a-marczewski/tinymem/internal/storage"
+	"github.com/daverage/tinymem/internal/app" // Add app import
+	"github.com/daverage/tinymem/internal/config"
+	"github.com/daverage/tinymem/internal/doctor" // Add doctor import
+	"github.com/daverage/tinymem/internal/evidence"
+	"github.com/daverage/tinymem/internal/extract"
+	"github.com/daverage/tinymem/internal/memory"
+	"github.com/daverage/tinymem/internal/ralph"
+	"github.com/daverage/tinymem/internal/recall"
+	"github.com/daverage/tinymem/internal/semantic"
+	"github.com/daverage/tinymem/internal/storage"
 	"go.uber.org/zap" // Add zap import
 )
 
@@ -69,6 +69,13 @@ func NewServer(a *app.App) *Server {
 		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Config, a.Logger, a.DB.GetConnection())
 	}
 	extractor := extract.NewExtractor(evidenceService)
+
+	// Initialize CoVe (Chain-of-Verification) for memory extraction filtering
+	if a.Config.CoVeEnabled {
+		llmClient := llm.NewClient(a.Config)
+		coveVerifier := cove.NewVerifier(a.Config, llmClient)
+		extractor.SetCoVeVerifier(coveVerifier)
+	}
 
 	return &Server{
 		app:             a, // Store the app instance
@@ -142,7 +149,9 @@ func (s *Server) handleInitialize(req *MCPRequest) {
 				"version": "0.1.0",
 			},
 			"capabilities": map[string]interface{}{
-				"tools": map[string]bool{},
+				"tools": map[string]interface{}{
+					"listChanged": false,
+				},
 			},
 		},
 		"id": req.ID,

@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/a-marczewski/tinymem/internal/config"
-	"github.com/a-marczewski/tinymem/internal/memory"
-	"github.com/a-marczewski/tinymem/internal/storage"
+	"github.com/daverage/tinymem/internal/config"
+	"github.com/daverage/tinymem/internal/memory"
+	"github.com/daverage/tinymem/internal/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -5,12 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/a-marczewski/tinymem/internal/config"
-	"github.com/a-marczewski/tinymem/internal/cove"
-	"github.com/a-marczewski/tinymem/internal/evidence"
-	"github.com/a-marczewski/tinymem/internal/llm"
-	"github.com/a-marczewski/tinymem/internal/memory"
-	"github.com/a-marczewski/tinymem/internal/storage"
+	"github.com/daverage/tinymem/internal/config"
+	"github.com/daverage/tinymem/internal/cove"
+	"github.com/daverage/tinymem/internal/evidence"
+	"github.com/daverage/tinymem/internal/llm"
+	"github.com/daverage/tinymem/internal/memory"
+	"github.com/daverage/tinymem/internal/storage"
 )
 
 // mockLLMClient for integration testing

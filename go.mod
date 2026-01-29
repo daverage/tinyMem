@@ -1,4 +1,4 @@
-module github.com/a-marczewski/tinymem
+module github.com/daverage/tinymem
 
 go 1.25.6
 

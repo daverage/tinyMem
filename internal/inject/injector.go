@@ -3,9 +3,9 @@ package inject
 import (
 	"context"
 	"fmt"
-	"github.com/a-marczewski/tinymem/internal/cove"
-	"github.com/a-marczewski/tinymem/internal/memory"
-	"github.com/a-marczewski/tinymem/internal/recall"
+	"github.com/daverage/tinymem/internal/cove"
+	"github.com/daverage/tinymem/internal/memory"
+	"github.com/daverage/tinymem/internal/recall"
 	"strconv"
 	"strings"
 )

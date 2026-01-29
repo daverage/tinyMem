@@ -18,5 +18,8 @@ port = 8080
 # This is the default API endpoint for Ollama.
 base_url = "http://localhost:11434/v1"
 
+[llm]
+model = "qwen"
+
 # All other tinyMem settings can also be configured in this file.
 # For a full list of options, see the main README.md file.

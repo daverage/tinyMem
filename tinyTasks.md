@@ -42,3 +42,16 @@
 - [x] Review current README.md content
 - [x] Update README.md to explain what each tool is, why it exists, and how to use it
 - [x] Ensure non-technical explanations are included
+
+# Tasks - Investigation
+
+- [x] Investigate why `memory_stats` is not exposed in MCP server
+- [x] Investigate why COVE stats never show
+
+# Tasks - LM Studio & Qwen Configuration
+
+- [x] Verify LM Studio proxy compatibility with `qwen2.5-coder-7b-instruct`
+- [x] Create/Update example configuration for Qwen on LM Studio
+- [x] Create Aider integration guide for tinyMem + LM Studio
+- [x] Document specific requirements for Qwen (chat templates)
+- [x] Add `llm.model` support to config for better local LLM compatibility

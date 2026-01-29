@@ -2,9 +2,9 @@ package extract
 
 import (
 	"fmt"
-	"github.com/a-marczewski/tinymem/internal/cove"
-	"github.com/a-marczewski/tinymem/internal/evidence"
-	"github.com/a-marczewski/tinymem/internal/memory"
+	"github.com/daverage/tinymem/internal/cove"
+	"github.com/daverage/tinymem/internal/evidence"
+	"github.com/daverage/tinymem/internal/memory"
 	"regexp"
 	"strconv"
 	"strings"

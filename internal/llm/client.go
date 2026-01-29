@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/a-marczewski/tinymem/internal/config"
+	"github.com/daverage/tinymem/internal/config"
 	"io"
 	"net/http"
 	"strings"

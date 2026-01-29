@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/a-marczewski/tinymem/internal/config"
-	"github.com/a-marczewski/tinymem/internal/doctor"
-	"github.com/a-marczewski/tinymem/internal/logging"
-	"github.com/a-marczewski/tinymem/internal/memory"
-	"github.com/a-marczewski/tinymem/internal/storage"
+	"github.com/daverage/tinymem/internal/config"
+	"github.com/daverage/tinymem/internal/doctor"
+	"github.com/daverage/tinymem/internal/logging"
+	"github.com/daverage/tinymem/internal/memory"
+	"github.com/daverage/tinymem/internal/storage"
 	"go.uber.org/zap"
 )
 

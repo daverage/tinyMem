@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/a-marczewski/tinymem/internal/config"
-	"github.com/a-marczewski/tinymem/internal/llm"
+	"github.com/daverage/tinymem/internal/config"
+	"github.com/daverage/tinymem/internal/llm"
 )
 
 // mockLLMClient is a mock LLM client for testing

@@ -8,9 +8,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/a-marczewski/tinymem/internal/config"
-	"github.com/a-marczewski/tinymem/internal/evidence"
-	"github.com/a-marczewski/tinymem/internal/memory"
+	"github.com/daverage/tinymem/internal/config"
+	"github.com/daverage/tinymem/internal/evidence"
+	"github.com/daverage/tinymem/internal/memory"
 	"go.uber.org/zap"
 )
 

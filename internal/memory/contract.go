@@ -75,7 +75,7 @@ func getContractContent() (string, error) {
 	}
 
 	// 2. Fall back to GitHub
-	url := "https://raw.githubusercontent.com/a-marczewski/tinyMem/refs/heads/main/docs/agents/AGENT_CONTRACT.md"
+	url := "https://raw.githubusercontent.com/daverage/tinyMem/refs/heads/main/docs/agents/AGENT_CONTRACT.md"
 	fmt.Printf("Local contract not found, fetching from %s...\n", url)
 
 	resp, err := http.Get(url)

@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/a-marczewski/tinymem/internal/config"
+	"github.com/daverage/tinymem/internal/config"
 
 	_ "github.com/mattn/go-sqlite3"
 )

@@ -10,21 +10,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/a-marczewski/tinymem/internal/analytics"
-	"github.com/a-marczewski/tinymem/internal/app"
+	"github.com/daverage/tinymem/internal/analytics"
+	"github.com/daverage/tinymem/internal/app"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	"github.com/a-marczewski/tinymem/internal/doctor"
-	"github.com/a-marczewski/tinymem/internal/evidence"
-	"github.com/a-marczewski/tinymem/internal/inject"
-	"github.com/a-marczewski/tinymem/internal/logging"
-	"github.com/a-marczewski/tinymem/internal/memory"
-	"github.com/a-marczewski/tinymem/internal/recall"
-	"github.com/a-marczewski/tinymem/internal/semantic"
-	"github.com/a-marczewski/tinymem/internal/server/mcp"
-	"github.com/a-marczewski/tinymem/internal/server/proxy"
-	"github.com/a-marczewski/tinymem/internal/version"
+	"github.com/daverage/tinymem/internal/doctor"
+	"github.com/daverage/tinymem/internal/evidence"
+	"github.com/daverage/tinymem/internal/inject"
+	"github.com/daverage/tinymem/internal/logging"
+	"github.com/daverage/tinymem/internal/memory"
+	"github.com/daverage/tinymem/internal/recall"
+	"github.com/daverage/tinymem/internal/semantic"
+	"github.com/daverage/tinymem/internal/server/mcp"
+	"github.com/daverage/tinymem/internal/server/proxy"
+	"github.com/daverage/tinymem/internal/version"
 )
 
 var rootCmd = &cobra.Command{
@@ -549,7 +549,7 @@ func checkUpdate(a *app.App) {
 	}
 
 	if newVersion != "" {
-		msg := fmt.Sprintf("A new version of tinyMem is available: v%s (current: v%s). Download it from: https://github.com/a-marczewski/tinymem/releases", newVersion, version.Version)
+		msg := fmt.Sprintf("A new version of tinyMem is available: v%s (current: v%s). Download it from: https://github.com/daverage/tinymem/releases", newVersion, version.Version)
 		a.Logger.Info(msg)
 		// Also print to stderr to ensure user sees it in CLI
 		fmt.Fprintf(os.Stderr, "\n🔔 %s\n\n", msg)

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/a-marczewski/tinymem/internal/config"
+	"github.com/daverage/tinymem/internal/config"
 )
 
 // Verifier defines the interface for evidence verification

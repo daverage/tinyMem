@@ -70,18 +70,27 @@ Edit your config file (usually `~/Library/Application Support/Claude/claude_desk
 *Restart Claude Desktop. The 🔌 icon should appear, indicating tinyMem is connected.*
 
 ### Option B: Proxy Mode (Scripts & API Clients)
-*Best for: Running Python scripts, generic OpenAI clients, or terminal tools.*
+*Best for: Running Python scripts, Aider, generic OpenAI clients, or terminal tools.*
 
-1.  Start the proxy in a separate terminal window:
+1.  **Configure for Local LLMs (Optional):**
+    If you use LM Studio or Ollama, create a file at `.tinyMem/config.toml`:
+    ```toml
+    [proxy]
+    base_url = "http://localhost:1234/v1" # Point to LM Studio
+    ```
+
+2.  Start the proxy in a separate terminal window:
     ```bash
     cd /path/to/my-cool-app
     tinymem proxy
     ```
-2.  In your main terminal, set the environment variable to route requests through tinyMem:
+3.  In your main terminal, set the environment variable to route requests through tinyMem:
     ```bash
     export OPENAI_API_BASE_URL=http://localhost:8080/v1
     ```
-3.  Run your script as usual. tinyMem will transparently intercept and inject memory.
+    *For Aider: `aider --openai-api-base http://localhost:8080/v1 --model openai/qwen2.5-coder-7b-instruct`*
+
+4.  Run your tool or script as usual. tinyMem will transparently intercept and inject memory.
 
 ---
 
