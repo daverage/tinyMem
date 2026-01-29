@@ -119,23 +119,36 @@ if "%IS_RELEASE%"=="true" (
 
     echo 💾 Committing changes...
     git add .
-    git commit -m "!COMMIT_MSG! (Release !VERSION!)"
+    git commit -m "!COMMIT_MSG! (Release !VERSION!)" || echo No changes to commit.
+
+    REM Check if tag exists
+    git rev-parse !VERSION! >nul 2>nul
+    if not errorlevel 1 (
+        echo ⚠️  Tag !VERSION! already exists locally. Updating...
+        git tag -d !VERSION!
+    )
 
     echo 🏷️  Tagging !VERSION!...
     git tag -a "!VERSION!" -m "!COMMIT_MSG!"
 
     echo ⬆️  Pushing to origin...
     git push origin main
-    git push origin "!VERSION!"
+    git push origin "!VERSION!" --force
 
     echo 📦 Creating GitHub Release...
-    gh release create "!VERSION!" ^
-      --title "tinyMem !VERSION!"
-      --notes "!COMMIT_MSG!"
-      "%OUT_DIR%\*"
+    gh release view "!VERSION!" >nul 2>nul
+    if not errorlevel 1 (
+        echo ⚠️  Release !VERSION! already exists. Uploading assets...
+        gh release upload "!VERSION!" "%OUT_DIR%\*" --clobber
+    ) else (
+        gh release create "!VERSION!" ^
+          --title "tinyMem !VERSION!" ^
+          --notes "!COMMIT_MSG!" ^
+          "%OUT_DIR%\*"
+    )
 
     echo.
-    echo ✅ Release !VERSION! published successfully!
+    echo ✅ Release !VERSION! processed successfully!
 ) else (
     echo.
     echo Build complete. Artifacts in %OUT_DIR%

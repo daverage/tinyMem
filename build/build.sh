@@ -113,28 +113,39 @@ if [ "$IS_RELEASE" = true ]; then
 
   # Update version.go
   echo "📝 Updating internal/version/version.go..."
-  sed -i.bak "s/var Version = ".*"/var Version = \"$VERSION\"/" \
+  sed -i.bak "s/var Version = \".*\"/var Version = \"$VERSION\"/" \
     internal/version/version.go
   rm internal/version/version.go.bak
 
   echo "💾 Committing changes..."
   git add .
-  git commit -m "$COMMIT_MSG (Release $VERSION)"
+  git commit -m "$COMMIT_MSG (Release $VERSION)" || echo "No code changes to commit."
+
+  # Check if tag exists
+  if git rev-parse "$VERSION" >/dev/null 2>&1; then
+    echo "⚠️  Tag $VERSION already exists locally. Updating..."
+    git tag -d "$VERSION"
+  fi
 
   echo "🏷️  Tagging $VERSION..."
   git tag -a "$VERSION" -m "$COMMIT_MSG"
 
   echo "⬆️  Pushing to origin..."
   git push origin main
-  git push origin "$VERSION"
+  git push origin "$VERSION" --force
 
   echo "📦 Creating GitHub Release..."
-  gh release create "$VERSION" \
-    --title "tinyMem $VERSION" \
-    --notes "$COMMIT_MSG" \
-    "$OUT_DIR"/*
+  if gh release view "$VERSION" >/dev/null 2>&1; then
+    echo "⚠️  Release $VERSION already exists. Uploading assets..."
+    gh release upload "$VERSION" "$OUT_DIR"/* --clobber
+  else
+    gh release create "$VERSION" \
+      --title "tinyMem $VERSION" \
+      --notes "$COMMIT_MSG" \
+      "$OUT_DIR"/*
+  fi
 
-  echo "✅ Release $VERSION published successfully!"
+  echo "✅ Release $VERSION processed successfully!"
 else
   echo
   echo "Build complete. Artifacts in $OUT_DIR"
