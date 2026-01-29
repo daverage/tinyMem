@@ -205,6 +205,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 			s.app.Core.Logger.Warn("Failed to recall memories for prompt injection", zap.Error(err), zap.String("user_message", userMessage))
 			notification.RecallStatus = recallStatusFailed
 		} else {
+			recallResults = s.injector.FilterRecallResults(r.Context(), recallResults, userMessage)
 			notifyCount := len(recallResults)
 			notification.RecallCount = notifyCount
 			if notifyCount > 0 {

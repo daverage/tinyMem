@@ -29,6 +29,20 @@ func (mi *MemoryInjector) SetCoVeVerifier(verifier *cove.Verifier) {
 	mi.coveVerifier = verifier
 }
 
+// FilterRecallResults applies optional CoVe recall filtering (fail-safe).
+func (mi *MemoryInjector) FilterRecallResults(ctx context.Context, results []recall.RecallResult, query string) []recall.RecallResult {
+	if mi.coveVerifier == nil || len(results) == 0 {
+		return results
+	}
+
+	recallMemories := recallResultsToCoVeMemories(results)
+	filteredMemories, err := mi.coveVerifier.FilterRecall(ctx, recallMemories, query)
+	if err != nil {
+		return results
+	}
+	return filterRecallResultsByCoVe(results, filteredMemories)
+}
+
 // InjectMemoriesIntoPrompt injects relevant memories into a prompt
 func (mi *MemoryInjector) InjectMemoriesIntoPrompt(prompt string, projectID string, maxItems int, maxTokens int) (string, error) {
 	// Perform recall to find relevant memories
@@ -48,22 +62,8 @@ func (mi *MemoryInjector) InjectMemoriesIntoPrompt(prompt string, projectID stri
 	}
 
 	// COVE INTEGRATION POINT 2: Optional recall filtering (advisory only)
-	// This can only remove memories, never add new ones
-	// IMPORTANT: This is bounded (already limited by recall), fail-safe, and optional
-	if mi.coveVerifier != nil {
-		// Convert recall results to CoVe format
-		recallMemories := recallResultsToCoVeMemories(results)
-
-		// Apply CoVe recall filtering (bounded, fail-safe)
-		ctx := context.Background()
-		filteredMemories, err := mi.coveVerifier.FilterRecall(ctx, recallMemories, prompt)
-		if err != nil {
-			// CoVe errors are non-fatal - continue with unfiltered
-		} else {
-			// Filter results based on CoVe decisions
-			results = filterRecallResultsByCoVe(results, filteredMemories)
-		}
-	}
+	// This can only remove memories, never add new ones.
+	results = mi.FilterRecallResults(context.Background(), results, prompt)
 
 	if len(results) == 0 {
 		// All memories filtered out, return original prompt

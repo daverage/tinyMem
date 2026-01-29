@@ -32,6 +32,16 @@ if [ "$IS_RELEASE" = true ]; then
     echo "❌ GitHub CLI (gh) not installed. Required for releases."
     exit 1
   }
+
+  command -v docker >/dev/null || {
+    echo "❌ Docker CLI not installed. Required for container publishing."
+    exit 1
+  }
+
+  docker info >/dev/null 2>&1 || {
+    echo "❌ Docker daemon not available. Start Docker and try again."
+    exit 1
+  }
 fi
 
 # ------------------------------------------------------------
@@ -81,6 +91,38 @@ build_target() {
   CC="${CC:-gcc}" CGO_ENABLED=1 GOOS="$goos" GOARCH="$goarch" \
     go build "${TAGS_FLAG[@]}" -ldflags "$LDFLAGS" \
     -o "$out" ./cmd/tinymem
+}
+
+# ------------------------------------------------------------
+# Container publish (release mode)
+# ------------------------------------------------------------
+resolve_image_name() {
+  local remote owner repo
+  remote="$(git config --get remote.origin.url || true)"
+  if [[ "$remote" =~ github\.com[:/]+([^/]+)/([^/.]+)(\.git)?$ ]]; then
+    owner="${BASH_REMATCH[1]}"
+    repo="${BASH_REMATCH[2]}"
+  else
+    owner="daverage"
+    repo="tinymem"
+  fi
+
+  if [[ -n "${TINYMEM_IMAGE:-}" ]]; then
+    echo "$TINYMEM_IMAGE"
+  else
+    echo "ghcr.io/${owner}/${repo}"
+  fi
+}
+
+publish_container() {
+  local image
+  image="$(resolve_image_name)"
+  echo "🐳 Building container: ${image}"
+  docker build -t "${image}:${VERSION}" -t "${image}:latest" .
+
+  echo "⬆️  Pushing container to GHCR..."
+  docker push "${image}:${VERSION}"
+  docker push "${image}:latest"
 }
 
 # Clear previous releases
@@ -155,6 +197,8 @@ if [ "$IS_RELEASE" = true ]; then
   echo "⬆️  Pushing to origin..."
   git push origin main
   git push origin "$VERSION" --force
+
+  publish_container
 
   echo "📦 Creating GitHub Release..."
   if gh release view "$VERSION" >/dev/null 2>&1; then

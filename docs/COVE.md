@@ -271,6 +271,10 @@ go test ./internal/extract -run CoVe -v
 
 ## Troubleshooting
 
+### Verify CoVe in Proxy and MCP Modes
+- **Proxy mode**: send a chat completion through the proxy, then check `tinymem dashboard` for CoVe stats and logs for “CoVe enabled (extraction + recall filtering)”.
+- **MCP mode**: call `memory_write` (non-fact) and `memory_query`, then run `memory_stats` to confirm candidates evaluated and recall filtering activity.
+
 ### CoVe Not Filtering Anything
 - Check `TINYMEM_COVE_ENABLED=true`
 - Check `confidence_threshold` (may be too low)

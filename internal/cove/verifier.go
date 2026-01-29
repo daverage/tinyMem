@@ -227,6 +227,10 @@ func (v *Verifier) FilterRecall(ctx context.Context, memories []RecallMemory, qu
 	if !v.config.CoVeEnabled {
 		return memories, nil
 	}
+	// Respect explicit recall filtering toggle
+	if !v.config.CoVeRecallFilterEnabled {
+		return memories, nil
+	}
 
 	// Safety check: if no memories, return empty
 	if len(memories) == 0 {
