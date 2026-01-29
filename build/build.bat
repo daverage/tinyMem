@@ -30,15 +30,6 @@ REM ------------------------------------------------
 REM Safety checks for Release Mode
 REM ------------------------------------------------
 if "%IS_RELEASE%"=="true" (
-    git status -s > temp_status.txt
-    set /p STATUS=<temp_status.txt
-    del temp_status.txt
-    if not "!STATUS!"=="" (
-        echo ❌ Error: Working directory is not clean. Commit or stash changes before releasing.
-        git status -s
-        exit /b 1
-    )
-    
     where gh >nul 2>nul
     if errorlevel 1 (
         echo ❌ Error: GitHub CLI (gh) not installed. Required for releases.
@@ -75,23 +66,7 @@ if "%IS_RELEASE%"=="true" (
     )
 
     set VERSION=v!MAJOR!.!MINOR!.!PATCH!
-    
-    echo.
     echo 🚀 Preparing Release: !VERSION! (Current: %LATEST_TAG%)
-    set /p CONTINUE=Continue? (y/N): 
-    if /i not "!CONTINUE!"=="y" (
-        echo Aborted.
-        exit /b 1
-    )
-
-    echo 📝 Updating internal/version/version.go...
-    powershell -Command ^
-      "(Get-Content internal/version/version.go) ^
-       -replace 'var Version = ".*"', 'var Version = "!VERSION!"' ^
-       | Set-Content internal/version/version.go"
-
-    git add internal/version/version.go
-    git commit -m "Bump version to !VERSION!"
 ) else (
     REM Read current version from code
     for /f "tokens=3 delims= " %%v in ('findstr /R "var Version = " internal\version\version.go') do (
@@ -129,8 +104,25 @@ REM ------------------------------------------------
 REM Finalize Release
 REM ------------------------------------------------
 if "%IS_RELEASE%"=="true" (
+    echo.
+    set /p COMMIT_MSG=Build successful. Commit message for !VERSION!: 
+    if "!COMMIT_MSG!"=="" (
+        echo ❌ Error: Commit message required.
+        exit /b 1
+    )
+
+    echo 📝 Updating internal/version/version.go...
+    powershell -Command ^
+      "(Get-Content internal/version/version.go) ^
+       -replace 'var Version = ".*"', 'var Version = "!VERSION!"' ^
+       | Set-Content internal/version/version.go"
+
+    echo 💾 Committing changes...
+    git add .
+    git commit -m "!COMMIT_MSG! (Release !VERSION!)"
+
     echo 🏷️  Tagging !VERSION!...
-    git tag -a "!VERSION!" -m "Release !VERSION!"
+    git tag -a "!VERSION!" -m "!COMMIT_MSG!"
 
     echo ⬆️  Pushing to origin...
     git push origin main
@@ -138,16 +130,15 @@ if "%IS_RELEASE%"=="true" (
 
     echo 📦 Creating GitHub Release...
     gh release create "!VERSION!" ^
-      --title "tinyMem !VERSION!" ^
-      --notes "Release !VERSION!"
+      --title "tinyMem !VERSION!"
+      --notes "!COMMIT_MSG!"
       "%OUT_DIR%\*"
 
     echo.
     echo ✅ Release !VERSION! published successfully!
 ) else (
     echo.
-    echo Build complete. Artifacts:
-    dir "%OUT_DIR%"
+    echo Build complete. Artifacts in %OUT_DIR%
 )
 
 exit /b 0
