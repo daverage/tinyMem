@@ -1,8 +1,8 @@
 # Compiled binaries
 /tinymem
 
-# Ensure built releases are NOT ignored for release commits
-!build/releases/
+# Ignore local release artifacts
+build/releases/
 
 # OS-specific files
 .DS_Store
