@@ -362,13 +362,11 @@ func (e *Engine) applyChanges(content string, safety SafetyOptions) error {
 		newContent := match[2]
 
 		// Safety check for forbidden paths
-		absPath := filepath.Join(e.cfg.ProjectRoot, relPath)
-
-		for _, forbidden := range safety.ForbidPaths {
-			if strings.Contains(relPath, forbidden) || strings.Contains(absPath, forbidden) {
-				return fmt.Errorf("safety violation: attempt to modify forbidden path '%s'", relPath)
-			}
+		if e.isPathForbidden(relPath, safety) {
+			return fmt.Errorf("safety violation: attempt to modify forbidden or ignored path '%s'", relPath)
 		}
+
+		absPath := filepath.Join(e.cfg.ProjectRoot, relPath)
 
 		// Ensure directory exists
 		err := os.MkdirAll(filepath.Dir(absPath), 0755)
@@ -385,4 +383,37 @@ func (e *Engine) applyChanges(content string, safety SafetyOptions) error {
 	}
 
 	return nil
+}
+
+func (e *Engine) isPathForbidden(relPath string, safety SafetyOptions) bool {
+	// 1. Check explicit forbidden paths from options
+	absPath := filepath.Join(e.cfg.ProjectRoot, relPath)
+	for _, forbidden := range safety.ForbidPaths {
+		if forbidden == "" {
+			continue
+		}
+		if strings.Contains(relPath, forbidden) || strings.Contains(absPath, forbidden) {
+			return true
+		}
+	}
+
+	// 2. Check hardcoded defaults (case-insensitive)
+	lowerPath := strings.ToLower(relPath)
+	if strings.Contains(lowerPath, ".tinymem") ||
+		strings.Contains(lowerPath, ".gemini") ||
+		strings.Contains(lowerPath, ".claude") ||
+		relPath == "tinyTasks.md" {
+		return true
+	}
+
+	// 3. Respect gitignore
+	// Use git check-ignore to see if the path is ignored
+	cmd := exec.Command("git", "check-ignore", "-q", relPath)
+	cmd.Dir = e.cfg.ProjectRoot
+	// If it exits with 0, it means the path is ignored
+	if err := cmd.Run(); err == nil {
+		return true
+	}
+
+	return false
 }
