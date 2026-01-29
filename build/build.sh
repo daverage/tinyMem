@@ -78,7 +78,7 @@ build_target() {
   local out=$4
 
   echo "→ $label"
-  CGO_ENABLED=1 GOOS="$goos" GOARCH="$goarch" \
+  CC="${CC:-gcc}" CGO_ENABLED=1 GOOS="$goos" GOARCH="$goarch" \
     go build "${TAGS_FLAG[@]}" -ldflags "$LDFLAGS" \
     -o "$out" ./cmd/tinymem
 }
@@ -90,15 +90,32 @@ rm -rf "$OUT_DIR"/*
 build_target "macOS ARM64" darwin arm64 "$OUT_DIR/tinymem-darwin-arm64"
 build_target "macOS AMD64" darwin amd64 "$OUT_DIR/tinymem-darwin-amd64"
 
+# Linux
 if [[ "$OSTYPE" == linux* ]]; then
   build_target "Linux AMD64" linux amd64 "$OUT_DIR/tinymem-linux-amd64"
   build_target "Linux ARM64" linux arm64 "$OUT_DIR/tinymem-linux-arm64"
+elif command -v x86_64-linux-musl-gcc >/dev/null 2>&1; then
+  echo "→ Linux (Cross-compiling via musl-cross)"
+  CC=x86_64-linux-musl-gcc build_target "Linux AMD64" linux amd64 "$OUT_DIR/tinymem-linux-amd64"
+elif command -v zig >/dev/null 2>&1; then
+  echo "→ Linux (Cross-compiling via zig cc)"
+  CC="zig cc -target x86_64-linux-musl" build_target "Linux AMD64" linux amd64 "$OUT_DIR/tinymem-linux-amd64"
+  CC="zig cc -target aarch64-linux-musl" build_target "Linux ARM64" linux arm64 "$OUT_DIR/tinymem-linux-arm64"
+else
+  echo "Skipping Linux builds (musl-cross or zig not found). To enable on Mac: brew install FiloSottile/musl-cross/musl-cross or brew install zig"
 fi
 
+# Windows
 if [[ "$OSTYPE" == msys* || "$OSTYPE" == cygwin* ]]; then
   build_target "Windows AMD64" windows amd64 "$OUT_DIR/tinymem-windows-amd64.exe"
   build_target "Windows ARM64" windows arm64 "$OUT_DIR/tinymem-windows-arm64.exe"
+elif command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then
+  echo "→ Windows (Cross-compiling via mingw-w64)"
+  CC=x86_64-w64-mingw32-gcc build_target "Windows AMD64" windows amd64 "$OUT_DIR/tinymem-windows-amd64.exe"
+else
+  echo "Skipping Windows builds (mingw-w64 not found). To enable on Mac: brew install mingw-w64"
 fi
+
 
 # ------------------------------------------------------------
 # Finalize Release

@@ -2,6 +2,7 @@
 
 - [x] Implement Git-based version injection
 - [x] Consolidate build and release scripts into `build/build.sh` and `build/build.bat`
+- [x] Improve release robustness (handle existing tags/releases, clobber assets)
 - [x] Remove obsolete "REPOSITORY VERSIONING RULES" from Agent docs
   - [x] Update `AGENTS.md`
   - [x] Update `CLAUDE.md`

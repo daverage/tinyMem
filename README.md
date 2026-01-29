@@ -125,6 +125,11 @@ cd tinyMem
 ./build/build.sh patch  # Release (patch version bump)
 ```
 
+**Cross-Compilation (on Mac):**
+To build Windows or Linux binaries on a Mac, you need C cross-compilers:
+- **For Windows**: `brew install mingw-w64`
+- **For Linux**: `brew install FiloSottile/musl-cross/musl-cross` (static) or `brew install zig`
+
 ---
 
 ## 💻 Usage
