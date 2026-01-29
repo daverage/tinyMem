@@ -77,6 +77,7 @@ func NewServer(a *app.App) *Server {
 	// Create CoVe verifier if enabled (safely disabled by default)
 	if a.Config.CoVeEnabled {
 		coveVerifier := cove.NewVerifier(a.Config, llmClient)
+		coveVerifier.SetStatsStore(cove.NewSQLiteStatsStore(a.DB.GetConnection()), a.ProjectID)
 		extractor.SetCoVeVerifier(coveVerifier)
 
 		// Also set CoVe verifier for recall filtering if enabled
@@ -254,28 +255,31 @@ func (s *Server) handleStreamingRequest(w http.ResponseWriter, ctx context.Conte
 	rollingBuffer := NewRollingBuffer(s.config.ExtractionBufferBytes)
 	var responseMutex sync.Mutex
 
+	// Emit recall status as a notification event for streaming clients.
+	if notification.RecallStatus != "" {
+		s.emitMemoryNotificationEvent(w, notification)
+	}
+
 	// Process the stream
 	for {
 		select {
 		case chunk, ok := <-chunkChan:
 			if !ok {
-				// Channel closed, stream is complete
-				// Get the final content from the rolling buffer for extraction
-				finalContent := rollingBuffer.String()
+				finalText := rollingBuffer.String()
 
 				// Log response token count if metrics are enabled
 				if s.config.MetricsEnabled {
-					tokenCount := estimateTokenCount(finalContent)
+					tokenCount := estimateTokenCount(finalText)
 					s.app.Logger.Info("Response metrics",
 						zap.String("model", req.Model),
 						zap.Int("response_tokens", tokenCount),
 					)
 				}
 
-				// Send the final content to the processing channel for extraction
+				// Send response for extraction via channel
 				select {
 				case s.responseBuffer <- ResponseCapture{
-					ResponseText: finalContent,
+					ResponseText: finalText,
 					Model:        req.Model,
 					Timestamp:    time.Now(),
 				}:
@@ -283,50 +287,44 @@ func (s *Server) handleStreamingRequest(w http.ResponseWriter, ctx context.Conte
 					s.app.Logger.Warn("Response buffer is full, skipping extraction for streaming request", zap.String("model", req.Model))
 				}
 
-				s.emitMemoryNotificationEvent(w, notification)
 				return
 			}
 
-			// Add chunk to rolling buffer
+			// Forward the chunk to the client
+			chunkData, err := json.Marshal(chunk)
+			if err != nil {
+				continue
+			}
+			fmt.Fprintf(w, "data: %s\n\n", chunkData)
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+
+			// Capture response text for extraction
 			responseMutex.Lock()
 			for _, choice := range chunk.Choices {
 				if choice.Delta.Content != "" {
 					_, _ = rollingBuffer.Write([]byte(choice.Delta.Content))
-
-					// Log an error if buffer exceeds max size, do not panic
-					if rollingBuffer.Len() > s.config.ExtractionBufferBytes {
-						s.app.Logger.Error("Rolling buffer exceeded configured max size",
-							zap.Int("current_size", rollingBuffer.Len()),
-							zap.Int("max_size", s.config.ExtractionBufferBytes))
-						// Optionally, truncate the buffer or handle as a fatal error
-						// For now, we'll just log and continue, as the system can still function.
-					}
 				}
 			}
 			responseMutex.Unlock()
-
-			// Send chunk to client
-			chunkBytes, err := json.Marshal(chunk)
-			if err != nil {
-				s.app.Logger.Error("Failed to marshal streaming chunk", zap.Error(err))
-				continue
-			}
-
-			// Terminate the SSE event with a blank line so clients treat it as a complete message.
-			fmt.Fprintf(w, "data: %s\n\n", chunkBytes)
-			w.(http.Flusher).Flush()
 		case err, ok := <-errChan:
 			if ok && err != nil {
 				s.app.Logger.Error("Error from LLM streaming channel", zap.Error(err))
+
+				// Provide a more helpful error message
+				errMsg := err.Error()
+				if strings.Contains(errMsg, "connection refused") || strings.Contains(errMsg, "no such host") || strings.Contains(errMsg, "i/o timeout") {
+					errMsg = fmt.Sprintf("tinyMem Proxy: Unable to reach LLM backend at %s. Ensure your local LLM server is running. Error: %v", s.config.LLMBaseURL, err)
+				}
+
 				// Send error event to client
-				errorMsg := fmt.Sprintf("data: {\"error\": \"%v\"}\n\n", err)
+				errorMsg := fmt.Sprintf("data: {\"error\": \"%s\"}\n\n", strings.ReplaceAll(errMsg, "\"", "\\\""))
 				fmt.Fprint(w, errorMsg)
 				w.(http.Flusher).Flush()
 				return
 			}
 		case <-ctx.Done():
-			s.app.Logger.Info("Streaming request context cancelled")
-			// Request context cancelled
 			return
 		}
 	}
@@ -337,7 +335,14 @@ func (s *Server) handleNonStreamingRequest(w http.ResponseWriter, ctx context.Co
 	resp, err := s.llmClient.ChatCompletionsRaw(ctx, req)
 	if err != nil {
 		s.app.Logger.Error("LLM ChatCompletions failed for non-streaming request", zap.Error(err))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+
+		// Provide a more helpful error message if it's a connection error
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "connection refused") || strings.Contains(errMsg, "no such host") || strings.Contains(errMsg, "i/o timeout") {
+			errMsg = fmt.Sprintf("tinyMem Proxy: Unable to reach LLM backend at %s. Ensure your local LLM server (LM Studio/Ollama) is running and its 'Local Server' is started. Error: %v", s.config.LLMBaseURL, err)
+		}
+
+		http.Error(w, errMsg, http.StatusInternalServerError)
 		return
 	}
 	defer resp.Body.Close()

@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	SchemaVersion = 7
+	SchemaVersion = 8
 )
 
 // DB represents the database connection
@@ -91,6 +91,10 @@ func (db *DB) migrate() error {
 			}
 		case 7:
 			if err := db.applySchemaV7(tx); err != nil {
+				return fmt.Errorf("failed to apply schema v%d: %w", version, err)
+			}
+		case 8:
+			if err := db.applySchemaV8(tx); err != nil {
 				return fmt.Errorf("failed to apply schema v%d: %w", version, err)
 			}
 		default:
@@ -660,6 +664,27 @@ func (db *DB) applySchemaV7(tx *sql.Tx) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	// Update schema version
+	_, err = tx.Exec(fmt.Sprintf("PRAGMA user_version = %d", SchemaVersion))
+	return err
+}
+
+// applySchemaV8 adds persistent CoVe stats storage.
+func (db *DB) applySchemaV8(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+		CREATE TABLE IF NOT EXISTS cove_stats (
+			project_id TEXT PRIMARY KEY,
+			candidates_evaluated INTEGER NOT NULL DEFAULT 0,
+			candidates_discarded INTEGER NOT NULL DEFAULT 0,
+			total_confidence REAL NOT NULL DEFAULT 0,
+			cove_errors INTEGER NOT NULL DEFAULT 0,
+			last_updated DATETIME
+		)
+	`)
+	if err != nil {
+		return err
 	}
 
 	// Update schema version

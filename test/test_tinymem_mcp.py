@@ -31,18 +31,31 @@ class TinyMemMCPTestCase(unittest.TestCase):
         subprocess.run(["git", "config", "user.email", "test@example.com"], check=True, capture_output=True)
         subprocess.run(["git", "config", "user.name", "Test User"], check=True, capture_output=True)
         
-        # Path to tinymem binary
-        self.tinymem_path = os.path.join(os.path.dirname(__file__), "tinymem")
+        # Path to tinymem binary (next to this test file)
+        test_dir = Path(__file__).resolve().parent
+        repo_root = test_dir.parent
+        self.tinymem_path = str(test_dir / "tinymem")
         
         # Verify tinymem binary exists
         if not os.path.exists(self.tinymem_path):
             # Try to build it
-            build_result = subprocess.run([
-                "go", "build", "-tags", "fts5", "-o", self.tinymem_path, 
-                "./cmd/tinymem"
-            ], cwd=os.path.dirname(__file__))
+            build_result = subprocess.run(
+                [
+                    "go",
+                    "build",
+                    "-tags",
+                    "fts5",
+                    "-o",
+                    self.tinymem_path,
+                    "./cmd/tinymem",
+                ],
+                cwd=repo_root,
+                capture_output=True,
+                text=True,
+            )
             if build_result.returncode != 0:
-                raise RuntimeError(f"Could not build tinymem binary: {build_result.stderr}")
+                stderr = build_result.stderr.strip() if build_result.stderr else "unknown build error"
+                raise RuntimeError(f"Could not build tinymem binary: {stderr}")
     
     def tearDown(self):
         """Clean up test environment"""

@@ -4,7 +4,7 @@
       "type": "stdio",
       "command": "tinymem",
       "args": ["mcp"],
-      "timeout": 120,
+      "timeout": 10000,
       "env": {
         "TINYMEM_METRICS_ENABLED": "true"
       }

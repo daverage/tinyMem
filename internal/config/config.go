@@ -163,6 +163,11 @@ func LoadConfig() (*Config, error) {
 		if err := toml.Unmarshal(fileData, &parsed); err != nil {
 			return nil, err
 		}
+		var raw map[string]interface{}
+		if err := toml.Unmarshal(fileData, &raw); err != nil {
+			return nil, err
+		}
+		_, coveSectionPresent := raw["cove"]
 
 		if parsed.Proxy.Port != 0 {
 			cfg.ProxyPort = parsed.Proxy.Port
@@ -211,21 +216,23 @@ func LoadConfig() (*Config, error) {
 		}
 		// Metrics configuration
 		cfg.MetricsEnabled = parsed.Metrics.Enabled
-		// CoVe configuration
-		cfg.CoVeEnabled = parsed.CoVe.Enabled
-		if parsed.CoVe.ConfidenceThreshold > 0 {
-			cfg.CoVeConfidenceThreshold = parsed.CoVe.ConfidenceThreshold
+		// CoVe configuration (only override defaults if [cove] is present)
+		if coveSectionPresent {
+			cfg.CoVeEnabled = parsed.CoVe.Enabled
+			if parsed.CoVe.ConfidenceThreshold > 0 {
+				cfg.CoVeConfidenceThreshold = parsed.CoVe.ConfidenceThreshold
+			}
+			if parsed.CoVe.MaxCandidates > 0 {
+				cfg.CoVeMaxCandidates = parsed.CoVe.MaxCandidates
+			}
+			if parsed.CoVe.TimeoutSeconds > 0 {
+				cfg.CoVeTimeoutSeconds = parsed.CoVe.TimeoutSeconds
+			}
+			if parsed.CoVe.Model != "" {
+				cfg.CoVeModel = parsed.CoVe.Model
+			}
+			cfg.CoVeRecallFilterEnabled = parsed.CoVe.RecallFilterEnabled
 		}
-		if parsed.CoVe.MaxCandidates > 0 {
-			cfg.CoVeMaxCandidates = parsed.CoVe.MaxCandidates
-		}
-		if parsed.CoVe.TimeoutSeconds > 0 {
-			cfg.CoVeTimeoutSeconds = parsed.CoVe.TimeoutSeconds
-		}
-		if parsed.CoVe.Model != "" {
-			cfg.CoVeModel = parsed.CoVe.Model
-		}
-		cfg.CoVeRecallFilterEnabled = parsed.CoVe.RecallFilterEnabled
 	}
 
 	// Apply environment variable overrides

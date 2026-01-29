@@ -56,3 +56,4 @@
 - [x] Document specific requirements for Qwen (chat templates)
 - [x] Add `llm.model` support to config for better local LLM compatibility
 - [x] Implement automatic model normalization (prefix stripping) for LiteLLM/Aider compatibility
+- [x] Improve proxy error reporting for unreachable backends

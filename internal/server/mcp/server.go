@@ -11,9 +11,11 @@ import (
 
 	"github.com/daverage/tinymem/internal/app" // Add app import
 	"github.com/daverage/tinymem/internal/config"
+	"github.com/daverage/tinymem/internal/cove"
 	"github.com/daverage/tinymem/internal/doctor" // Add doctor import
 	"github.com/daverage/tinymem/internal/evidence"
 	"github.com/daverage/tinymem/internal/extract"
+	"github.com/daverage/tinymem/internal/llm"
 	"github.com/daverage/tinymem/internal/memory"
 	"github.com/daverage/tinymem/internal/ralph"
 	"github.com/daverage/tinymem/internal/recall"
@@ -31,6 +33,7 @@ type Server struct {
 	evidenceService *evidence.Service
 	recallEngine    recall.Recaller
 	extractor       *extract.Extractor
+	coveVerifier    *cove.Verifier
 	ctx             context.Context
 	cancel          context.CancelFunc
 }
@@ -71,9 +74,11 @@ func NewServer(a *app.App) *Server {
 	extractor := extract.NewExtractor(evidenceService)
 
 	// Initialize CoVe (Chain-of-Verification) for memory extraction filtering
+	var coveVerifier *cove.Verifier
 	if a.Config.CoVeEnabled {
 		llmClient := llm.NewClient(a.Config)
-		coveVerifier := cove.NewVerifier(a.Config, llmClient)
+		coveVerifier = cove.NewVerifier(a.Config, llmClient)
+		coveVerifier.SetStatsStore(cove.NewSQLiteStatsStore(a.DB.GetConnection()), a.ProjectID)
 		extractor.SetCoVeVerifier(coveVerifier)
 	}
 
@@ -85,6 +90,7 @@ func NewServer(a *app.App) *Server {
 		evidenceService: evidenceService,
 		recallEngine:    recallEngine,
 		extractor:       extractor,
+		coveVerifier:    coveVerifier,
 		ctx:             ctx,
 		cancel:          cancel,
 	}
@@ -285,7 +291,7 @@ func (s *Server) handleToolsList(req *MCPRequest) {
 			"name":        "memory_ralph",
 			"description": "Execute an evidence-gated repair loop with memory-assisted recall and bounded autonomous retries. NOTE: This may take several minutes to complete and may exceed default client timeouts.",
 			"inputSchema": map[string]interface{}{
-				"type": "object",
+				"type":     "object",
 				"required": []string{"task", "command", "evidence"},
 				"properties": map[string]interface{}{
 					"task": map[string]interface{}{
@@ -605,6 +611,35 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 	if !memType.IsValid() {
 		s.sendError(req.ID, -32602, "Invalid memory type")
 		return
+	}
+
+	// Optional CoVe filtering for non-fact writes (fail-safe on error)
+	if s.coveVerifier != nil && memType != memory.Fact {
+		candidates := []cove.CandidateMemory{
+			{
+				ID:      "0",
+				Type:    string(memType),
+				Summary: writeReq.Summary,
+				Detail:  writeReq.Detail,
+			},
+		}
+		verified, err := s.coveVerifier.VerifyCandidates(candidates)
+		if err == nil && len(verified) == 0 {
+			response := map[string]interface{}{
+				"jsonrpc": "2.0",
+				"result": map[string]interface{}{
+					"content": []map[string]interface{}{
+						{
+							"type": "text",
+							"text": "Memory discarded by CoVe (confidence below threshold).",
+						},
+					},
+				},
+				"id": req.ID,
+			}
+			s.sendResponse(response)
+			return
+		}
 	}
 
 	newMemory := &memory.Memory{

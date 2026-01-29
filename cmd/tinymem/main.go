@@ -12,6 +12,7 @@ import (
 
 	"github.com/daverage/tinymem/internal/analytics"
 	"github.com/daverage/tinymem/internal/app"
+	"github.com/daverage/tinymem/internal/cove"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
@@ -334,6 +335,29 @@ func runStatsCmd(a *app.App, cmd *cobra.Command, args []string) {
 		fmt.Println("\nMode: Proxy")
 		// Additional proxy-specific stats could be added here
 		fmt.Printf("Proxy Port: %d\n", a.Config.ProxyPort)
+	}
+
+	// CoVe configuration summary
+	fmt.Printf("\nCoVe Enabled: %t\n", a.Config.CoVeEnabled)
+	fmt.Printf("CoVe Confidence Threshold: %.2f\n", a.Config.CoVeConfidenceThreshold)
+	fmt.Printf("CoVe Max Candidates: %d\n", a.Config.CoVeMaxCandidates)
+	fmt.Printf("CoVe Timeout Seconds: %d\n", a.Config.CoVeTimeoutSeconds)
+	fmt.Printf("CoVe Recall Filter Enabled: %t\n", a.Config.CoVeRecallFilterEnabled)
+
+	store := cove.NewSQLiteStatsStore(a.DB.GetConnection())
+	if stats, err := store.Load(a.ProjectID); err == nil && stats != nil && stats.CandidatesEvaluated > 0 {
+		fmt.Printf("\nCoVe Runtime Stats:\n")
+		fmt.Printf("  Candidates Evaluated: %d\n", stats.CandidatesEvaluated)
+		fmt.Printf("  Candidates Discarded: %d\n", stats.CandidatesDiscarded)
+		fmt.Printf("  Average Confidence: %.2f\n", stats.AvgConfidence)
+		if stats.CandidatesEvaluated > 0 {
+			discardRate := float64(stats.CandidatesDiscarded) / float64(stats.CandidatesEvaluated) * 100
+			fmt.Printf("  Discard Rate: %.1f%%\n", discardRate)
+		}
+		fmt.Printf("  Errors: %d\n", stats.CoVeErrors)
+		if !stats.LastUpdated.IsZero() {
+			fmt.Printf("  Last Updated: %s\n", stats.LastUpdated.Format(time.RFC3339))
+		}
 	}
 }
 

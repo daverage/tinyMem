@@ -33,7 +33,21 @@ aider --openai-api-base http://localhost:8080/v1 --model openai/qwen2.5-coder-7b
 
 **CRITICAL**: If you omit `openai/` and only pass `--model qwen2.5-coder-7b-instruct`, LiteLLM will throw a `BadRequestError: LLM Provider NOT provided`. Always include the prefix.
 
-tinyMem will automatically strip the `openai/` prefix before sending the request to LM Studio, ensuring compatibility.
+## Troubleshooting Connection Errors
+
+If you see `InternalServerError: OpenAIException - Connection error`:
+
+1.  **Verify LM Studio**: Ensure LM Studio is open, the model is loaded, and the **Local Server is started** (usually on port 1234).
+2.  **Verify tinyMem**: Ensure `tinymem proxy` is running in your project folder.
+3.  **Check URLs**: If `localhost` doesn't work, try using `127.0.0.1` in your `.tinyMem/config.toml`:
+    ```toml
+    base_url = "http://127.0.0.1:1234/v1"
+    ```
+4.  **Run Diagnostics**: Use the tinyMem doctor to check connectivity:
+    ```bash
+    tinymem doctor
+    ```
+    Look for the "LLM backend reachability" check.
 
 ### Option B: Environment Variables
 
@@ -54,3 +68,27 @@ Qwen2.5-Coder is highly recommended for use with Aider. When using it via LM Stu
 4.  Run Aider pointing to tinyMem.
 
 tinyMem will automatically inject relevant project context into Aider's requests and extract new memories from its responses.
+
+## Resolving "Unknown context window size" Warnings
+
+Aider uses LiteLLM, which may not recognize local model strings like `openai/qwen2.5-coder-7b-instruct`. You might see a warning like:
+`Warning for openai/qwen2.5-coder-7b-instruct: Unknown context window size and costs, using sane defaults.`
+
+To resolve this, create a file named **`.aider.model.metadata.json`** in your project root:
+
+```json
+{
+    "openai/qwen2.5-coder-7b-instruct": {
+        "max_tokens": 32768,
+        "input_cost_per_token": 0.0,
+        "output_cost_per_token": 0.0,
+        "litellm_provider": "openai",
+        "mode": "chat"
+    }
+}
+```
+
+Aider will automatically detect this file in the current directory or your home directory. You can also specify it explicitly using:
+```bash
+aider --model-metadata-file .aider.model.metadata.json --model openai/qwen2.5-coder-7b-instruct
+```

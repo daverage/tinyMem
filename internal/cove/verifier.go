@@ -18,9 +18,11 @@ type LLMClient interface {
 
 // Verifier provides CoVe (Chain-of-Verification) filtering for memory candidates
 type Verifier struct {
-	llmClient LLMClient
-	config    *config.Config
-	stats     *StatsTracker
+	llmClient  LLMClient
+	config     *config.Config
+	stats      *StatsTracker
+	statsStore StatsStore
+	projectID  string
 }
 
 // NewVerifier creates a new CoVe verifier
@@ -30,6 +32,12 @@ func NewVerifier(cfg *config.Config, llmClient LLMClient) *Verifier {
 		config:    cfg,
 		stats:     NewStatsTracker(),
 	}
+}
+
+// SetStatsStore enables persistent stats storage.
+func (v *Verifier) SetStatsStore(store StatsStore, projectID string) {
+	v.statsStore = store
+	v.projectID = projectID
 }
 
 // VerifyCandidates performs CoVe verification on candidate memories
@@ -61,6 +69,7 @@ func (v *Verifier) VerifyCandidates(candidates []CandidateMemory) ([]CandidateMe
 	if err != nil {
 		// FAIL-SAFE: On error, return all candidates unfiltered
 		v.stats.RecordError()
+		v.persistStats()
 		return candidates, nil
 	}
 
@@ -89,6 +98,7 @@ func (v *Verifier) VerifyCandidates(candidates []CandidateMemory) ([]CandidateMe
 		// Discarded candidates are simply not added to filtered slice
 	}
 
+	v.persistStats()
 	return filtered, nil
 }
 
@@ -232,6 +242,7 @@ func (v *Verifier) FilterRecall(ctx context.Context, memories []RecallMemory, qu
 	if err != nil {
 		// FAIL-SAFE: On error, return all memories unfiltered
 		v.stats.RecordError()
+		v.persistStats()
 		return memories, nil
 	}
 
@@ -257,6 +268,7 @@ func (v *Verifier) FilterRecall(ctx context.Context, memories []RecallMemory, qu
 		// Excluded memories are simply not added to filtered slice
 	}
 
+	v.persistStats()
 	return filtered, nil
 }
 
@@ -376,4 +388,11 @@ func (v *Verifier) GetStats() Stats {
 // ResetStats clears all statistics
 func (v *Verifier) ResetStats() {
 	v.stats.Reset()
+}
+
+func (v *Verifier) persistStats() {
+	if v.statsStore == nil || v.projectID == "" {
+		return
+	}
+	_ = v.statsStore.Save(v.projectID, v.stats.GetStats())
 }
