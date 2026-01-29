@@ -1,9 +1,7 @@
 # Tasks - Version Automation
 
 - [x] Implement Git-based version injection
-- [x] Create automated release script (`build/release.sh`)
-- [x] Refactor `release.sh` to build before commit and ask for commit message
-- [x] Create Windows equivalent release script (`build/release.bat`)
+- [x] Consolidate build and release scripts into `build/build.sh` and `build/build.bat`
 - [x] Remove obsolete "REPOSITORY VERSIONING RULES" from Agent docs
   - [x] Update `AGENTS.md`
   - [x] Update `CLAUDE.md`

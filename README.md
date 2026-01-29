@@ -120,9 +120,9 @@ Requires Go 1.25.6+.
 ```bash
 git clone https://github.com/andrzejmarczewski/tinyMem.git
 cd tinyMem
-./build/build.sh   # macOS/Linux
+./build/build.sh   # Build only
 # or
-.\build\build.bat  # Windows
+./build/build.sh patch  # Release (patch version bump)
 ```
 
 ---
