@@ -1,4 +1,5 @@
-# Tasks – Confirm binary naming in install docs
+# Tasks – Add update check to `tinymem version`
 
-- [x] Verify install instructions ensure binary name `tinymem`
-- [x] Adjust docs or release artifacts if needed
+- [x] Find `version` command implementation
+- [x] Add update check and user-facing message
+- [x] Ensure behavior is safe when offline

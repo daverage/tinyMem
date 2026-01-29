@@ -86,6 +86,7 @@ var versionCmd = &cobra.Command{
 
 func runVersionCmd(a *app.App, cmd *cobra.Command, args []string) {
 	fmt.Printf("tinyMem %s\n", version.Version)
+	checkUpdateWithContext(a.Ctx, a)
 }
 
 var proxyCmd = &cobra.Command{
