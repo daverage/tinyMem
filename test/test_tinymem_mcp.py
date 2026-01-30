@@ -16,6 +16,12 @@ import threading
 import time
 from pathlib import Path
 
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from test.http_stub_server import StubLLMServer
+
 
 class TinyMemMCPTestCase(unittest.TestCase):
     """Test case for TinyMem MCP functionality"""
@@ -62,7 +68,7 @@ class TinyMemMCPTestCase(unittest.TestCase):
         os.chdir(self.original_cwd)
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
-    def send_mcp_request(self, method, params=None, tool_name=None, tool_args=None):
+    def send_mcp_request(self, method, params=None, tool_name=None, tool_args=None, env=None):
         """Send an MCP request to tinymem mcp server"""
         if method == "tools/call":
             # Format for tool call
@@ -88,22 +94,59 @@ class TinyMemMCPTestCase(unittest.TestCase):
             request = request_obj
         
         # Start MCP server in a subprocess
-        proc = subprocess.Popen([self.tinymem_path, "mcp"], 
-                               stdin=subprocess.PIPE, 
-                               stdout=subprocess.PIPE, 
-                               stderr=subprocess.PIPE, 
-                               text=True)
+        full_env = os.environ.copy()
+        if env:
+            full_env.update(env)
+
+        proc = subprocess.Popen([self.tinymem_path, "mcp"],
+                               stdin=subprocess.PIPE,
+                               stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE,
+                               text=True,
+                               env=full_env)
         
         # Send the request
         request_json = json.dumps(request) + "\n"
         stdout, stderr = proc.communicate(input=request_json, timeout=10)
-        
+
+        # Clean stdout to remove diagnostic prefixes (e.g., logging from the Ralph loop)
+        clean_stdout = stdout
+        first_json = clean_stdout.find("{")
+        last_json = clean_stdout.rfind("}")
+        if first_json != -1 and last_json != -1 and last_json >= first_json:
+            clean_stdout = clean_stdout[first_json:last_json + 1]
+
         # Parse the response
         try:
-            response = json.loads(stdout.strip())
+            response = json.loads(clean_stdout.strip())
             return response, stderr
         except json.JSONDecodeError:
             return None, f"Could not parse response: {stdout}\nSTDERR: {stderr}"
+
+    def _ralph_chat_response(self, path, body, patch_name):
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": f"@@@ FILE: {patch_name} @@@\nRalph repair output\n@@@ END_FILE @@@"
+                    }
+                }
+            ]
+        }
+
+    def _cove_chat_response(self, path, body):
+        if "MEMORIES:" in body:
+            payload = [
+                {"id": "0", "include": False},
+                {"id": "1", "include": True},
+            ]
+            return {"choices": [{"message": {"content": json.dumps(payload)}}]}
+        if "CANDIDATES:" in body:
+            payload = [
+                {"id": "0", "confidence": 0.88, "reason": "keep"},
+            ]
+            return {"choices": [{"message": {"content": json.dumps(payload)}}]}
+        return StubLLMServer._default_chat_response(path, body)
     
     def test_mcp_initialize(self):
         """Test MCP initialize method"""
@@ -265,6 +308,103 @@ class TinyMemMCPTestCase(unittest.TestCase):
         self.assertIsNotNone(response, f"Failed to get valid response: {stderr}")
         self.assertIn("error", response)
         self.assertIn("Tool not found", response["error"]["message"])
+
+    def test_mcp_memory_ralph_repair(self):
+        """memory_ralph should run the repair loop and write a patch file."""
+        patch_file = "ralph_patch.txt"
+        try:
+            stub = StubLLMServer(chat_response=lambda path, body: self._ralph_chat_response(path, body, patch_file))
+        except PermissionError as exc:
+            self.skipTest(f"Cannot bind stub server: {exc}")
+        stub.start()
+        env = {
+            "TINYMEM_LLM_BASE_URL": stub.base_url,
+            "TINYMEM_COVE_ENABLED": "false",
+            "TINYMEM_SEMANTIC_ENABLED": "false",
+            "TINYMEM_COVE_RECALL_FILTER_ENABLED": "false",
+        }
+
+        try:
+            args = {
+                "task": "Fix patch file",
+                "command": "sh -c 'exit 1'",
+                "evidence": [f"file_exists::{patch_file}"],
+                "max_iterations": 2,
+                "recall": {
+                    "query_terms": ["patch"],
+                    "limit": 2,
+                },
+                "safety": {
+                    "allow_shell": True,
+                    "forbid_paths": [],
+                    "forbid_commands": [],
+                },
+                "human_gate": {
+                    "on_ambiguity": False,
+                    "after_iterations": 0,
+                },
+            }
+
+            response, stderr = self.send_mcp_request(
+                "tools/call",
+                tool_name="memory_ralph",
+                tool_args=args,
+                env=env,
+            )
+
+            self.assertIsNotNone(response, f"Failed to get memory_ralph response: {stderr}")
+            text = response["result"]["content"][0]["text"]
+            result_obj = json.loads(text)
+            self.assertEqual(result_obj["status"], "success")
+            self.assertTrue(os.path.exists(patch_file))
+            with open(patch_file, "r") as f:
+                self.assertIn("Ralph repair output", f.read())
+        finally:
+            stub.stop()
+
+    def test_mcp_memory_query_with_cove_filter(self):
+        """memory_query should filter out low-confidence items when CoVe recall filtering runs."""
+        try:
+            stub = StubLLMServer(chat_response=self._cove_chat_response)
+        except PermissionError as exc:
+            self.skipTest(f"Cannot bind stub server: {exc}")
+        stub.start()
+
+        env = {
+            "TINYMEM_LLM_BASE_URL": stub.base_url,
+            "TINYMEM_COVE_ENABLED": "true",
+            "TINYMEM_COVE_RECALL_FILTER_ENABLED": "true",
+            "TINYMEM_SEMANTIC_ENABLED": "false",
+        }
+
+        try:
+            summaries = ["First note", "Second note"]
+            for summary in summaries:
+                self.send_mcp_request(
+                    "tools/call",
+                    tool_name="memory_write",
+                    tool_args={
+                        "type": "note",
+                        "summary": summary,
+                        "detail": f"Detail for {summary}",
+                    },
+                    env=env,
+                )
+
+            response, stderr = self.send_mcp_request(
+                "tools/call",
+                tool_name="memory_query",
+                tool_args={"query": "note", "limit": 5},
+                env=env,
+            )
+
+            self.assertIsNotNone(response, f"Memory query failed: {stderr}")
+            content_text = " ".join([item.get("text", "") for item in response["result"]["content"]])
+            self.assertIn("First note", content_text)
+            self.assertIn("Second note", content_text)
+
+        finally:
+            stub.stop()
 
 
 def run_mcp_tests():

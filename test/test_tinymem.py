@@ -20,6 +20,12 @@ import json
 import unittest
 from pathlib import Path
 
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from test.http_stub_server import StubLLMServer
+
 
 class TinyMemTestCase(unittest.TestCase):
     """Base test case for TinyMem tests"""
@@ -239,11 +245,63 @@ class TinyMemTestCase(unittest.TestCase):
         result = self.run_tinymem_cmd(["doctor"])
         # Doctor should run and provide a report
         self.assertIn("=== tinyMem Diagnostic Report ===", result.stdout)
-    
+
     def test_version_command(self):
         """Test version command"""
         result = self.run_tinymem_cmd(["version"])
         self.assertIn("tinyMem", result.stdout)
+
+    def test_semantic_query_hits_embedding_endpoint(self):
+        """Semantic recall should call the embedding service before returning results."""
+        try:
+            stub = StubLLMServer(
+                embedding_response={"data": [{"embedding": [0.1, 0.1, 0.1]}]},
+            )
+        except PermissionError as exc:
+            self.skipTest(f"Cannot bind stub server: {exc}")
+        stub.start()
+        env = {
+            "TINYMEM_SEMANTIC_ENABLED": "true",
+            "TINYMEM_EMBEDDING_BASE_URL": stub.base_url,
+            "TINYMEM_COVE_ENABLED": "false",
+            "TINYMEM_LLM_BASE_URL": stub.base_url,
+        }
+
+        try:
+            self.run_tinymem_cmd(
+                ["write", "--type", "note", "--summary", "semantic memory", "--detail", "embedding detail"],
+                env=env,
+            )
+
+            result = self.run_tinymem_cmd(["query", "semantic memory"], env=env)
+            self.assertIn("semantic memory", result.stdout)
+
+            embedding_calls = [req for req in stub.requests if req[0].endswith("/embeddings")]
+            self.assertGreaterEqual(len(embedding_calls), 1)
+        finally:
+            stub.stop()
+
+    def test_dashboard_syncs_tinytasks(self):
+        """Dashboard should read tinyTasks.md and surface the task via memory query."""
+        task_content = """
+# Tasks — CLI tinyTasks Test
+
+- [ ] Sample Task
+  - [x] Confirm dashboard reads tinyTasks
+"""
+        with open("tinyTasks.md", "w") as f:
+            f.write(task_content.strip() + "\n")
+
+        env = {
+            "TINYMEM_COVE_ENABLED": "false",
+            "TINYMEM_SEMANTIC_ENABLED": "false",
+        }
+
+        dashboard = self.run_tinymem_cmd(["dashboard"], env=env)
+        self.assertIn("Task Analytics", dashboard.stdout)
+
+        query_result = self.run_tinymem_cmd(["query", "Sample Task"], env=env)
+        self.assertIn("task: Sample Task", query_result.stdout)
 
 
 def run_tests():
