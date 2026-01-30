@@ -213,6 +213,39 @@ File: `~/Library/Application Support/Claude/claude_desktop_config.json`
 }
 ```
 
+### Claude CLI (Cross-platform)
+
+The Claude CLI has a built-in MCP manager, which means you can run the same `tinymem mcp` command that the desktop client uses without manually editing a JSON file.
+
+```bash
+claude mcp add tinymem -- /usr/local/bin/tinymem mcp
+```
+
+The `--` separates Claude CLI flags from the command that will be launched. You can also choose a different name and include extra arguments, for example:
+
+```bash
+claude mcp add my-server -- my-command --some-flag arg1
+```
+
+After the command finishes, `claude mcp list` will show the registered endpoint. If you need to inject environment variables or change the working directory, edit the JSON block (usually under `~/.config/claude/claude_config.json` or the `%APPDATA%\Claude\claude_config.json` file on Windows) so it looks like this:
+
+```json
+{
+  "mcpServers": {
+    "tinymem": {
+      "command": "/usr/local/bin/tinymem",
+      "args": ["mcp"],
+      "env": {
+        "TINYMEM_METRICS_ENABLED": "true",
+        "TINYMEM_LOG_LEVEL": "debug"
+      }
+    }
+  }
+}
+```
+
+Claude reads the strings under `env` before it starts the MCP server, so setting `TINYMEM_METRICS_ENABLED` lets tinyMem emit recall metrics and `TINYMEM_LOG_LEVEL=debug` keeps the MCP logs verbose for troubleshooting.
+
 ### Cursor
 
 File: `~/.cursor/config/mcp.json` or via Settings UI
@@ -263,6 +296,7 @@ See extension documentation for configuration format.
          "command": "tinymem",
          "args": ["mcp"],
          "env": {
+           "TINYMEM_METRICS_ENABLED": "true",
            "TINYMEM_LOG_LEVEL": "debug"
          }
        }
