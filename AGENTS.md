@@ -211,6 +211,57 @@ The response MUST end with an explicit checklist confirming all of the following
 
 If any item cannot be affirmed, the agent MUST continue execution.
 The response may not terminate.
+ 
+## tinyTasks Auto-Creation
+
+tinyTasks.md creation is a system concern; task authoring is a human concern. The system may proactively create the ledger for intent, but only a human can introduce the unchecked tasks that signal intent. tinyMem may automatically create `tinyTasks.md` when multi-step work is implied, but task intent is recognised only when a human defines unchecked tasks within it.
+
+Auto-creation is mechanical and is triggered whenever **any** of the following occur:
+
+1. A multi-step action is requested (e.g., “Refactor…”, “Implement…”, “Add support for…”, “Fix these issues…”, “Build a system that…”).
+2. The agent would otherwise refuse because `tinyTasks.md` is missing.
+3. A task-related CLI or MCP command is invoked (for example, `tinymem dashboard`).
+
+Every auto-created file must be intentionally inert:
+
+* Explicitly non-authorising (it tells the human no work is authorised until someone edits it).
+* Human-edit required before work can resume.
+* Machine-detectable as “no intent yet” (e.g., the title remains `# Tasks — NOT STARTED`).
+
+A canonical auto-created template:
+
+```
+# Tasks — NOT STARTED
+>
+> This file was created automatically because a multi-step workflow
+> may be required.
+>
+> No work is authorised until a human edits this file and defines tasks.
+
+## How to proceed
+
+1. Replace the title above with a concrete goal
+2. Add one or more unchecked tasks (`- [ ]`)
+3. Save the file
+4. Resume work
+
+## Tasks
+
+<!-- No tasks defined yet -->
+```
+
+The updated invariant is:
+
+> Presence of `tinyTasks.md` is not intent. Presence of unchecked, human-authored tasks is intent.
+
+Task memory is synchronized only when all of the following are true:
+
+1. `tinyTasks.md` exists.
+2. It contains one or more unchecked tasks.
+3. The file has been modified since the last sync.
+4. The tasks are parse-valid.
+
+When `tinyTasks.md` exists but contains no unchecked entries, the agent must refuse multi-step execution and clearly respond: “Task file exists but no tasks are defined. Please edit `tinyTasks.md` to proceed.” If unchecked tasks exist, the agent may create task memory, resume incremental work, and enforce completion tracking.
 
 ---
 

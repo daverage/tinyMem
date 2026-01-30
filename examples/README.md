@@ -1,19 +1,37 @@
-# tinyMem Example Configurations
+# tinyMem Examples & Integration Guides
 
-This folder contains example configuration files for connecting `tinyMem` to various local LLM providers and IDEs.
+This directory contains comprehensive guides for integrating `tinyMem` with various LLM providers, clients, and IDEs.
 
-## Directory Structure
+## Provider Guides
 
--   `proxy/`: Contains `config.toml` examples for using `tinyMem` in proxy mode. In this mode, `tinyMem` sits between your LLM client and your local LLM server.
--   `mcp/`: Contains examples for integrating `tinyMem` with IDEs that support the Model Context Protocol (MCP), such as Claude Desktop and Cursor.
--   `cli-clients/`: Contains examples and instructions for configuring command-line tools and SDKs to use `tinyMem` (via the OpenAI-compatible proxy or via MCP, depending on the client).
+*   **[Claude](Claude.md):** Integration with Claude Desktop, Claude CLI, and MCP.
+*   **[GitHub Copilot](GitHubCopilot.md):** Configuration for Copilot Chat in VS Code.
+*   **[Qwen](Qwen.md):** Setup for Qwen CLI, Ollama, and LM Studio.
+*   **[Gemini](Gemini.md):** Using Gemini via MCP or with an adapter.
+*   **[OpenAI](OpenAI.md):** Using the standard OpenAI Python/Node SDKs with tinyMem.
+*   **[DeepSeek](DeepSeek.md):** Configuration for DeepSeek API and local R1 models.
+*   **[Aider](Aider.md):** Configuring the Aider AI pair programmer.
+*   **[Crush/Rush](Crush.md):** Using Charm's Crush CLI with native MCP support.
+*   **[LangChain](LangChain.md):** Integration examples for LangChain Python.
+*   **[Windsurf](Windsurf.md):** Setup for Codeium's Windsurf IDE.
+*   **[Cline](Cline.md):** Setup for the Cline VS Code agent.
 
-## How to Use These Examples
+## Ecosystem Guides
 
-1.  **Choose your setup:** Find the folder that matches your LLM provider (e.g., `ollama`, `lmstudio`) and your integration method (`proxy` or `mcp`).
-2.  **Copy the configuration:** Copy the example configuration file to the correct location.
-    -   For `config.toml` files, you should place them in a `.tinyMem` directory inside your project folder (i.e., `your-project/.tinyMem/config.toml`). `tinyMem` will automatically load this file if it exists.
-    -   For IDE configuration files (like `claude_desktop_config.json`), you'll need to merge the contents with your existing settings file. Please refer to your IDE's documentation for the exact location of its configuration file.
-3.  **Adjust the settings:** The provided examples use default ports and settings. If you have configured your LLM provider to use a different port or URL, you will need to update the `base_url` in the `config.toml` file accordingly.
+*   **[IDEs](IDEs.md):** VS Code, Cursor, Zed, and Continue configuration.
+*   **[Local LLMs](LocalLLMs.md):** Generic configuration for backends like Ollama, LM Studio, and Llama.cpp.
+*   **[Configuration](Configuration.md):** **Full reference** for `.tinyMem/config.toml` options.
 
-For more detailed information, please refer to the main `README.md` file in the root of this repository.
+## About the Agent Directives (AGENT MD)
+
+The `AGENT MD` folder (legacy) contains specific prompt directives for different AI models. These are now maintained in the root `docs/agents/` directory:
+- [Claude Directive](../docs/agents/CLAUDE.md)
+- [Gemini Directive](../docs/agents/GEMINI.md)
+- [Qwen Directive](../docs/agents/QWEN.md)
+
+## Quick Reference: Modes
+
+| Mode | Best For | How it works |
+|------|----------|--------------|
+| **MCP** | Claude Desktop, Crush, Cursor, Zed, Windsurf, Cline | `tinymem` runs as a stdio server, responding to tool calls. |
+| **Proxy** | OpenAI SDK, Aider, LangChain, Copilot, DeepSeek | `tinymem` runs an HTTP server (`:8080`), intercepting and injecting memory into API calls. |

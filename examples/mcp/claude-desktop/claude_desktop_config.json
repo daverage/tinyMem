@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "tinymem": {
-      "command": "/absolute/path/to/tinymem",
-      "args": ["mcp"],
-      "env": {}
-    }
-  }
-}

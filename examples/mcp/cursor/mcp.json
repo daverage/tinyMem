@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "tinymem": {
-      "command": "tinymem",
-      "args": ["mcp"],
-      "env": {}
-    }
-  }
-}
