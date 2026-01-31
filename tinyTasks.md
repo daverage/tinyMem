@@ -1,17 +1,17 @@
-# Tasks – Integration Guides Expansion
+# Tasks – Pre-Release Fixes for v0.3.0
 
-- [x] Implement Critical Missing Guides
-  - [x] Create `examples/GitHubCopilot.md`
-  - [x] Create `examples/LangChain.md`
-  - [x] Create `examples/Windsurf.md`
-  - [x] Create `examples/Cline.md`
-  - [x] Create `examples/DeepSeek.md`
-  - [x] Create `examples/Configuration.md` (Central Reference)
-- [x] Refinement & Standardization
-  - [x] Update `examples/README.md` to index new guides
-  - [x] Rewrite `examples/Gemini.md` to clarify proxy/backend limitations
-  - [x] Standardize `config.toml` snippets across all guides
-  - [x] Add "Troubleshooting" sections to all guides
-- [x] Verification
-  - [x] Verify links in `examples/README.md`
-  - [x] Proofread new guides for accuracy
+- [x] Fix goroutine lifecycle in proxy server
+  - [x] Add processorDone channel to ProxyServer struct
+  - [x] Signal completion when processResponseCaptures exits
+  - [x] Wait for goroutine completion in Stop()
+- [x] Extract duplicate service initialization code
+  - [x] Create initializeRecallServices helper in app/modules.go
+  - [x] Replace duplicated code in proxy/server.go
+  - [x] Replace duplicated code in mcp/server.go
+- [x] Fix channel drain on shutdown
+  - [x] Update processResponseCaptures to drain buffer after shutdown signal
+  - [x] Ensure no buffered items lost on shutdown
+- [x] Update Cline.md documentation
+  - [x] Replace manual path instructions with UI-based method
+  - [x] Add reference to official Cline docs
+  - [x] Test instructions for accuracy

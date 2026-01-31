@@ -5,12 +5,15 @@
 ## Configuration
 
 1.  **Install the Cline Extension** in VS Code.
-2.  **Configure MCP:**
-    Create or edit `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/mcp.json` (Mac) or `%APPDATA%\Code\User\globalStorage\saoudrizwan.claude-dev\settings\mcp.json` (Windows).
-    
-    *Note: The path might vary. Check Cline's settings for "MCP Servers" button to open the config file directly.*
 
-3.  Add tinyMem:
+2.  **Configure MCP via UI:**
+    - Click the **MCP Servers** icon at the top navigation bar of the Cline pane
+    - Select the **Configure** tab
+    - Click the **"Configure MCP Servers"** button at the bottom
+
+    This opens the `cline_mcp_settings.json` configuration file.
+
+3.  **Add tinyMem** to the configuration:
 
     ```json
     {
@@ -23,7 +26,11 @@
     }
     ```
 
-4.  **Restart VS Code** (or reload window).
+    *Tip: Ensure `tinymem` is in your system PATH, or use the absolute path as shown above.*
+
+4.  **Save and restart VS Code** (or reload window).
+
+For more details on Cline MCP configuration, see the [official Cline MCP documentation](https://docs.cline.bot/mcp/configuring-mcp-servers).
 
 ## Usage
 

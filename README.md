@@ -65,7 +65,7 @@ As the project grew, we realized that memory alone wasn't enough. Reliability re
 ## ✨ Key Features
 
 *   **Evidence-Based Truth**: Typed memories (`fact`, `claim`, `decision`, etc.). Only verified claims become facts.
-*   **Chain-of-Verification (CoVe)**: LLM-based quality filter to reduce hallucinations before storage and improve recall relevance (enabled by default).
+*   **Chain-of-Verification (CoVe)**: LLM-based quality filter to reduce hallucinations before storage and improve recall relevance (enabled by default). See [docs/COVE.md](docs/COVE.md) for details.
 *   **Local & Private**: Runs as a single binary. Data lives in `.tinyMem/`.
 *   **Zero Configuration**: Works out of the box.
 *   **Dual Mode**: Works as an HTTP Proxy or Model Context Protocol (MCP) server.
@@ -262,7 +262,6 @@ Compatible with Claude Desktop, Cursor, and other MCP clients.
   }
 }
 ```
-*Run `./verify_mcp.sh` to validate your setup.*
 
 #### Available MCP Tools:
 When tinyMem is running in MCP mode, your AI agent (like Claude or Gemini) gains these "superpowers":
@@ -283,6 +282,18 @@ When tinyMem is running in MCP mode, your AI agent (like Claude or Gemini) gains
 *   **Gemini**: [`docs/agents/GEMINI.md`](docs/agents/GEMINI.md)
 *   **Qwen**: [`docs/agents/QWEN.md`](docs/agents/QWEN.md)
 *   **Other**: [`docs/agents/AGENT_CONTRACT.md`](docs/agents/AGENT_CONTRACT.md)
+
+---
+
+## 📚 Guides & Examples
+
+Detailed integration guides for various tools and ecosystems can be found in the [examples/](examples/) directory:
+
+- [**Claude Integration**](examples/Claude.md) (Desktop & CLI)
+- [**Aider Integration**](examples/Aider.md)
+- [**GitHub Copilot**](examples/GitHubCopilot.md)
+- [**Local LLM Setup**](examples/LocalLLMs.md) (Ollama, LM Studio)
+- [**IDE Configuration**](examples/IDEs.md) (Cursor, VS Code, Zed)
 
 ---
 
@@ -321,6 +332,18 @@ flowchart TD
 ├── internal/             # Core logic (Memory, Evidence, Recall)
 └── README.md             # This file
 ```
+
+---
+
+## 🔍 Visualizing & Diagnostics
+
+tinyMem provides built-in tools to help you understand your project's memory state and health.
+
+*   **Dashboard**: Run `tinymem dashboard` to see a visual summary of memories, tasks, and CoVe performance.
+*   **Doctor**: Run `tinymem doctor` to perform a comprehensive diagnostic check of the database, configuration, and connectivity.
+*   **Stats**: Run `tinymem stats` for a detailed terminal breakdown of memory types and task completion rates.
+
+---
 
 ## 📉 Token Efficiency & Economics
 
@@ -375,7 +398,7 @@ go test ./...
 # Build
 ./build/build.sh
 ```
-See [Task Management](docs/tinyTasks.md) for how we track work.
+See [Task Management](docs/TINY_TASKS.md) for how we track work.
 
 ---
 

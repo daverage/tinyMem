@@ -1,357 +1,122 @@
-tinyMem Architecture
+# tinyMem Architecture
 
-    Overview
+## Executive Summary
 
-    tinyMem is a persistent memory system for Large Language Models (LLMs) that provides evidence-based truth validation. It operates as both a proxy server and a Model Context
-    Protocol (MCP) server, allowing LLMs to access historical information and validate claims.
+tinyMem is a multi-modal persistent memory system tailored to large language models. It combines a proxy front-end, Model Context Protocol (MCP) server, CLI tooling, scheduled background services, and a SQLite-backed evidence store to keep conversations honest, traceable, and actionable over long-lived workflows.
 
-    Core Architecture
+## Deployment Topology
 
-      1 ┌─────────────────────────────────────────────────────────────────────────────┐
-      2 │                              tinyMem System                                 │
-      3 ├─────────────────────────────────────────────────────────────────────────────┤
-      4 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐            │
-      5 │  │   Proxy Server  │  │     MCP         │  │   CLI Tools     │            │
-      6 │  │                 │  │   Server        │  │                 │            │
-      7 │  │  /v1/chat/      │  │  stdin/stdout   │  │  tinymem cmd   │            │
-      8 │  │  completions    │  │                 │  │                 │            │
-      9 │  └─────────────────┘  └─────────────────┘  └─────────────────┘            │
-     10 │         │                       │                       │                  │
-     11 │         ▼                       ▼                       ▼                  │
-     12 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-     13 │  │                         Main Application                          │   │
-     14 │  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐   │   │
-     15 │  │  │   Core Module   │  │  Project        │  │  Server         │   │   │
-     16 │  │  │                 │  │  Module         │  │  Module         │   │   │
-     17 │  │  │ - Config        │  │  - Path         │  │  - Mode        │   │   │
-     18 │  │  │ - Logger        │  │  - ID           │  │                 │   │   │
-     19 │  │  │ - DB            │  │                 │  │                 │   │   │
-     20 │  │  └─────────────────┘  └─────────────────┘  └─────────────────┘   │   │
-     21 │  └─────────────────────────────────────────────────────────────────────┘   │
-     22 │                             │                                               │
-     23 │                             ▼                                               │
-     24 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-     25 │  │                        Services Layer                             │   │
-     26 │  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐   │   │
-     27 │  │  │  Memory         │  │  Evidence       │  │  Recall         │   │   │
-     28 │  │  │  Service        │  │  Service        │  │  Engine         │   │   │
-     29 │  │  └─────────────────┘  └─────────────────┘  └─────────────────┘   │   │
-     30 │  │         │                       │                       │         │   │
-     31 │  │         ▼                       ▼                       ▼         │   │
-     32 │  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐   │   │
-     33 │  │  │  Storage        │  │  Verification   │  │  Semantic       │   │   │
-     34 │  │  │  (SQLite)       │  │  Logic          │  │  Engine         │   │   │
-     35 │  │  └─────────────────┘  └─────────────────┘  └─────────────────┘   │   │
-     36 │  └─────────────────────────────────────────────────────────────────────┘   │
-     37 └─────────────────────────────────────────────────────────────────────────────┘
+```
+               +-------------------------+
+               |      LLM / Agent         |
+               +-----------+-------------+
+                           |
+                 Proxy Mode |  MCP Mode (stdin/stdout)
+                           ▼
+   ┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+   │  Proxy Server │   │  MCP Server  │   │  CLI / Tools │
+   │  (/v1/chat)   │   │  (tinyMem)   │   │  (tinymem,   │
+   │               │   │              │   │   dashboards)
+   └───────┬──────┘   └──────┬───────┘   └──────────────┘
+           │                 │                  │
+           ▼                 ▼                  ▼
+   ┌──────────────────────────────────────────────┐
+   │             tinyMem Application               │
+   │  - CoreModule   - ProjectModule   - ServerModule │
+   │  - Service Layer (Memory, Evidence, Recall)   │
+   └──────────────────┬───────────────────────────┘
+                      ▼
+             +------------------+
+             | SQLite Memory DB |
+             +------------------+
+                      ▼
+              +---------------+
+              | tinyTasks.md  |
+              | (ledger file) |
+              +---------------+
+```
 
-    Key Components
+Proxy and MCP transports enqueue requests into the same core process, which routes them through shared services and the SQLite store. The CLI tools and dashboards hook into the same API surface, exposing diagnostics, `tinyTasks` synchronization, and manual memory operations.
 
-    1. Main Application Structure
+## Core Modules and Service Layer
 
-     - App: The central application object that coordinates all components
-       - CoreModule: Contains configuration, logger, and database connection
-       - ProjectModule: Manages project-specific information
-       - ServerModule: Tracks server mode (proxy, MCP, or standalone)
+- **CoreModule**: Loads configuration, bootstraps structured logging, and opens the SQLite database used for persistent memories and task state.
+- **ProjectModule**: Knows the project root, project ID, and file-system layout so services can locate `tinyTasks.md`, sample data, and per-project metadata.
+- **ServerModule**: Understands the execution mode (proxy, MCP, standalone) and wires transports to MCP tool handlers, health endpoints, and the Ralph repair loop.
 
-    2. Memory System
+The service layer sits atop the modules:
 
-     - Memory Types:
-       - Fact (requires evidence)
-       - Claim (unverified assertion)
-       - Plan (future intentions)
-       - Decision (choices made)
-       - Constraint (limitations)
-       - Observation (noted facts)
-       - Note (miscellaneous information)
-       - Task (action items)
+- **Memory Service** stores, indexes, and deletes memories while conforming to truth states (verified/asserted/tentative) and allows custom recall tiers.
+- **Evidence Service** ensures evidence predicates are evaluated before admitting facts, constraining claims, or closing a Ralph loop.
+- **Recall Engine** decides which memories to inject back into prompts based on tiers, tokens, and freshness heuristics.
 
-     - Recall Tiers:
-       - Always (facts and constraints)
-       - Contextual (decisions and claims)
-       - Opportunistic (observations, notes, plans)
+## Memory Pipeline and Persistence
 
-     - Truth States:
-       - Verified (confirmed with evidence)
-       - Asserted (claimed but not verified)
-       - Tentative (provisional)
+1. **Ingestion** – Agents issue `memory_write` or CLI commands, specifying type (constraint, plan, decision, observation, note, task, claim). Facts require external evidence references while other types may be more loosely defined.
+2. **Evidence gating** – Evidence predicates such as `file_exists`, `cmd_exit0`, or `test_pass` are checked before a discovery is marked `verified`. Unverified assertions stay `asserted` or `tentative` until more proof arrives.
+3. **Storage** – SQLite tables store the memory payload, metadata, recall tier, and hash for deduplication. The same store backs tinyTasks-derived state so everything stays in lockstep.
+4. **Recall** – The recall engine filters memories by tier (`always`, `contextual`, `opportunistic`), truth state, workspace tags, and temporal relevance before injecting them into responses.
+5. **Verification & Updates** – The CLI and MCP expose `memory_stats`, `memory_health`, and `memory_doctor` so operators can inspect database health, run diagnostics, or re-verify stored entries.
 
-    3. tinyTasks System
+## tinyTasks System
 
-    One of the key features of tinyMem is the tinyTasks system, which stores and manages task information in a dedicated file called tinyTasks.md. This system allows for
-    persistent tracking of tasks across sessions:
+`tinyTasks.md` remains the single source of truth for work. tinyMem keeps this ledger synchronized with memory entries and enforces strict intent semantics.
 
-      1 ┌─────────────────────────────────────────────────────────────────────────────┐
-      2 │                              tinyTasks System                               │
-      3 ├─────────────────────────────────────────────────────────────────────────────┤
-      4 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐            │
-      5 │  │  Task Parser    │  │  Task Manager   │  │  Task Tracker   │            │
-      6 │  │                 │  │                 │  │                 │            │
-      7 │  │  Reads/Writes   │  │  Creates/       │  │  Updates/       │            │
-      8 │  │  tinyTasks.md   │  │  Updates Tasks  │  │  Queries Tasks  │            │
-      9 │  └─────────────────┘  └─────────────────┘  └─────────────────┘            │
-     10 │         │                       │                       │                  │
-     11 │         ▼                       ▼                       ▼                  │
-     12 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-     13 │  │                    tinyTasks.md File                              │   │
-     14 │  │  # Tasks – <Goal>                                                 │   │
-     15 │  │  - [ ] Top-level task                                             │   │
-     16 │  │    - [ ] Atomic subtask                                           │   │
-     17 │  │    - [ ] Atomic subtask                                           │   │
-     18 │  │  - [x] Completed task                                             │   │
-     19 │  │    - [x] Completed subtask                                        │   │
-     20 │  └─────────────────────────────────────────────────────────────────────┘   │
-     21 └─────────────────────────────────────────────────────────────────────────────┘
+```
+┌────────────────────────────────────────────────────────────┐
+│ tinyTasks System                                           │
+├──────────────┬──────────────┬──────────────┬───────────────┤
+│ Parser       │ Task Memory  │ Synchronizer│ Guardrails    │
+│ - Reads file │ - Mirrors    │ - Watches   │ - Intent      │
+│ - Validates  │   unchecked  │   file      │   policies    │
+└──────────────┴──────────────┴──────────────┴───────────────┘
+```
 
-     - File Location: Stored in tinyTasks.md in the project root
-     - Structure: Hierarchical task lists with checkboxes indicating completion status
-     - Integration: Tasks can be stored as special memory type in the database
-     - Persistence: Survives application restarts and provides continuity
-     - Format:
+### Intent semantics
+- The system may automatically create `tinyTasks.md` when multi-step work is implied (multi-step requests, missing file detections, or task-related CLI/MCP commands). The auto-created file is intentionally inert and clearly marked `# Tasks — NOT STARTED` so no work is authorized yet.
+- Real intent exists only when a human edits the file, replaces the title with a concrete goal, and adds unchecked task list entries (`- [ ]`). The earlier policy ensures deterministic behavior while keeping humans in control.
+- When the file contains unchecked human-authored tasks, tinyMem parses, validates, and surfaces them to memory commands; completed tasks (`- [x]`) are ignored unless re-opened.
 
-     1   # Tasks – <Goal>
-     2
-     3   - [ ] Top-level task
-     4     - [ ] Atomic subtask
-     5     - [ ] Atomic subtask
-     6   - [x] Completed task
-     7     - [x] Completed subtask
-     - Safety Filtering: Unfinished dormant tasks are filtered out unless explicitly requested
+### File features
+- Format: hierarchical Markdown lists with GitHub-style checkboxes for top-level tasks and atomic subtasks.
+- Synchronization: CLI/MCP commands read and write `tinyTasks.md`, regenerate memory entries, and drive agent workflows.
+- Safety: Dormant unchecked tasks stay out of recall unless explicitly requested, preventing stale instructions from triggering new work.
 
-    4. Ralph Mode (Autonomous Repair System)
+## Ralph Mode (Autonomous Repair)
 
-    The Ralph system is an autonomous repair loop that can execute evidence-gated repairs with bounded retries:
+Ralph orchestrates evidence-gated repair loops when tasks require verification.
 
-      1 ┌─────────────────────────────────────────────────────────────────────────────┐
-      2 │                                Ralph Mode                                 │
-      3 ├─────────────────────────────────────────────────────────────────────────────┤
-      4 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐            │
-      5 │  │   Execute       │  │   Evidence      │  │   Recall        │            │
-      6 │  │   Phase         │  │   Phase         │  │   Phase         │            │
-      7 │  │                 │  │                 │  │                 │            │
-      8 │  │  Run command    │  │  Verify        │  │  Retrieve       │            │
-      9 │  │  and capture    │  │  evidence       │  │  relevant       │            │
-     10 │  │  output         │  │  predicates     │  │  memories       │            │
-     11 │  └─────────────────┘  └─────────────────┘  └─────────────────┘            │
-     12 │         │                       │                       │                  │
-     13 │         ▼                       ▼                       ▼                  │
-     14 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐            │
-     15 │  │   Repair        │  │   Human         │  │   Loop          │            │
-     16 │  │   Phase         │  │   Gate          │  │   Control       │            │
-     17 │  │                 │  │                 │  │                 │            │
-     18 │  │  Apply fixes    │  │  Approval      │  │  Max iterations│            │
-     19 │  │  based on       │  │  if needed      │  │  and safety     │            │
-     20 │  │  memories       │  │                 │  │  checks         │            │
-     21 │  └─────────────────┘  └─────────────────┘  └─────────────────┘            │
-     22 └─────────────────────────────────────────────────────────────────────────────┘
+```
+┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
+│ Execute  │ -> │ Evidence │ -> │ Recall   │ -> │ Repair   │
+│ Phase    │    │ Phase    │    │ Phase    │    │ Phase    │
+└──────────┘    └──────────┘    └──────────┘    └──────────┘
+       ↑                                                    │
+       └───────────────────── Loop control ──────────────────┘
+```
 
-     - Purpose: Executes evidence-gated repair loops with bounded autonomous retries
-     - Phases:
-       - Execute: Runs a verification command and captures output
-       - Evidence: Checks if evidence predicates are satisfied
-       - Recall: Retrieves relevant memories to inform repairs
-       - Repair: Applies fixes based on memories and previous output
-     - Safety Features:
-       - Maximum iteration limits
-       - Forbidden path protection
-       - Command whitelisting
-       - Human approval gates
-     - Evidence Predicates:
-       - cmd_exit0: Command exits with code 0
-       - test_pass: Test passes successfully
-       - file_exists: File exists
-       - grep_hit: Pattern found in file
+- **Execute**: Runs diagnostic commands or tests (via `memory_ralph` API) capturing stdout/stderr.
+- **Evidence**: Enforces predicates like `cmd_exit0`, `test_pass`, or `file_exists` before declaring success.
+- **Recall**: Fetches relevant memories, including tinyTasks state, to inform repairs.
+- **Repair**: Applies fixes (patches, file edits) while respecting forbidden paths, iteration caps, and human approval gates.
 
-    5. Available Tools (MCP Interface)
+Safety measures include iteration limits, forbidden-path enforcement, diagnostics logging, and human gating for high-risk repairs.
 
-    tinyMem provides a rich set of tools accessible through the MCP interface:
+## Tooling and Interfaces
 
-      1 ┌─────────────────────────────────────────────────────────────────────────────┐
-      2 │                               MCP Tools                                     │
-      3 ├─────────────────────────────────────────────────────────────────────────────┤
-      4 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐            │
-      5 │  │  memory_query   │  │  memory_recent  │  │  memory_write   │            │
-      6 │  │                 │  │                 │  │                 │            │
-      7 │  │  Search        │  │  Retrieve       │  │  Create new     │            │
-      8 │  │  memories      │  │  recent         │  │  memory         │            │
-      9 │  └─────────────────┘  └─────────────────┘  └─────────────────┘            │
-     10 │         │                       │                       │                  │
-     11 │         ▼                       ▼                       ▼                  │
-     12 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐            │
-     13 │  │  memory_stats   │  │  memory_health  │  │  memory_doctor  │            │
-     14 │  │                 │  │                 │  │                 │            │
-     15 │  │  Get memory    │  │  Check health   │  │  Run           │            │
-     16 │  │  statistics    │  │  status         │  │  diagnostics    │            │
-     17 │  └─────────────────┘  └─────────────────┘  └─────────────────┘            │
-     18 │         │                       │                                          │
-     19 │         ▼                       ▼                                          │
-     20 │  ┌─────────────────┐  ┌─────────────────┐                                  │
-     21 │  │  memory_ralph   │  │  Other tools   │                                  │
-     22 │  │                 │  │                 │                                  │
-     23 │  │  Execute       │  │  Future         │                                  │
-     24 │  │  autonomous    │  │  extensions     │                                  │
-     25 │  │  repair loop   │  │                 │                                  │
-     26 │  └─────────────────┘  └─────────────────┘                                  │
-     27 └─────────────────────────────────────────────────────────────────────────────┘
+tinyMem exposes capabilities through CLI commands, MCP tool calls, and the dashboard.
 
-     - memory_query: Search memories using full-text or semantic search
-     - memory_recent: Retrieve the most recent memories
-     - memory_write: Create a new memory entry with optional evidence
-     - memory_stats: Get statistics about stored memories
-     - memory_health: Check the health status of the memory system
-     - memory_doctor: Run diagnostics on the memory system
-     - memory_ralph: Execute an evidence-gated repair loop with memory-assisted recall
+| Interface | Purpose |
+| --- | --- |
+| `tinymem` CLI | Launches commands such as `memory_query`, `memory_recent`, `memory_write`, `memory_stats`, `memory_doctor`, `dashboard`, `proxy`, and `mcp` for dev workflows. |
+| MCP tools | `memory_query`, `memory_recent`, `memory_write`, `memory_stats`, `memory_health`, `memory_doctor`, `memory_ralph`, and others feed LLM agents. |
+| Proxy endpoints | `/v1/chat/completions` (OpenAI-compatible) forwards requests through tinyMem to enforce recall and filtering. |
+| Dashboard | Visualizes memory state, tinyTasks progress, and health signals to operators. |
 
-    6. Storage Layer
+All interfaces observe the same architecture, retrieving memories, verifying evidence, and updating tinyTasks, so every agent or operator experiences a consistent view of project state.
 
-     - SQLite Database: Stores memories, evidence, embeddings, and recall metrics
-     - Schema Versioning: Automatic migration system with version tracking
-     - Triggers: Maintains Full-Text Search (FTS) index synchronization
-     - Constraints: Enforces business rules at the database level
+## Operational Notes
 
-    7. Evidence System
-
-     - Evidence Types:
-       - file_exists (checks if a file exists)
-       - grep_hit (searches for patterns in files)
-       - cmd_exit0 (runs commands and checks exit codes)
-       - test_pass (runs tests and verifies success)
-
-     - Verification Process: Validates evidence before promoting claims to facts
-
-    8. Recall Engine
-
-     - Search Methods: Combines FTS5 and traditional LIKE-based search
-     - Scoring Algorithm: Ranks memories based on relevance to query
-     - Tier-Based Filtering: Applies recall limits based on memory importance
-     - Truth State Prioritization: Prefers verified memories over tentative ones
-
-    9. Chain-of-Verification (CoVe)
-
-     - Candidate Verification: Filters memory candidates based on confidence scores
-     - Recall Filtering: Removes irrelevant memories from recall results
-     - Confidence Threshold: Configurable threshold for accepting memories
-     - Statistics Tracking: Monitors verification effectiveness
-
-    Data Flow
-
-      1 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-      2 │   LLM Request   │───▶│  Proxy/MCP      │───▶│  Memory         │
-      3 │                 │    │  Server         │    │  Injection      │
-      4 └─────────────────┘    └─────────────────┘    └─────────────────┘
-      5                             │                           │
-      6                             ▼                           ▼
-      7                     ┌─────────────────┐    ┌─────────────────┐
-      8                     │  Recall         │───▶│  Memories       │
-      9                     │  Engine         │    │  Retrieved      │
-     10                     └─────────────────┘    └─────────────────┘
-     11                             │                           │
-     12                             ▼                           ▼
-     13                     ┌─────────────────┐    ┌─────────────────┐
-     14                     │  CoVe           │───▶│  Evidence        │
-     15                     │  Verification   │    │  Validation      │
-     16                     └─────────────────┘    └─────────────────┘
-     17                             │                           │
-     18                             ▼                           ▼
-     19                     ┌─────────────────┐    ┌─────────────────┐
-     20                     │  tinyTasks      │───▶│  Task Memory     │
-     21                     │  Integration    │    │  Storage         │
-     22                     └─────────────────┘    └─────────────────┘
-     23                             │                           │
-     24                             ▼                           ▼
-     25                     ┌─────────────────┐    ┌─────────────────┐
-     26                     │  Ralph Mode     │───▶│  Autonomous      │
-     27                     │  (Repair Loop)  │    │  Operations      │
-     28                     └─────────────────┘    └─────────────────┘
-
-    Operational Pathways
-
-    1. Proxy Server Pathway
-
-     1 1. LLM sends request to /v1/chat/completions
-     2 2. Proxy extracts user message
-     3 3. Recall engine searches for relevant memories (including tasks)
-     4 4. CoVe filters memories (if enabled)
-     5 5. Task safety filtering applied
-     6 6. Memories injected into system message
-     7 7. Request forwarded to backend LLM
-     8 8. Response captured for memory extraction
-     9 9. Auto-extraction identifies new memories
-
-    2. MCP Server Pathway
-
-     1 1. MCP client sends tool call
-     2 2. Server routes to appropriate handler
-     3 3. Memory operations performed (including task management)
-     4 4. Tools list returned when requested
-     5 5. Results formatted as MCP response
-     6 6. Response sent via stdout
-
-    3. CLI Operations Pathway
-
-     1 1. User runs tinymem command
-     2 2. App initialized with config
-     3 3. Services instantiated
-     4 4. Operation performed (query, write, etc.)
-     5 5. Results displayed to user
-
-    4. Memory Creation Pathway
-
-     1 1. Memory submitted (via proxy, MCP, or CLI)
-     2 2. Type validation occurs
-     3 3. Evidence verification (for facts)
-     4 4. Supersession logic applied
-     5 5. Stored in database with appropriate tier/state
-     6 6. FTS index updated
-
-    5. Memory Retrieval Pathway
-
-     1 1. Query received (empty = recent, non-empty = search)
-     2 2. FTS5 search performed (fallback to LIKE)
-     3 3. Results scored by relevance
-     4 4. Tier-based filtering applied
-     5 5. Truth state prioritization
-     6 6. Token and item limits enforced
-     7 7. CoVe filtering applied (if enabled)
-     8 8. Task safety filtering applied
-     9 9. Results returned
-
-    6. tinyTasks Management Pathway
-
-     1 1. Task created/updated via CLI or MCP
-     2 2. Task stored as special memory type
-     3 3. Task state synchronized with tinyTasks.md file
-     4 4. Task recall prioritized based on completion status
-     5 5. Task safety filtering applied (unfinished dormant tasks filtered out)
-
-    7. Ralph Mode Pathway
-
-     1 1. memory_ralph tool called with task, command, and evidence
-     2 2. Execute phase: Run verification command
-     3 3. Evidence phase: Check if evidence predicates are satisfied
-     4 4. If not satisfied:
-     5    a. Recall phase: Retrieve relevant memories
-     6    b. Repair phase: Apply fixes based on memories
-     7    c. Repeat until evidence satisfied or max iterations reached
-     8 5. Return results with iteration log and final diff
-
-    Key Features
-
-     1. Persistent Memory: Memories stored in SQLite database survive application restarts
-     2. Evidence-Based Validation: Facts require verified evidence to be created
-     3. Tiered Recall: Different types of memories recalled based on importance
-     4. CoVe Integration: Chain-of-Verification filters memories for quality
-     5. Autonomous Repair: Ralph system fixes issues with evidence verification
-     6. Multiple Interfaces: Proxy, MCP, and CLI access methods
-     7. Safety Mechanisms: Path validation, command whitelisting, and iteration limits
-     8. Metrics Collection: Tracks recall effectiveness and system performance
-     9. Task Management: Integrated tinyTasks system for persistent task tracking
-     10. Task Safety: Filters out unfinished dormant tasks unless explicitly requested
-     11. Rich Toolset: MCP provides multiple tools for memory operations
-     12. Ralph Mode: Autonomous repair loop with evidence-gated execution
-     13. Configurable: Extensive configuration options for all features
-
-    This architecture enables tinyMem to serve as a persistent, verifiable memory system for LLMs, enhancing their ability to maintain context and learn from past interactions
-    while maintaining data integrity through evidence-based validation. The tinyTasks integration provides a persistent task management system that allows for long-term project
-    continuity and task tracking. The Ralph mode offers an autonomous repair capability with safety controls, and the rich toolset provides flexible access to memory operations
-    through the MCP interface.
+- Versioned container images (e.g., GHCR) package the tinyMem binary along with schema migrations and dashboards.
+- Diagnostics (`tinyMem doctor`, `memory_doctor`) report on schema health, memory integrity, and task sync status.
+- The architecture ensures persistence, transparency, and evidence-backed memory retrieval for long-lived multi-agent workflows.

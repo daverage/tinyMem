@@ -60,38 +60,27 @@ type Server struct {
 	taskService     *tasks.Service
 	responseBuffer  chan ResponseCapture // Channel for capturing responses for extraction
 	shutdownCh      chan struct{}
+	processorDone   chan struct{} // Signals when processResponseCaptures has finished
 	shutdownOnce    sync.Once
 	server          *http.Server
 }
 
 // NewServer creates a new proxy server
 func NewServer(a *app.App) *Server {
-	// Create new instances of services using app.App's components
-	evidenceService := evidence.NewService(a.Core.DB, a.Core.Config)
-	var recallEngine recall.Recaller
-	if a.Core.Config.SemanticEnabled {
-		recallEngine = semantic.NewSemanticEngine(a.Core.DB, a.Memory, evidenceService, a.Core.Config, a.Core.Logger)
-	} else {
-		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Core.Config, a.Core.Logger, a.Core.DB.GetConnection())
-	}
-	injector := inject.NewMemoryInjector(recallEngine, a.Core.Logger, a.Core.Config.AlwaysIncludeUserPrompt)
-	llmClient := llm.NewClient(a.Core.Config)
-	extractor := extract.NewExtractor(evidenceService)
+	// Initialize shared recall services
+	recallServices := a.InitializeRecallServices()
+
+	// Create proxy-specific services
+	injector := inject.NewMemoryInjector(recallServices.RecallEngine, a.Core.Logger, a.Core.Config.AlwaysIncludeUserPrompt)
 	taskService := tasks.NewService(a.Core.DB, a.Memory, a.Project.ID)
 
-	// Create CoVe verifier if enabled (safely enabled by default)
-	if a.Core.Config.CoVeEnabled {
-		coveVerifier := cove.NewVerifier(a.Core.Config, llmClient)
-		coveVerifier.SetStatsStore(cove.NewSQLiteStatsStore(a.Core.DB.GetConnection()), a.Project.ID)
-		extractor.SetCoVeVerifier(coveVerifier)
-
-		// Also set CoVe verifier for recall filtering
-		injector.SetCoVeVerifier(coveVerifier)
-		a.Core.Logger.Info("CoVe enabled (extraction + recall filtering)",
-			zap.Float64("confidence_threshold", a.Core.Config.CoVeConfidenceThreshold),
-			zap.Int("max_candidates", a.Core.Config.CoVeMaxCandidates),
-		)
+	// Set CoVe verifier on injector for recall filtering if CoVe is enabled
+	if recallServices.CoVeVerifier != nil {
+		injector.SetCoVeVerifier(recallServices.CoVeVerifier)
 	}
+
+	// Create LLM client (always needed for proxy)
+	llmClient := llm.NewClient(a.Core.Config)
 
 	server := &Server{
 		app:             a, // Store the app instance
@@ -99,12 +88,13 @@ func NewServer(a *app.App) *Server {
 		injector:        injector,
 		llmClient:       llmClient,
 		memoryService:   a.Memory,
-		evidenceService: evidenceService,
-		recallEngine:    recallEngine,
-		extractor:       extractor,
+		evidenceService: recallServices.EvidenceService,
+		recallEngine:    recallServices.RecallEngine,
+		extractor:       recallServices.Extractor,
 		taskService:     taskService,
 		responseBuffer:  make(chan ResponseCapture, 10), // Buffered channel to prevent blocking
 		shutdownCh:      make(chan struct{}),
+		processorDone:   make(chan struct{}),
 	}
 
 	// Start a goroutine to process response captures
@@ -115,6 +105,8 @@ func NewServer(a *app.App) *Server {
 
 // processResponseCaptures processes captured responses for memory extraction
 func (s *Server) processResponseCaptures() {
+	defer close(s.processorDone) // Signal completion when exiting
+
 	for {
 		select {
 		case capture := <-s.responseBuffer:
@@ -126,7 +118,22 @@ func (s *Server) processResponseCaptures() {
 				}
 			}
 		case <-s.shutdownCh:
-			return
+			// Drain any remaining items in the buffer before exiting
+			s.app.Core.Logger.Debug("Draining response buffer before shutdown")
+			for {
+				select {
+				case capture := <-s.responseBuffer:
+					if s.extractor != nil {
+						err := s.extractor.ExtractAndQueueForVerification(capture.ResponseText, s.memoryService, s.evidenceService, s.app.Project.ID)
+						if err != nil {
+							s.app.Core.Logger.Error("Error extracting memories during shutdown", zap.Error(err))
+						}
+					}
+				default:
+					// Buffer is empty, safe to exit
+					return
+				}
+			}
 		}
 	}
 }
@@ -160,7 +167,12 @@ func (s *Server) Stop() error {
 	}
 
 	if s.server != nil {
+		// Signal shutdown to the processor goroutine
 		s.shutdownOnce.Do(func() { close(s.shutdownCh) })
+
+		// Wait for the processor to finish draining the buffer
+		<-s.processorDone
+
 		return s.server.Shutdown(context.Background())
 	}
 	return nil

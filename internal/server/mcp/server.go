@@ -64,41 +64,21 @@ type MCPError struct {
 func NewServer(a *app.App) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Create new instances of services using app.App's components
-	// These will now receive the logger from the app.App instance automatically
-	evidenceService := evidence.NewService(a.Core.DB, a.Core.Config)
-	var recallEngine recall.Recaller
-	if a.Core.Config.SemanticEnabled {
-		recallEngine = semantic.NewSemanticEngine(a.Core.DB, a.Memory, evidenceService, a.Core.Config, a.Core.Logger)
-	} else {
-		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Core.Config, a.Core.Logger, a.Core.DB.GetConnection())
-	}
-	extractor := extract.NewExtractor(evidenceService)
+	// Initialize shared recall services
+	recallServices := a.InitializeRecallServices()
+
+	// Create MCP-specific services
 	taskService := tasks.NewService(a.Core.DB, a.Memory, a.Project.ID)
-
-	// Initialize CoVe (Chain-of-Verification) for memory extraction filtering
-	var coveVerifier *cove.Verifier
-	if a.Core.Config.CoVeEnabled {
-		llmClient := llm.NewClient(a.Core.Config)
-		coveVerifier = cove.NewVerifier(a.Core.Config, llmClient)
-		coveVerifier.SetStatsStore(cove.NewSQLiteStatsStore(a.Core.DB.GetConnection()), a.Project.ID)
-		extractor.SetCoVeVerifier(coveVerifier)
-
-		a.Core.Logger.Info("CoVe enabled (extraction + recall filtering)",
-			zap.Float64("confidence_threshold", a.Core.Config.CoVeConfidenceThreshold),
-			zap.Int("max_candidates", a.Core.Config.CoVeMaxCandidates),
-		)
-	}
 
 	return &Server{
 		app:             a, // Store the app instance
 		config:          a.Core.Config,
 		db:              a.Core.DB,
 		memoryService:   a.Memory,
-		evidenceService: evidenceService,
-		recallEngine:    recallEngine,
-		extractor:       extractor,
-		coveVerifier:    coveVerifier,
+		evidenceService: recallServices.EvidenceService,
+		recallEngine:    recallServices.RecallEngine,
+		extractor:       recallServices.Extractor,
+		coveVerifier:    recallServices.CoVeVerifier,
 		taskService:     taskService,
 		ctx:             ctx,
 		cancel:          cancel,

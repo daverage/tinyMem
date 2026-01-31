@@ -1,13 +1,17 @@
 # tinyMem Claude Integration Guide
 
-tinyMem connects to the Claude ecosystem primarily through the **Model Context Protocol (MCP)**, which is natively supported by Claude Desktop and Claude CLI.
+> [!IMPORTANT]
+> This guide covers both **Claude Desktop** and **Claude Code (CLI)**. 
+> While both support MCP, the configuration methods for environment variables differ.
+
+tinyMem connects to the Claude ecosystem primarily through the **Model Context Protocol (MCP)**, which is natively supported by Claude Desktop and Claude Code.
 
 ## Quick Start: Which Mode?
 
 | Tool | Recommended Mode | Why |
 |------|------------------|-----|
 | **Claude Desktop** | **MCP** | Native integration; allows Claude to query memory on demand. |
-| **Claude CLI** (`claude`) | **MCP** | Native integration via `claude mcp` commands. |
+| **Claude Code** (`claude`) | **MCP** | Native CLI integration via `claude mcp` commands. |
 | **Claude SDKs** | **Proxy** | If using Anthropic SDKs manually, standard MCP isn't automatic; consider Proxy or custom MCP client. |
 
 ---
@@ -55,31 +59,36 @@ Claude Desktop can connect to tinyMem to read and write project memories.
 
 3.  Restart Claude Desktop.
 
-### Usage
-Once connected, you can ask Claude Desktop:
--   "What do we know about the database schema?"
--   "Remember that we are using Go 1.25."
--   "Check for any active tasks."
-
 ---
 
-## 2. Claude CLI (MCP)
+## 2. Claude Code CLI (MCP)
 
-The `claude` CLI tool also supports MCP.
+The `claude` CLI tool (Claude Code) supports MCP and provides a command-line interface for adding servers.
 
 ### Registration
 
-You can register tinyMem with a single command:
+You can register tinyMem using the `claude mcp add` command.
+
+**Method 1: Using `--env` flags (Claude Code CLI only)**
+This is the recommended way to pass configuration to tinyMem in the CLI.
 
 ```bash
+claude mcp add tinymem \
+  --env TINYMEM_LOG_LEVEL=debug \
+  --env TINYMEM_METRICS_ENABLED=true \
+  -- tinymem mcp
+```
+
+**Method 2: Using shell exports**
+Environment variables exported in your current shell session will be picked up when you add the server.
+
+```bash
+export TINYMEM_LOG_LEVEL=debug
 claude mcp add tinymem -- tinymem mcp
 ```
 
-Or with specific flags/env vars:
-
-```bash
-claude mcp add tinymem -- /usr/local/bin/tinymem mcp
-```
+**Method 3: Manual JSON editing**
+You can also manually edit the `claude_desktop_config.json` (which Claude Code also uses for its MCP settings).
 
 ### Verification
 
@@ -110,6 +119,7 @@ For a full list of configuration options, see [Configuration.md](Configuration.m
 | `TINYMEM_LOG_LEVEL` | Log verbosity (`debug`, `info`, `error`) | `info` |
 | `TINYMEM_METRICS_ENABLED` | Track recall stats | `false` |
 | `TINYMEM_RECALL_MAX_ITEMS` | Max memories to retrieve per query | `10` |
+
 
 ---
 
