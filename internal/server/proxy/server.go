@@ -14,14 +14,12 @@ import (
 
 	"github.com/daverage/tinymem/internal/app"
 	"github.com/daverage/tinymem/internal/config"
-	"github.com/daverage/tinymem/internal/cove"
 	"github.com/daverage/tinymem/internal/evidence"
 	"github.com/daverage/tinymem/internal/extract"
 	"github.com/daverage/tinymem/internal/inject"
 	"github.com/daverage/tinymem/internal/llm"
 	"github.com/daverage/tinymem/internal/memory"
 	"github.com/daverage/tinymem/internal/recall"
-	"github.com/daverage/tinymem/internal/semantic"
 	"github.com/daverage/tinymem/internal/tasks"
 	"go.uber.org/zap"
 )

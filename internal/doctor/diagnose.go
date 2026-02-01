@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/daverage/tinymem/internal/config"
+	"github.com/daverage/tinymem/internal/embedding"
 	"github.com/daverage/tinymem/internal/memory"
 	"github.com/daverage/tinymem/internal/storage"
 )
@@ -83,6 +84,7 @@ func (d *Runner) RunAll() *Diagnostics {
 	results = append(results, d.checkMemoryServiceHealth()...) // NEW CHECK
 	results = append(results, d.checkExternalDependencies()...)
 	results = append(results, d.checkFactEvidenceIntegrity()...)
+	results = append(results, d.checkFeatureStatus()...) // NEW: Feature status reporting
 
 	// Collect issues from failed checks
 	for _, result := range results {
@@ -533,7 +535,116 @@ func (d *Runner) checkStorageHealth() []CheckResult {
 		})
 	}
 
+	// Get database statistics
+	stats, err := d.db.GetDatabaseStats(d.config.DBPath)
+	if err != nil {
+		results = append(results, CheckResult{
+			Name:     "database_statistics",
+			Status:   "warn",
+			Message:  fmt.Sprintf("Could not retrieve database statistics: %v", err),
+			Severity: "warning",
+		})
+	} else {
+		// Format size in human-readable format
+		sizeStr := formatBytes(stats.FileSizeBytes)
+
+		// Build type breakdown
+		typeBreakdown := ""
+		for memType, count := range stats.MemoriesByType {
+			if typeBreakdown != "" {
+				typeBreakdown += ", "
+			}
+			typeBreakdown += fmt.Sprintf("%s: %d", memType, count)
+		}
+		if typeBreakdown == "" {
+			typeBreakdown = "none"
+		}
+
+		message := fmt.Sprintf("Size: %s, Total Memories: %d (%s), Fragmentation: %.1f%%",
+			sizeStr, stats.TotalMemories, typeBreakdown, stats.FragmentationPct)
+
+		// Add warnings for large databases or high fragmentation
+		status := "pass"
+		severity := "info"
+		if stats.FileSizeBytes > 100*1024*1024 { // >100 MB
+			status = "warn"
+			severity = "warning"
+			message += " [Large database - consider retention policy]"
+		}
+		if stats.FragmentationPct > 20.0 { // >20% fragmentation
+			status = "warn"
+			severity = "warning"
+			message += " [High fragmentation - run maintenance]"
+		}
+
+		results = append(results, CheckResult{
+			Name:     "database_statistics",
+			Status:   status,
+			Message:  message,
+			Severity: severity,
+		})
+
+		// Show maintenance status
+		if d.config.DBAutoMaintenance {
+			results = append(results, CheckResult{
+				Name:     "database_maintenance",
+				Status:   "pass",
+				Message:  fmt.Sprintf("Auto-maintenance enabled (every %d hours)", d.config.DBMaintenanceIntervalHours),
+				Severity: "info",
+			})
+		} else {
+			results = append(results, CheckResult{
+				Name:     "database_maintenance",
+				Status:   "warn",
+				Message:  "Auto-maintenance disabled - database may grow without bounds",
+				Severity: "warning",
+			})
+		}
+
+		// Show retention policy status
+		if d.config.DBRetentionMaxAgeDays > 0 || d.config.DBRetentionMaxCount > 0 {
+			var policy []string
+			if d.config.DBRetentionMaxAgeDays > 0 {
+				policy = append(policy, fmt.Sprintf("max age: %d days", d.config.DBRetentionMaxAgeDays))
+			}
+			if d.config.DBRetentionMaxCount > 0 {
+				policy = append(policy, fmt.Sprintf("max count: %d", d.config.DBRetentionMaxCount))
+			}
+			excludeMsg := ""
+			if len(d.config.DBRetentionExcludeTypes) > 0 {
+				excludeMsg = fmt.Sprintf(", excluding: %s", strings.Join(d.config.DBRetentionExcludeTypes, ", "))
+			}
+			results = append(results, CheckResult{
+				Name:     "database_retention",
+				Status:   "pass",
+				Message:  fmt.Sprintf("Retention policy: %s%s", strings.Join(policy, ", "), excludeMsg),
+				Severity: "info",
+			})
+		} else {
+			results = append(results, CheckResult{
+				Name:     "database_retention",
+				Status:   "info",
+				Message:  "No retention policy set - memories will be kept indefinitely",
+				Severity: "info",
+			})
+		}
+	}
+
 	return results
+}
+
+// formatBytes formats bytes in human-readable format
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
 func (d *Runner) checkFactEvidenceIntegrity() []CheckResult {
@@ -570,6 +681,198 @@ func (d *Runner) checkFactEvidenceIntegrity() []CheckResult {
 			Name:     "fact_evidence_integrity",
 			Status:   "pass",
 			Message:  "All facts have verified evidence",
+			Severity: "info",
+		})
+	}
+
+	return results
+}
+
+// checkFeatureStatus checks the status of tinyMem features (CoVe, Ralph, Semantic Search)
+func (d *Runner) checkFeatureStatus() []CheckResult {
+	var results []CheckResult
+
+	// ============================================================
+	// CoVe (Chain-of-Verification) Status
+	// ============================================================
+	if d.serverMode == MCPMode {
+		// In MCP mode, CoVe is handled by the calling AI
+		results = append(results, CheckResult{
+			Name:     "cove_status",
+			Status:   "pass",
+			Message:  "CoVe handled by calling AI in MCP mode (no external LLM needed)",
+			Severity: "info",
+		})
+	} else if d.config.CoVeEnabled {
+		// In Proxy/Standalone mode, check if external LLM is configured
+		coveMsg := fmt.Sprintf("CoVe enabled (threshold: %.2f, max candidates: %d, timeout: %ds",
+			d.config.CoVeConfidenceThreshold,
+			d.config.CoVeMaxCandidates,
+			d.config.CoVeTimeoutSeconds)
+		if d.config.CoVeModel != "" {
+			coveMsg += fmt.Sprintf(", model: %s", d.config.CoVeModel)
+		}
+		if d.config.CoVeRecallFilterEnabled {
+			coveMsg += ", recall filter: enabled"
+		}
+		coveMsg += ")"
+
+		results = append(results, CheckResult{
+			Name:     "cove_status",
+			Status:   "pass",
+			Message:  coveMsg,
+			Severity: "info",
+		})
+
+		// Check if LLM backend is reachable for CoVe (Proxy mode only)
+		if d.serverMode == ProxyMode && d.config.LLMBaseURL != "" {
+			llmErr := checkReachable(d.config.LLMBaseURL)
+			if llmErr != nil {
+				results = append(results, CheckResult{
+					Name:     "cove_llm_availability",
+					Status:   "fail",
+					Message:  fmt.Sprintf("CoVe enabled but LLM backend unreachable: %v", llmErr),
+					Severity: "warning",
+				})
+			} else {
+				results = append(results, CheckResult{
+					Name:     "cove_llm_availability",
+					Status:   "pass",
+					Message:  "CoVe LLM backend reachable",
+					Severity: "info",
+				})
+			}
+		} else if d.serverMode == MCPMode {
+			results = append(results, CheckResult{
+				Name:     "cove_llm_availability",
+				Status:   "pass",
+				Message:  "CoVe not needed in MCP mode (calling AI handles verification)",
+				Severity: "info",
+			})
+		}
+	} else {
+		results = append(results, CheckResult{
+			Name:     "cove_status",
+			Status:   "pass",
+			Message:  "CoVe disabled",
+			Severity: "info",
+		})
+	}
+
+	// ============================================================
+	// Ralph (Autonomous Repair Loop) Status
+	// ============================================================
+	if d.serverMode == MCPMode {
+		// In MCP mode, Ralph is handled by the calling AI
+		results = append(results, CheckResult{
+			Name:     "ralph_availability",
+			Status:   "pass",
+			Message:  "Ralph handled by calling AI in MCP mode (no external LLM needed)",
+			Severity: "info",
+		})
+	} else {
+		// In Proxy/Standalone mode, Ralph uses external LLM
+		results = append(results, CheckResult{
+			Name:     "ralph_availability",
+			Status:   "pass",
+			Message:  "Ralph available (autonomous repair with memory-guided fixes)",
+			Severity: "info",
+		})
+
+		// Check if LLM is available for Ralph (needs LLM for repairs in Proxy mode)
+		if d.serverMode == ProxyMode && d.config.LLMBaseURL != "" {
+			llmErr := checkReachable(d.config.LLMBaseURL)
+			if llmErr != nil {
+				results = append(results, CheckResult{
+					Name:     "ralph_llm_availability",
+					Status:   "fail",
+					Message:  fmt.Sprintf("Ralph requires LLM backend for repairs: %v", llmErr),
+					Severity: "warning",
+				})
+			} else {
+				results = append(results, CheckResult{
+					Name:     "ralph_llm_availability",
+					Status:   "pass",
+					Message:  "Ralph LLM backend reachable",
+					Severity: "info",
+				})
+			}
+		} else if d.serverMode == MCPMode {
+			results = append(results, CheckResult{
+				Name:     "ralph_llm_availability",
+				Status:   "pass",
+				Message:  "Ralph not needed in MCP mode (calling AI handles repairs)",
+				Severity: "info",
+			})
+		}
+	}
+
+	// ============================================================
+	// Semantic Search Status
+	// ============================================================
+	if d.config.SemanticEnabled {
+		// Determine embedding mode (local vs HTTP)
+		embedMode := "unknown"
+		embedDetails := ""
+
+		// Try to create local embedder to check if available
+		localEmbedder, localErr := embedding.NewLocalEmbedder()
+		if localErr == nil && localEmbedder != nil {
+			embedMode = "local (embedded model)"
+			embedDetails = "Using built-in embedding model (offline capable)"
+			// Clean up the embedder
+			localEmbedder.Close()
+		} else if d.config.EmbeddingBaseURL != "" {
+			embedMode = "HTTP"
+			embedDetails = fmt.Sprintf("Using HTTP endpoint: %s (model: %s)",
+				d.config.EmbeddingBaseURL,
+				d.config.EmbeddingModel)
+
+			// Check if HTTP endpoint is reachable
+			embedErr := checkReachable(d.config.EmbeddingBaseURL)
+			if embedErr != nil {
+				results = append(results, CheckResult{
+					Name:     "semantic_embedding_reachability",
+					Status:   "fail",
+					Message:  fmt.Sprintf("Semantic search enabled but embedding endpoint unreachable: %v", embedErr),
+					Severity: "error",
+				})
+			} else {
+				results = append(results, CheckResult{
+					Name:     "semantic_embedding_reachability",
+					Status:   "pass",
+					Message:  "Embedding HTTP endpoint reachable",
+					Severity: "info",
+				})
+			}
+		} else {
+			embedMode = "disabled (no embedder available)"
+			embedDetails = "Local embedder not available and no HTTP endpoint configured"
+			results = append(results, CheckResult{
+				Name:     "semantic_embedding_availability",
+				Status:   "fail",
+				Message:  "Semantic search enabled but no embedding provider available",
+				Severity: "error",
+			})
+		}
+
+		semanticMsg := fmt.Sprintf("Semantic search enabled (mode: %s, hybrid weight: %.2f)",
+			embedMode, d.config.HybridWeight)
+		if embedDetails != "" {
+			semanticMsg += " - " + embedDetails
+		}
+
+		results = append(results, CheckResult{
+			Name:     "semantic_search_status",
+			Status:   "pass",
+			Message:  semanticMsg,
+			Severity: "info",
+		})
+	} else {
+		results = append(results, CheckResult{
+			Name:     "semantic_search_status",
+			Status:   "pass",
+			Message:  "Semantic search disabled (using lexical search only)",
 			Severity: "info",
 		})
 	}

@@ -1,3 +1,5 @@
+//go:build !nollm
+
 package ralph
 
 import (
@@ -19,21 +21,21 @@ import (
 
 // Engine orchestrates the Ralph Wiggum loop
 type Engine struct {
-	cfg       *config.Config
-	mem       *memory.Service
-	llmClient *llm.Client
-	projectID string
-	logger    *zap.Logger
+	cfg         *config.Config
+	mem         *memory.Service
+	llmProvider llm.Provider
+	projectID   string
+	logger      *zap.Logger
 }
 
-// NewEngine creates a new Ralph engine
-func NewEngine(cfg *config.Config, mem *memory.Service, projectID string, logger *zap.Logger) *Engine {
+// NewEngine creates a new Ralph engine with LLM provider
+func NewEngine(cfg *config.Config, mem *memory.Service, llmProvider llm.Provider, projectID string, logger *zap.Logger) *Engine {
 	return &Engine{
-		cfg:       cfg,
-		mem:       mem,
-		llmClient: llm.NewClient(cfg),
-		projectID: projectID,
-		logger:    logger,
+		cfg:         cfg,
+		mem:         mem,
+		llmProvider: llmProvider,
+		projectID:   projectID,
+		logger:      logger,
 	}
 }
 
@@ -334,7 +336,7 @@ func (e *Engine) repair(ctx context.Context, opt Options, state *IterationState,
 		},
 	}
 
-	resp, err := e.llmClient.ChatCompletions(ctx, req)
+	resp, err := e.llmProvider.ChatCompletions(ctx, req)
 	if err != nil {
 		return fmt.Errorf("LLM call failed: %w", err)
 	}

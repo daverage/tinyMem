@@ -66,10 +66,12 @@ As the project grew, we realized that memory alone wasn't enough. Reliability re
 
 *   **Evidence-Based Truth**: Typed memories (`fact`, `claim`, `decision`, etc.). Only verified claims become facts.
 *   **Chain-of-Verification (CoVe)**: LLM-based quality filter to reduce hallucinations before storage and improve recall relevance (enabled by default). See [docs/COVE.md](docs/COVE.md) for details.
+*   **Built-in Semantic Search**: Embedded vector embeddings for offline semantic search (full builds) or HTTP fallback. See [docs/EMBEDDINGS.md](docs/EMBEDDINGS.md) for details.
+*   **Automatic Database Maintenance**: Self-healing database with automatic compaction (PRAGMA optimize + incremental vacuum) and optional retention policies to prevent unbounded growth.
 *   **Local & Private**: Runs as a single binary. Data lives in `.tinyMem/`.
 *   **Zero Configuration**: Works out of the box.
 *   **Dual Mode**: Works as an HTTP Proxy or Model Context Protocol (MCP) server.
-*   **Hybrid Search**: FTS (lexical) + Optional Semantic Search.
+*   **Hybrid Search**: FTS (lexical) + Semantic (vector) search with configurable weighting.
 *   **Recall Tiers**: Prioritizes `Always` (facts) > `Contextual` (decisions) > `Opportunistic` (notes).
 
 ---

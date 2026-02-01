@@ -1,0 +1,51 @@
+# tinyMem Database Maintenance Configuration Example
+# This example shows how to configure automatic database maintenance and retention policies
+
+[database]
+# Enable automatic database maintenance (PRAGMA optimize + incremental_vacuum)
+# Default: true
+auto_maintenance = true
+
+# How often to run maintenance (in hours)
+# Default: 24 (daily)
+maintenance_interval_hours = 24
+
+[database.retention]
+# Maximum age of memories in days (0 = unlimited)
+# Memories older than this will be automatically deleted
+# Default: 0 (unlimited)
+max_age_days = 90  # Example: Keep memories for 90 days
+
+# Maximum number of memories to keep (0 = unlimited)
+# Only the N most recent memories will be kept
+# Default: 0 (unlimited)
+max_count = 10000  # Example: Keep only 10,000 most recent memories
+
+# Memory types to exclude from retention policy
+# These types will never be automatically deleted
+# Default: ["fact"]
+exclude_types = ["fact", "decision"]  # Example: Preserve facts and decisions
+
+# Example configurations for different use cases:
+
+# 1. Long-term project (keep everything, just maintain)
+# auto_maintenance = true
+# maintenance_interval_hours = 168  # Weekly
+# max_age_days = 0
+# max_count = 0
+
+# 2. Short-lived sessions (aggressive cleanup)
+# auto_maintenance = true
+# maintenance_interval_hours = 1  # Hourly
+# max_age_days = 7  # One week
+# exclude_types = ["fact", "decision"]
+
+# 3. Size-limited (keep only recent memories)
+# auto_maintenance = true
+# maintenance_interval_hours = 24  # Daily
+# max_count = 5000  # Keep 5,000 most recent
+# exclude_types = ["fact"]
+
+# 4. Disable auto-maintenance (manual only)
+# auto_maintenance = false
+# (retention policies won't run automatically)

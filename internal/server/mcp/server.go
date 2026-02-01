@@ -19,7 +19,6 @@ import (
 	"github.com/daverage/tinymem/internal/memory"
 	"github.com/daverage/tinymem/internal/ralph"
 	"github.com/daverage/tinymem/internal/recall"
-	"github.com/daverage/tinymem/internal/semantic"
 	"github.com/daverage/tinymem/internal/storage"
 	"github.com/daverage/tinymem/internal/tasks"
 	"go.uber.org/zap" // Add zap import
@@ -35,6 +34,7 @@ type Server struct {
 	recallEngine    recall.Recaller
 	extractor       *extract.Extractor
 	coveVerifier    *cove.Verifier
+	llmProvider     llm.Provider // LLM provider for CoVe and Ralph
 	taskService     *tasks.Service
 	ctx             context.Context
 	cancel          context.CancelFunc
@@ -79,6 +79,7 @@ func NewServer(a *app.App) *Server {
 		recallEngine:    recallServices.RecallEngine,
 		extractor:       recallServices.Extractor,
 		coveVerifier:    recallServices.CoVeVerifier,
+		llmProvider:     recallServices.LLMProvider,
 		taskService:     taskService,
 		ctx:             ctx,
 		cancel:          cancel,
@@ -277,6 +278,14 @@ func (s *Server) handleToolsList(req *MCPRequest) {
 			},
 		},
 		{
+			"name":        "memory_eval_stats",
+			"description": "Get detailed metrics for evaluation and scoring.",
+			"inputSchema": map[string]interface{}{
+				"type":       "object",
+				"properties": map[string]interface{}{},
+			},
+		},
+		{
 			"name":        "memory_ralph",
 			"description": "Execute an evidence-gated repair loop with memory-assisted recall and bounded autonomous retries. NOTE: This may take several minutes to complete and may exceed default client timeouts.",
 			"inputSchema": map[string]interface{}{
@@ -416,6 +425,8 @@ func (s *Server) handleToolCall(req *MCPRequest) {
 		s.handleMemoryHealth(req)
 	case "memory_doctor":
 		s.handleMemoryDoctor(req)
+	case "memory_eval_stats":
+		s.handleMemoryEvalStats(req)
 	case "memory_ralph":
 		s.handleMemoryRalph(req, argsBytes)
 	default:
@@ -433,8 +444,12 @@ func (s *Server) handleMemoryRalph(req *MCPRequest, args json.RawMessage) {
 		return
 	}
 
-	// Initialize Ralph engine
-	engine := ralph.NewEngine(s.config, s.memoryService, s.app.Project.ID, s.app.Core.Logger)
+	// Initialize Ralph engine with LLM provider
+	if s.llmProvider == nil {
+		s.sendError(req.ID, -32603, "Ralph requires LLM provider - build with -tags llmgen or configure external LLM")
+		return
+	}
+	engine := ralph.NewEngine(s.config, s.memoryService, s.llmProvider, s.app.Project.ID, s.app.Core.Logger)
 
 	// Execute the loop
 	result, err := engine.ExecuteLoop(context.Background(), options)
@@ -652,6 +667,7 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 				Type:    string(memType),
 				Summary: writeReq.Summary,
 				Detail:  writeReq.Detail,
+				Score:   1.0, // Write operations default to pass-through (no semantic score)
 			},
 		}
 		verified, err := s.coveVerifier.VerifyCandidates(candidates)

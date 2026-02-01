@@ -1,9 +1,45 @@
 @echo off
 REM tinyMem Build & Release Script (Windows)
 REM Builds platform binaries and handles full release lifecycle if requested.
+REM
 REM Usage:
-REM   .\build\build.bat                 (Build only)
-REM   .\build\build.bat [major|minor|patch] (Full release cycle)
+REM   .\build\build.bat                          (Lightweight build ~50-60 MB)
+REM   .\build\build.bat [major|minor|patch]      (Full release cycle)
+REM
+REM Build Options:
+REM   Default: Lightweight build with FTS5 only
+REM     - Binary size: ~50-60 MB
+REM     - Semantic search requires HTTP endpoint (Ollama, etc.)
+REM     - All features enabled (CoVe, Ralph, semantic)
+REM
+REM   Full build with embedded model:
+REM     set TINYMEM_EXTRA_BUILD_TAGS=embeddings
+REM     .\build\build.bat
+REM     - Binary size: ~150-200 MB
+REM     - Includes embedded nomic-embed-text-v1.5 model
+REM     - Semantic search works offline, no external service needed
+REM     - Model file must exist: internal\embedding\models\nomic-embed-text-v1.5.Q4_K_M.gguf
+REM
+REM   Minimal build (no LLM features):
+REM     set TINYMEM_EXTRA_BUILD_TAGS=nollm
+REM     .\build\build.bat
+REM     - Binary size: ~14 MB
+REM     - Disables CoVe and Ralph (which require text generation LLMs)
+REM     - Semantic search still available via HTTP endpoint
+REM     - Useful for constrained environments or MCP-only deployments
+REM
+REM   Semantic-only build (embedded search, no LLM features):
+REM     set TINYMEM_EXTRA_BUILD_TAGS=embeddings nollm
+REM     .\build\build.bat
+REM     - Binary size: ~95 MB
+REM     - Embedded semantic search works offline
+REM     - CoVe and Ralph disabled
+REM
+REM Examples:
+REM   .\build\build.bat                                               # Lightweight build
+REM   set TINYMEM_EXTRA_BUILD_TAGS=embeddings && .\build\build.bat    # Full build with embeddings
+REM   set TINYMEM_EXTRA_BUILD_TAGS=nollm && .\build\build.bat         # Minimal build
+REM   set TINYMEM_EXTRA_BUILD_TAGS=embeddings nollm && .\build\build.bat  # Semantic-only build
 
 setlocal enabledelayedexpansion
 

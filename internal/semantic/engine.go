@@ -4,19 +4,21 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"sort"
+
 	"github.com/daverage/tinymem/internal/config"
+	"github.com/daverage/tinymem/internal/embedding"
 	"github.com/daverage/tinymem/internal/evidence"
 	"github.com/daverage/tinymem/internal/memory"
 	"github.com/daverage/tinymem/internal/recall"
 	"github.com/daverage/tinymem/internal/storage"
 	"go.uber.org/zap"
-	"sort"
 )
 
 // SemanticEngine enhances recall with semantic similarity
 type SemanticEngine struct {
 	db              *storage.DB
-	embeddingClient *EmbeddingClient
+	embedder        embedding.Embedder
 	memoryService   *memory.Service
 	evidenceService *evidence.Service
 	config          *config.Config
@@ -30,10 +32,11 @@ func NewSemanticEngine(
 	evidenceService *evidence.Service,
 	cfg *config.Config,
 	logger *zap.Logger,
+	embedder embedding.Embedder,
 ) *SemanticEngine {
 	return &SemanticEngine{
 		db:              db,
-		embeddingClient: NewEmbeddingClient(cfg),
+		embedder:        embedder,
 		memoryService:   memoryService,
 		evidenceService: evidenceService,
 		config:          cfg,
@@ -52,7 +55,7 @@ func (s *SemanticEngine) SemanticRecall(options recall.RecallOptions) ([]recall.
 	var queryEmbedding []float32
 	if options.Query != "" {
 		var err error
-		queryEmbedding, err = s.embeddingClient.GenerateEmbedding(options.Query)
+		queryEmbedding, err = s.embedder.GenerateEmbedding(options.Query)
 		if err != nil {
 			// If embedding fails, fall back to lexical search only
 			// This ensures the system remains functional even if semantic is unavailable
@@ -89,19 +92,20 @@ func (s *SemanticEngine) SemanticRecall(options recall.RecallOptions) ([]recall.
 			text += " " + mem.Detail
 		}
 
-		embedding, err := s.getOrCreateEmbedding(mem.ID, text)
+		embVec, err := s.getOrCreateEmbedding(mem.ID, text)
 		if err != nil {
 			continue // Skip if we can't get embedding
 		}
 
 		if queryEmbedding != nil {
-			similarity := CosineSimilarity(queryEmbedding, embedding)
+			similarity := embedding.CosineSimilarity(queryEmbedding, embVec)
 			semanticScores[mem.ID] = similarity
 		}
 	}
 
 	// Get lexical scores using the standard recall engine
 	lexicalResults, err := s.fallbackLexicalRecall(recall.RecallOptions{
+		ProjectID:         options.ProjectID, // CRITICAL: Must include ProjectID!
 		Query:             options.Query,
 		MaxItems:          100, // Get more for combination
 		MaxTokens:         0,   // Handle token budgeting after combination
@@ -112,23 +116,40 @@ func (s *SemanticEngine) SemanticRecall(options recall.RecallOptions) ([]recall.
 		return nil, err
 	}
 
-	// Combine lexical and semantic scores
-	combinedResults := make([]recall.RecallResult, 0, len(lexicalResults))
+	// Create lexical score map for quick lookup
+	lexicalScores := make(map[int64]float64)
+	lexicalTokens := make(map[int64]int)
 	for _, result := range lexicalResults {
-		// Normalize scores to 0-1 range if needed
-		lexicalScore := result.Score
-		semanticScore := semanticScores[result.Memory.ID]
+		lexicalScores[result.Memory.ID] = result.Score
+		lexicalTokens[result.Memory.ID] = result.Tokens
+	}
+
+	// Combine lexical and semantic scores for ALL memories
+	// This allows semantic search to find results lexical search missed
+	combinedResults := make([]recall.RecallResult, 0)
+	for _, mem := range allMemories {
+		lexicalScore := lexicalScores[mem.ID] // 0 if not found by lexical search
+		semanticScore := semanticScores[mem.ID] // 0 if no embedding
 
 		// Combine scores with configurable weights
-		// Using equal weights for simplicity; in practice, these could be tuned
 		lexicalWeight := 1.0 - s.config.HybridWeight
 		combinedScore := lexicalWeight*normalizeScore(lexicalScore) + s.config.HybridWeight*semanticScore
 
-		combinedResults = append(combinedResults, recall.RecallResult{
-			Memory: result.Memory,
-			Score:  combinedScore,
-			Tokens: result.Tokens,
-		})
+		// Only include if combined score is above threshold
+		// With 70% semantic weight, semantic score of 0.3 or lexical match is enough
+		if combinedScore > 0.1 { // Minimum threshold to avoid noise
+			tokens := lexicalTokens[mem.ID]
+			if tokens == 0 {
+				// Estimate tokens for memories not in lexical results
+				tokens = len(mem.Summary)/4 + len(mem.Detail)/4
+			}
+
+			combinedResults = append(combinedResults, recall.RecallResult{
+				Memory: mem,
+				Score:  combinedScore,
+				Tokens: tokens,
+			})
+		}
 	}
 
 	// Sort by combined score
@@ -198,23 +219,23 @@ func (s *SemanticEngine) Recall(options recall.RecallOptions) ([]recall.RecallRe
 // getOrCreateEmbedding gets an existing embedding or creates a new one
 func (s *SemanticEngine) getOrCreateEmbedding(memoryID int64, text string) ([]float32, error) {
 	// Try to get from database first
-	embedding, err := s.getEmbeddingFromDB(memoryID)
+	embVec, err := s.getEmbeddingFromDB(memoryID)
 	if err != nil {
 		// If not found in DB, generate new embedding
-		embedding, err = s.embeddingClient.GenerateEmbedding(text)
+		embVec, err = s.embedder.GenerateEmbedding(text)
 		if err != nil {
 			return nil, err
 		}
 
 		// Store the new embedding in the database
-		err = s.storeEmbeddingInDB(memoryID, embedding)
+		err = s.storeEmbeddingInDB(memoryID, embVec)
 		if err != nil {
 			// Log error but don't fail the operation
 			// The embedding can still be used even if not stored
 		}
 	}
 
-	return embedding, nil
+	return embVec, nil
 }
 
 // getEmbeddingFromDB retrieves an embedding from the database

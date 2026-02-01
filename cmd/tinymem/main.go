@@ -23,7 +23,6 @@ import (
 	"github.com/daverage/tinymem/internal/logging"
 	"github.com/daverage/tinymem/internal/memory"
 	"github.com/daverage/tinymem/internal/recall"
-	"github.com/daverage/tinymem/internal/semantic"
 	"github.com/daverage/tinymem/internal/server/mcp"
 	"github.com/daverage/tinymem/internal/server/proxy"
 	"github.com/daverage/tinymem/internal/version"
@@ -156,15 +155,10 @@ var runCmd = &cobra.Command{
 
 // setupServices creates and returns the common services used across different commands
 func setupServices(a *app.App) (*evidence.Service, recall.Recaller, *inject.MemoryInjector) {
-	evidenceService := evidence.NewService(a.Core.DB, a.Core.Config)
-	var recallEngine recall.Recaller
-	if a.Core.Config.SemanticEnabled {
-		recallEngine = semantic.NewSemanticEngine(a.Core.DB, a.Memory, evidenceService, a.Core.Config, a.Core.Logger)
-	} else {
-		recallEngine = recall.NewEngine(a.Memory, evidenceService, a.Core.Config, a.Core.Logger, a.Core.DB.GetConnection())
-	}
-	injector := inject.NewMemoryInjector(recallEngine, a.Core.Logger, a.Core.Config.AlwaysIncludeUserPrompt)
-	return evidenceService, recallEngine, injector
+	// Use the centralized initialization from app package
+	recallServices := a.InitializeRecallServices()
+	injector := inject.NewMemoryInjector(recallServices.RecallEngine, a.Core.Logger, a.Core.Config.AlwaysIncludeUserPrompt)
+	return recallServices.EvidenceService, recallServices.RecallEngine, injector
 }
 
 func runRunCmd(a *app.App, cmd *cobra.Command, args []string) {
@@ -243,8 +237,28 @@ func runHealthCmd(a *app.App, cmd *cobra.Command, args []string) {
 		}
 	}
 
+	// Feature status reporting
+	fmt.Println("\n📊 Feature Status:")
+
+	// CoVe status
+	if a.Core.Config.CoVeEnabled {
+		fmt.Printf("  ✓ CoVe: Enabled (threshold: %.2f)\n", a.Core.Config.CoVeConfidenceThreshold)
+	} else {
+		fmt.Println("  ○ CoVe: Disabled")
+	}
+
+	// Ralph status
+	fmt.Println("  ✓ Ralph: Available (autonomous repair)")
+
+	// Semantic search status
+	if a.Core.Config.SemanticEnabled {
+		fmt.Printf("  ✓ Semantic Search: Enabled (hybrid weight: %.2f)\n", a.Core.Config.HybridWeight)
+	} else {
+		fmt.Println("  ○ Semantic Search: Disabled (lexical only)")
+	}
+
 	a.Core.Logger.Info("Health check complete.")
-	fmt.Println("Health check complete.")
+	fmt.Println("\nHealth check complete.")
 }
 
 // Helper function to check if proxy is listening on a port
@@ -428,13 +442,13 @@ var queryCmd = &cobra.Command{
 }
 
 func runQueryCmd(a *app.App, cmd *cobra.Command, args []string) {
-	// Set up services using the app instance
-	_, recallEngine, _ := setupServices(a)
-	defer recallEngine.Close()
+	// Initialize recall services (includes CoVe verifier)
+	recallServices := a.InitializeRecallServices()
+	defer recallServices.RecallEngine.Close()
 
 	// Perform search
 	query := strings.Join(args, " ")
-	results, err := recallEngine.Recall(recall.RecallOptions{
+	results, err := recallServices.RecallEngine.Recall(recall.RecallOptions{
 		ProjectID: a.Project.ID,
 		Query:     query,
 		MaxItems:  a.Core.Config.RecallMaxItems,
@@ -443,6 +457,41 @@ func runQueryCmd(a *app.App, cmd *cobra.Command, args []string) {
 		a.Core.Logger.Error("Search failed", zap.Error(err))
 		fmt.Printf("❌ Search failed: %v\n", err)
 		return
+	}
+
+	// Apply CoVe filtering if enabled
+	if recallServices.CoVeVerifier != nil && a.Core.Config.CoVeEnabled {
+		// Convert recall results to CandidateMemory for CoVe filtering
+		candidates := make([]cove.CandidateMemory, len(results))
+		for i, result := range results {
+			candidates[i] = cove.CandidateMemory{
+				ID:      fmt.Sprintf("%d", result.Memory.ID), // Convert int64 to string
+				Type:    string(result.Memory.Type),
+				Summary: result.Memory.Summary,
+				Detail:  result.Memory.Detail,
+				Score:   result.Score, // Use semantic similarity score as confidence
+			}
+		}
+
+		// Apply CoVe filtering (uses semantic scores, no LLM)
+		filtered, err := recallServices.CoVeVerifier.VerifyCandidates(candidates)
+		if err != nil {
+			a.Core.Logger.Warn("CoVe filtering failed, returning unfiltered results", zap.Error(err))
+		} else {
+			// Map filtered candidates back to results
+			filteredIDs := make(map[string]bool)
+			for _, cand := range filtered {
+				filteredIDs[cand.ID] = true
+			}
+
+			filteredResults := make([]recall.RecallResult, 0, len(filtered))
+			for _, result := range results {
+				if filteredIDs[fmt.Sprintf("%d", result.Memory.ID)] {
+					filteredResults = append(filteredResults, result)
+				}
+			}
+			results = filteredResults
+		}
 	}
 
 	fmt.Printf("Search results for '%s':\n\n", query)

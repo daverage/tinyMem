@@ -3,6 +3,8 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/daverage/tinymem/internal/config"
 
@@ -700,4 +702,214 @@ func (db *DB) Close() error {
 // GetConnection returns the underlying database connection
 func (db *DB) GetConnection() *sql.DB {
 	return db.conn
+}
+
+// DatabaseStats holds statistics about the database
+type DatabaseStats struct {
+	FileSizeBytes      int64
+	TotalMemories      int
+	MemoriesByType     map[string]int
+	OldestMemoryTime   string
+	NewestMemoryTime   string
+	FragmentationPct   float64
+}
+
+// RunMaintenance performs database optimization and cleanup
+func (db *DB) RunMaintenance() error {
+	// Run PRAGMA optimize to analyze query patterns
+	_, err := db.conn.Exec("PRAGMA optimize")
+	if err != nil {
+		return fmt.Errorf("failed to run PRAGMA optimize: %w", err)
+	}
+
+	// Run incremental vacuum to reclaim deleted space
+	_, err = db.conn.Exec("PRAGMA incremental_vacuum")
+	if err != nil {
+		return fmt.Errorf("failed to run incremental vacuum: %w", err)
+	}
+
+	return nil
+}
+
+// GetDatabaseStats returns statistics about the database
+func (db *DB) GetDatabaseStats(dbPath string) (*DatabaseStats, error) {
+	stats := &DatabaseStats{
+		MemoriesByType: make(map[string]int),
+	}
+
+	// Get file size
+	fileInfo, err := os.Stat(dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat database file: %w", err)
+	}
+	stats.FileSizeBytes = fileInfo.Size()
+
+	// Get total memory count
+	err = db.conn.QueryRow("SELECT COUNT(*) FROM memories").Scan(&stats.TotalMemories)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count memories: %w", err)
+	}
+
+	// Get memories by type
+	rows, err := db.conn.Query("SELECT type, COUNT(*) FROM memories GROUP BY type")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get memories by type: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var memType string
+		var count int
+		if err := rows.Scan(&memType, &count); err != nil {
+			return nil, fmt.Errorf("failed to scan memory type count: %w", err)
+		}
+		stats.MemoriesByType[memType] = count
+	}
+
+	// Get oldest memory timestamp
+	err = db.conn.QueryRow("SELECT MIN(created_at) FROM memories").Scan(&stats.OldestMemoryTime)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, fmt.Errorf("failed to get oldest memory: %w", err)
+	}
+
+	// Get newest memory timestamp
+	err = db.conn.QueryRow("SELECT MAX(created_at) FROM memories").Scan(&stats.NewestMemoryTime)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, fmt.Errorf("failed to get newest memory: %w", err)
+	}
+
+	// Calculate fragmentation (freelist pages / total pages)
+	var freelistCount, pageCount int
+	err = db.conn.QueryRow("PRAGMA freelist_count").Scan(&freelistCount)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get freelist count: %w", err)
+	}
+	err = db.conn.QueryRow("PRAGMA page_count").Scan(&pageCount)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get page count: %w", err)
+	}
+	if pageCount > 0 {
+		stats.FragmentationPct = float64(freelistCount) / float64(pageCount) * 100.0
+	}
+
+	return stats, nil
+}
+
+// RetentionPolicy defines rules for automatic memory cleanup
+type RetentionPolicy struct {
+	MaxAgeDays   int
+	MaxCount     int
+	ExcludeTypes []string
+	DryRun       bool
+}
+
+// ApplyRetentionPolicy deletes old memories according to the retention policy
+func (db *DB) ApplyRetentionPolicy(policy RetentionPolicy) (int, error) {
+	var deletedCount int
+
+	// Build exclusion clause
+	excludeClause := ""
+	if len(policy.ExcludeTypes) > 0 {
+		placeholders := make([]string, len(policy.ExcludeTypes))
+		for i := range policy.ExcludeTypes {
+			placeholders[i] = "?"
+		}
+		excludeClause = fmt.Sprintf(" AND type NOT IN (%s)", strings.Join(placeholders, ","))
+	}
+
+	// Age-based retention
+	if policy.MaxAgeDays > 0 {
+		query := fmt.Sprintf(`
+			DELETE FROM memories
+			WHERE created_at < datetime('now', '-%d days')%s
+		`, policy.MaxAgeDays, excludeClause)
+
+		if policy.DryRun {
+			// Count what would be deleted
+			countQuery := fmt.Sprintf(`
+				SELECT COUNT(*) FROM memories
+				WHERE created_at < datetime('now', '-%d days')%s
+			`, policy.MaxAgeDays, excludeClause)
+
+			args := make([]interface{}, len(policy.ExcludeTypes))
+			for i, t := range policy.ExcludeTypes {
+				args[i] = t
+			}
+
+			err := db.conn.QueryRow(countQuery, args...).Scan(&deletedCount)
+			if err != nil {
+				return 0, fmt.Errorf("failed to count memories for age-based retention: %w", err)
+			}
+		} else {
+			args := make([]interface{}, len(policy.ExcludeTypes))
+			for i, t := range policy.ExcludeTypes {
+				args[i] = t
+			}
+
+			result, err := db.conn.Exec(query, args...)
+			if err != nil {
+				return 0, fmt.Errorf("failed to delete old memories: %w", err)
+			}
+			affected, _ := result.RowsAffected()
+			deletedCount += int(affected)
+		}
+	}
+
+	// Count-based retention (keep only N most recent)
+	if policy.MaxCount > 0 {
+		query := fmt.Sprintf(`
+			DELETE FROM memories
+			WHERE id NOT IN (
+				SELECT id FROM memories
+				WHERE 1=1%s
+				ORDER BY created_at DESC
+				LIMIT ?
+			)%s
+		`, excludeClause, excludeClause)
+
+		if policy.DryRun {
+			// Count what would be deleted
+			countQuery := fmt.Sprintf(`
+				SELECT COUNT(*) FROM memories
+				WHERE id NOT IN (
+					SELECT id FROM memories
+					WHERE 1=1%s
+					ORDER BY created_at DESC
+					LIMIT ?
+				)%s
+			`, excludeClause, excludeClause)
+
+			args := []interface{}{policy.MaxCount}
+			for _, t := range policy.ExcludeTypes {
+				args = append(args, t)
+			}
+			for _, t := range policy.ExcludeTypes {
+				args = append(args, t)
+			}
+
+			var countBasedDeletes int
+			err := db.conn.QueryRow(countQuery, args...).Scan(&countBasedDeletes)
+			if err != nil {
+				return deletedCount, fmt.Errorf("failed to count memories for count-based retention: %w", err)
+			}
+			deletedCount += countBasedDeletes
+		} else {
+			args := []interface{}{policy.MaxCount}
+			for _, t := range policy.ExcludeTypes {
+				args = append(args, t)
+			}
+			for _, t := range policy.ExcludeTypes {
+				args = append(args, t)
+			}
+
+			result, err := db.conn.Exec(query, args...)
+			if err != nil {
+				return deletedCount, fmt.Errorf("failed to delete excess memories: %w", err)
+			}
+			affected, _ := result.RowsAffected()
+			deletedCount += int(affected)
+		}
+	}
+
+	return deletedCount, nil
 }

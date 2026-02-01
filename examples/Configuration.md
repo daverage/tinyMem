@@ -46,7 +46,47 @@ Settings for the internal LLM client (used for CoVe, summarization, and proxying
 Settings for memory retrieval.
 -   `max_items` (integer): Maximum number of memories to retrieve per query. Default: `10`.
 -   `max_tokens` (integer): Maximum total tokens for injected context. Default: `2000`.
--   `semantic_enabled` (boolean): Enable semantic search (requires embedding model). Default: `false`.
+-   `semantic_enabled` (boolean): Enable semantic search. Full builds use embedded model, lightweight builds require HTTP endpoint. Default: `false`.
+-   `hybrid_weight` (float): Weight for semantic vs lexical search (0.0 = all lexical, 1.0 = all semantic). Default: `0.5`.
+
+### `[embedding]`
+Settings for text embeddings used in semantic search. See [docs/EMBEDDINGS.md](../docs/EMBEDDINGS.md) for details.
+
+**Full builds** (built with `-tags embeddings`):
+- No configuration needed - uses embedded model automatically
+- `base_url` and `model` are optional (only used as HTTP fallback if local model fails)
+
+**Lightweight builds** (built without embeddings tag):
+- `base_url` (string): **Required** - URL of embedding service (e.g., `http://localhost:11434`)
+- `model` (string): Model name to use for embeddings. Default: `nomic-embed-text`
+
+**Example (Full Build - No Config Needed):**
+```toml
+[recall]
+semantic_enabled = true
+# That's it! Embedded model is used automatically.
+```
+
+**Example (Lightweight Build - HTTP Required):**
+```toml
+[recall]
+semantic_enabled = true
+
+[embedding]
+base_url = "http://localhost:11434"  # Ollama or other embedding service
+model = "nomic-embed-text"
+```
+
+**Example (Full Build with HTTP Override):**
+```toml
+[recall]
+semantic_enabled = true
+
+[embedding]
+# Force HTTP mode even with full build (e.g., to use different model)
+base_url = "http://localhost:11434"
+model = "mxbai-embed-large"
+```
 
 ### `[cove]`
 Chain-of-Verification settings for truth validation.
@@ -63,3 +103,63 @@ Settings for the Autonomous Repair Loop.
 -   `max_iterations` (integer): Maximum repair attempts before giving up. Default: `5`.
 -   `allow_shell` (boolean): Allow execution of shell commands. Default: `false`.
 -   `forbid_paths` (array of strings): Paths that Ralph must never modify.
+
+### `[database]`
+Database maintenance and retention policy settings.
+-   `auto_maintenance` (boolean): Enable automatic database maintenance (PRAGMA optimize + incremental_vacuum). Default: `true`.
+-   `maintenance_interval_hours` (integer): How often to run maintenance (in hours). Default: `24` (daily).
+
+**Example:**
+```toml
+[database]
+auto_maintenance = true
+maintenance_interval_hours = 24  # Run daily
+
+[database.retention]
+max_age_days = 90  # Delete memories older than 90 days
+max_count = 10000  # Keep only 10,000 most recent memories
+exclude_types = ["fact", "decision"]  # Never delete facts or decisions
+```
+
+### `[database.retention]`
+Retention policy for automatic memory cleanup.
+-   `max_age_days` (integer): Delete memories older than this many days. Default: `0` (unlimited).
+-   `max_count` (integer): Keep only the N most recent memories. Default: `0` (unlimited).
+-   `exclude_types` (array of strings): Memory types to never delete. Default: `["fact"]`.
+
+**Retention Policy Behavior:**
+- Age-based and count-based retention can be used together
+- Both policies respect the `exclude_types` list
+- Retention runs on startup and periodically (if auto_maintenance is enabled)
+- Use `max_age_days = 0` and `max_count = 0` for unlimited retention
+- Excluded types are always preserved regardless of age or count
+
+**Example Use Cases:**
+
+*Long-term project (keep everything, just maintain):*
+```toml
+[database]
+auto_maintenance = true
+maintenance_interval_hours = 168  # Weekly
+```
+
+*Short-lived sessions (aggressive cleanup):*
+```toml
+[database]
+auto_maintenance = true
+maintenance_interval_hours = 1  # Hourly
+
+[database.retention]
+max_age_days = 7  # One week
+exclude_types = ["fact", "decision"]
+```
+
+*Size-limited (keep only recent memories):*
+```toml
+[database]
+auto_maintenance = true
+
+[database.retention]
+max_count = 5000  # Keep 5,000 most recent
+exclude_types = ["fact"]
+```

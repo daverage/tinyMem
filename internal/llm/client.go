@@ -18,6 +18,7 @@ type Client struct {
 	apiKey     string
 	config     *config.Config
 	httpClient *http.Client
+	metrics    *Metrics
 }
 
 // ChatCompletionRequest represents a request to the chat completion API
@@ -73,6 +74,9 @@ func NewClient(cfg *config.Config) *Client {
 		baseURL = config.DefaultLLMBaseURL
 	}
 
+	metrics := NewMetrics("external-http")
+	RegisterMetrics("external-http", metrics)
+
 	return &Client{
 		baseURL: baseURL,
 		apiKey:  cfg.LLMAPIKey,
@@ -80,30 +84,45 @@ func NewClient(cfg *config.Config) *Client {
 		httpClient: &http.Client{
 			Timeout: 120 * time.Second,
 		},
+		metrics: metrics,
 	}
 }
 
 // NewClientWithConfig creates a new LLM client with proper configuration
 func NewClientWithConfig(baseURL, apiKey string) *Client {
+	metrics := NewMetrics("external-http")
+	RegisterMetrics("external-http", metrics)
+
 	return &Client{
 		baseURL: baseURL,
 		apiKey:  apiKey,
 		httpClient: &http.Client{
 			Timeout: 120 * time.Second,
 		},
+		metrics: metrics,
 	}
 }
 
 // ChatCompletions sends a chat completion request
 func (c *Client) ChatCompletions(ctx context.Context, req ChatCompletionRequest) (*ChatCompletionResponse, error) {
+	start := time.Now()
+
 	req.Model = c.normalizeModel(req.Model)
 	jsonData, err := json.Marshal(req)
 	if err != nil {
+		if c.metrics != nil {
+			latency := time.Since(start).Milliseconds()
+			c.metrics.RecordRequest(false, latency, 0)
+		}
 		return nil, err
 	}
 
 	request, err := http.NewRequestWithContext(ctx, "POST", chatCompletionURL(c.baseURL), strings.NewReader(string(jsonData)))
 	if err != nil {
+		if c.metrics != nil {
+			latency := time.Since(start).Milliseconds()
+			c.metrics.RecordRequest(false, latency, 0)
+		}
 		return nil, err
 	}
 
@@ -114,18 +133,46 @@ func (c *Client) ChatCompletions(ctx context.Context, req ChatCompletionRequest)
 
 	resp, err := c.httpClient.Do(request)
 	if err != nil {
+		if c.metrics != nil {
+			latency := time.Since(start).Milliseconds()
+			c.metrics.RecordRequest(false, latency, 0)
+		}
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		if c.metrics != nil {
+			latency := time.Since(start).Milliseconds()
+			c.metrics.RecordRequest(false, latency, 0)
+		}
 		return nil, fmt.Errorf("request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var response ChatCompletionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		if c.metrics != nil {
+			latency := time.Since(start).Milliseconds()
+			c.metrics.RecordRequest(false, latency, 0)
+		}
 		return nil, err
+	}
+
+	// Record successful request
+	if c.metrics != nil {
+		latency := time.Since(start).Milliseconds()
+		// Rough token estimate: 4 chars per token
+		promptTokens := 0
+		for _, msg := range req.Messages {
+			promptTokens += len(msg.Content) / 4
+		}
+		completionTokens := 0
+		if len(response.Choices) > 0 {
+			completionTokens = len(response.Choices[0].Message.Content) / 4
+		}
+		totalTokens := promptTokens + completionTokens
+		c.metrics.RecordRequest(true, latency, totalTokens)
 	}
 
 	return &response, nil
@@ -305,6 +352,21 @@ func (c *Client) normalizeModel(model string) string {
 	}
 
 	return model
+}
+
+// ProviderName returns the name of this provider
+func (c *Client) ProviderName() string {
+	return "external-http"
+}
+
+// GetMetrics returns the current metrics for this provider
+func (c *Client) GetMetrics() *Metrics {
+	return c.metrics
+}
+
+// Close releases any resources (HTTP client has no resources to release)
+func (c *Client) Close() error {
+	return nil
 }
 
 func chatCompletionURL(baseURL string) string {

@@ -396,6 +396,7 @@ func memoriesToCandidates(memories []*memory.Memory) []cove.CandidateMemory {
 			Type:    string(mem.Type),
 			Summary: mem.Summary,
 			Detail:  mem.Detail,
+			Score:   1.0, // Extracted facts default to pass-through (no semantic score)
 		})
 	}
 

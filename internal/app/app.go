@@ -55,6 +55,32 @@ func NewApp() (*App, error) {
 		return nil, fmt.Errorf("failed to initialize database: %w", err)
 	}
 
+	// 4a. Run database maintenance if enabled
+	if cfg.DBAutoMaintenance {
+		logger.Info("Running database maintenance on startup")
+		if err := db.RunMaintenance(); err != nil {
+			logger.Warn("Database maintenance failed", zap.Error(err))
+		} else {
+			logger.Info("Database maintenance completed")
+		}
+
+		// Apply retention policy if configured
+		if cfg.DBRetentionMaxAgeDays > 0 || cfg.DBRetentionMaxCount > 0 {
+			policy := storage.RetentionPolicy{
+				MaxAgeDays:   cfg.DBRetentionMaxAgeDays,
+				MaxCount:     cfg.DBRetentionMaxCount,
+				ExcludeTypes: cfg.DBRetentionExcludeTypes,
+				DryRun:       false,
+			}
+			deletedCount, err := db.ApplyRetentionPolicy(policy)
+			if err != nil {
+				logger.Warn("Retention policy application failed", zap.Error(err))
+			} else if deletedCount > 0 {
+				logger.Info("Retention policy applied", zap.Int("deleted_memories", deletedCount))
+			}
+		}
+	}
+
 	// 5. Initialize memory service
 	memoryService := memory.NewService(db)
 
@@ -63,7 +89,7 @@ func NewApp() (*App, error) {
 	// Create context for managing goroutines
 	ctx, cancel := context.WithCancel(context.Background())
 
-	return &App{
+	app := &App{
 		Core: CoreModule{
 			Config: cfg,
 			Logger: logger,
@@ -79,7 +105,56 @@ func NewApp() (*App, error) {
 		Memory: memoryService,
 		Ctx:    ctx,
 		Cancel: cancel,
-	}, nil
+	}
+
+	// Start periodic maintenance if enabled
+	if cfg.DBAutoMaintenance && cfg.DBMaintenanceIntervalHours > 0 {
+		go app.runPeriodicMaintenance()
+	}
+
+	return app, nil
+}
+
+// runPeriodicMaintenance runs database maintenance periodically
+func (a *App) runPeriodicMaintenance() {
+	interval := time.Duration(a.Core.Config.DBMaintenanceIntervalHours) * time.Hour
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	a.Core.Logger.Info("Periodic database maintenance started",
+		zap.Duration("interval", interval))
+
+	for {
+		select {
+		case <-ticker.C:
+			a.Core.Logger.Info("Running periodic database maintenance")
+			if err := a.Core.DB.RunMaintenance(); err != nil {
+				a.Core.Logger.Warn("Periodic database maintenance failed", zap.Error(err))
+			} else {
+				a.Core.Logger.Info("Periodic database maintenance completed")
+			}
+
+			// Apply retention policy if configured
+			if a.Core.Config.DBRetentionMaxAgeDays > 0 || a.Core.Config.DBRetentionMaxCount > 0 {
+				policy := storage.RetentionPolicy{
+					MaxAgeDays:   a.Core.Config.DBRetentionMaxAgeDays,
+					MaxCount:     a.Core.Config.DBRetentionMaxCount,
+					ExcludeTypes: a.Core.Config.DBRetentionExcludeTypes,
+					DryRun:       false,
+				}
+				deletedCount, err := a.Core.DB.ApplyRetentionPolicy(policy)
+				if err != nil {
+					a.Core.Logger.Warn("Periodic retention policy failed", zap.Error(err))
+				} else if deletedCount > 0 {
+					a.Core.Logger.Info("Periodic retention policy applied",
+						zap.Int("deleted_memories", deletedCount))
+				}
+			}
+		case <-a.Ctx.Done():
+			a.Core.Logger.Info("Stopping periodic database maintenance")
+			return
+		}
+	}
 }
 
 // Close gracefully shuts down the application resources.

@@ -21,6 +21,10 @@ const (
 	DefaultCoVeMaxCandidates       = 20
 	DefaultCoVeTimeoutSeconds      = 30
 	DefaultCoVeModel               = "" // Empty = use default LLM
+	DefaultDBAutoMaintenance       = true
+	DefaultDBMaintenanceIntervalHours = 24
+	DefaultDBRetentionMaxAgeDays   = 0 // 0 = unlimited
+	DefaultDBRetentionMaxCount     = 0 // 0 = unlimited
 )
 
 // Config holds the application configuration
@@ -57,6 +61,12 @@ type Config struct {
 	CoVeTimeoutSeconds      int
 	CoVeModel               string
 	CoVeRecallFilterEnabled bool
+	// Database maintenance configuration
+	DBAutoMaintenance       bool
+	DBMaintenanceIntervalHours int
+	DBRetentionMaxAgeDays   int
+	DBRetentionMaxCount     int
+	DBRetentionExcludeTypes []string
 }
 
 type fileConfig struct {
@@ -106,6 +116,15 @@ type fileConfig struct {
 		Model               string  `toml:"model"`
 		RecallFilterEnabled bool    `toml:"recall_filter_enabled"`
 	} `toml:"cove"`
+	Database struct {
+		AutoMaintenance       bool     `toml:"auto_maintenance"`
+		MaintenanceIntervalHours int   `toml:"maintenance_interval_hours"`
+		Retention struct {
+			MaxAgeDays   int      `toml:"max_age_days"`
+			MaxCount     int      `toml:"max_count"`
+			ExcludeTypes []string `toml:"exclude_types"`
+		} `toml:"retention"`
+	} `toml:"database"`
 }
 
 // LoadConfig loads configuration from file, environment variables, and defaults
@@ -154,6 +173,12 @@ func LoadConfig() (*Config, error) {
 		CoVeTimeoutSeconds:      DefaultCoVeTimeoutSeconds,
 		CoVeModel:               DefaultCoVeModel,
 		CoVeRecallFilterEnabled: true,
+		// Database defaults
+		DBAutoMaintenance:       DefaultDBAutoMaintenance,
+		DBMaintenanceIntervalHours: DefaultDBMaintenanceIntervalHours,
+		DBRetentionMaxAgeDays:   DefaultDBRetentionMaxAgeDays,
+		DBRetentionMaxCount:     DefaultDBRetentionMaxCount,
+		DBRetentionExcludeTypes: []string{"fact"},
 	}
 
 	embeddingBaseURLSet := false
@@ -240,6 +265,23 @@ func LoadConfig() (*Config, error) {
 				cfg.CoVeModel = parsed.CoVe.Model
 			}
 			cfg.CoVeRecallFilterEnabled = parsed.CoVe.RecallFilterEnabled
+		}
+		// Database configuration
+		_, databaseSectionPresent := raw["database"]
+		if databaseSectionPresent {
+			cfg.DBAutoMaintenance = parsed.Database.AutoMaintenance
+			if parsed.Database.MaintenanceIntervalHours > 0 {
+				cfg.DBMaintenanceIntervalHours = parsed.Database.MaintenanceIntervalHours
+			}
+			if parsed.Database.Retention.MaxAgeDays > 0 {
+				cfg.DBRetentionMaxAgeDays = parsed.Database.Retention.MaxAgeDays
+			}
+			if parsed.Database.Retention.MaxCount > 0 {
+				cfg.DBRetentionMaxCount = parsed.Database.Retention.MaxCount
+			}
+			if len(parsed.Database.Retention.ExcludeTypes) > 0 {
+				cfg.DBRetentionExcludeTypes = parsed.Database.Retention.ExcludeTypes
+			}
 		}
 	}
 
@@ -366,6 +408,39 @@ func LoadConfig() (*Config, error) {
 		cfg.CoVeRecallFilterEnabled = coveRecallFilter == "true" || coveRecallFilter == "1"
 	}
 
+	// Database environment variable overrides
+	if dbAutoMaint := os.Getenv("TINYMEM_DB_AUTO_MAINTENANCE"); dbAutoMaint != "" {
+		cfg.DBAutoMaintenance = dbAutoMaint == "true" || dbAutoMaint == "1"
+	}
+	if dbMaintInterval := os.Getenv("TINYMEM_DB_MAINTENANCE_INTERVAL_HOURS"); dbMaintInterval != "" {
+		if interval, err := strconv.Atoi(dbMaintInterval); err == nil {
+			cfg.DBMaintenanceIntervalHours = interval
+		}
+	}
+	if dbRetentionAge := os.Getenv("TINYMEM_DB_RETENTION_MAX_AGE_DAYS"); dbRetentionAge != "" {
+		if age, err := strconv.Atoi(dbRetentionAge); err == nil {
+			cfg.DBRetentionMaxAgeDays = age
+		}
+	}
+	if dbRetentionCount := os.Getenv("TINYMEM_DB_RETENTION_MAX_COUNT"); dbRetentionCount != "" {
+		if count, err := strconv.Atoi(dbRetentionCount); err == nil {
+			cfg.DBRetentionMaxCount = count
+		}
+	}
+	if dbExcludeTypes := os.Getenv("TINYMEM_DB_RETENTION_EXCLUDE_TYPES"); dbExcludeTypes != "" {
+		types := strings.Split(dbExcludeTypes, ",")
+		var excludeTypes []string
+		for _, t := range types {
+			t = strings.TrimSpace(t)
+			if t != "" {
+				excludeTypes = append(excludeTypes, t)
+			}
+		}
+		if len(excludeTypes) > 0 {
+			cfg.DBRetentionExcludeTypes = excludeTypes
+		}
+	}
+
 	cfg.LLMBaseURL = normalizeBaseURL(cfg.LLMBaseURL)
 	if !embeddingBaseURLSet {
 		cfg.EmbeddingBaseURL = cfg.LLMBaseURL
@@ -449,6 +524,16 @@ func (c *Config) Validate() error {
 	}
 	if c.CoVeTimeoutSeconds <= 0 {
 		return fmt.Errorf("CoVe timeout must be positive")
+	}
+	// Database validation
+	if c.DBMaintenanceIntervalHours <= 0 {
+		return fmt.Errorf("database maintenance interval must be positive")
+	}
+	if c.DBRetentionMaxAgeDays < 0 {
+		return fmt.Errorf("database retention max age cannot be negative")
+	}
+	if c.DBRetentionMaxCount < 0 {
+		return fmt.Errorf("database retention max count cannot be negative")
 	}
 	return nil
 }

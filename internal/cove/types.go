@@ -1,6 +1,16 @@
 package cove
 
-import "time"
+import (
+	"context"
+	"time"
+
+	"github.com/daverage/tinymem/internal/llm"
+)
+
+// LLMClient is an interface for LLM clients (for testing and build variants)
+type LLMClient interface {
+	ChatCompletions(ctx context.Context, req llm.ChatCompletionRequest) (*llm.ChatCompletionResponse, error)
+}
 
 // CandidateResult represents the CoVe verification result for a single candidate memory
 type CandidateResult struct {
@@ -38,6 +48,7 @@ type CandidateMemory struct {
 	Type    string
 	Summary string
 	Detail  string
+	Score   float64 // Similarity score from semantic search (0-1), or 1.0 if not using semantic
 }
 
 // RecallFilterRequest is the internal request structure for recall filtering

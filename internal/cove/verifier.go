@@ -1,3 +1,5 @@
+//go:build !nollm
+
 package cove
 
 import (
@@ -11,14 +13,10 @@ import (
 	"github.com/daverage/tinymem/internal/llm"
 )
 
-// LLMClient is an interface for LLM clients (for testing)
-type LLMClient interface {
-	ChatCompletions(ctx context.Context, req llm.ChatCompletionRequest) (*llm.ChatCompletionResponse, error)
-}
-
 // Verifier provides CoVe (Chain-of-Verification) filtering for memory candidates
+// New architecture: Uses semantic similarity scores, LLM optional for legacy methods
 type Verifier struct {
-	llmClient  LLMClient
+	llmClient  LLMClient // Optional: only needed for FilterRecall (legacy), nil for semantic-only mode
 	config     *config.Config
 	stats      *StatsTracker
 	statsStore StatsStore
@@ -26,6 +24,7 @@ type Verifier struct {
 }
 
 // NewVerifier creates a new CoVe verifier
+// llmClient can be nil - VerifyCandidates uses semantic scores, not LLM
 func NewVerifier(cfg *config.Config, llmClient LLMClient) *Verifier {
 	return &Verifier{
 		llmClient: llmClient,
@@ -60,37 +59,21 @@ func (v *Verifier) VerifyCandidates(candidates []CandidateMemory) ([]CandidateMe
 		candidates = candidates[:v.config.CoVeMaxCandidates]
 	}
 
-	// Create context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(v.config.CoVeTimeoutSeconds)*time.Second)
-	defer cancel()
-
-	// Call LLM for verification
-	results, err := v.callLLMForCandidateVerification(ctx, candidates)
-	if err != nil {
-		// FAIL-SAFE: On error, return all candidates unfiltered
-		v.stats.RecordError()
-		v.persistStats()
-		return candidates, nil
-	}
-
-	// Filter candidates based on confidence threshold
+	// Use semantic similarity scores as confidence (no LLM needed)
+	// Candidates from semantic search have Score field populated (0-1)
+	// Lexical search candidates default to Score=1.0 (pass through)
 	filtered := make([]CandidateMemory, 0, len(candidates))
-	resultMap := make(map[string]CandidateResult)
-	for _, result := range results {
-		resultMap[result.ID] = result
-	}
 
 	for _, candidate := range candidates {
-		result, exists := resultMap[candidate.ID]
-
-		// Default to keeping if no result (safety fallback)
-		if !exists {
-			filtered = append(filtered, candidate)
-			continue
+		// Use candidate's similarity score as confidence
+		confidence := candidate.Score
+		if confidence == 0 {
+			// No score provided (lexical search) - default to pass through
+			confidence = 1.0
 		}
 
-		discarded := result.Confidence < v.config.CoVeConfidenceThreshold
-		v.stats.RecordEvaluation(result.Confidence, discarded)
+		discarded := confidence < v.config.CoVeConfidenceThreshold
+		v.stats.RecordEvaluation(confidence, discarded)
 
 		if !discarded {
 			filtered = append(filtered, candidate)
