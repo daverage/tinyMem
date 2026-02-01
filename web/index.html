@@ -774,10 +774,10 @@
                 </div>
 
                 <p>
-                    tinyMem runs locally, stays project-scoped, and can operate
-                    entirely without cloud dependencies or complex embeddings.
-                    Optional semantic search is available for users who want
-                    vector-based recall.
+                    tinyMem runs locally, stays project-scoped, and operates
+                    entirely without cloud dependencies. It uses FTS5 lexical
+                    recall with CoVe filtering for deterministic, fast memory
+                    retrieval.
                 </p>
             </section>
 
@@ -811,21 +811,21 @@
                 </div>
 
                 <div class="feature-card">
-                    <h3>The Ralph Loop</h3>
+                    <h3>CoVe Filtering</h3>
                     <p>
-                        An optional autonomous repair loop that retries until
-                        evidence predicates pass. Tests fail, memory is
-                        recalled, fixes are applied, and execution continues
-                        only when verification succeeds.
+                        Chain-of-Verification reduces hallucinations by
+                        filtering memories before storage and during recall.
+                        Only high-confidence, relevant memories are injected
+                        into agent context.
                     </p>
                 </div>
 
                 <div class="feature-card">
                     <h3>tinyTasks</h3>
                     <p>
-                        A file-authoritative task ledger. Agents must update
-                        <code>tinyTasks.md</code> so progress is explicit,
-                        reviewable, and persistent across sessions.
+                        <strong>File-authoritative task ledger enforced by tinyMem.</strong>
+                        Agents must update <code>tinyTasks.md</code> so progress
+                        is explicit, reviewable, and persistent across sessions.
                     </p>
                 </div>
             </div>

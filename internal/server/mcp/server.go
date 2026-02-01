@@ -15,12 +15,12 @@ import (
 	"github.com/daverage/tinymem/internal/config"
 	"github.com/daverage/tinymem/internal/cove"
 	"github.com/daverage/tinymem/internal/doctor" // Add doctor import
+	"github.com/daverage/tinymem/internal/enforcement"
 	"github.com/daverage/tinymem/internal/evidence"
 	"github.com/daverage/tinymem/internal/execution"
 	"github.com/daverage/tinymem/internal/extract"
 	"github.com/daverage/tinymem/internal/llm"
 	"github.com/daverage/tinymem/internal/memory"
-	"github.com/daverage/tinymem/internal/ralph"
 	"github.com/daverage/tinymem/internal/recall"
 	"github.com/daverage/tinymem/internal/storage"
 	"github.com/daverage/tinymem/internal/tasks"
@@ -37,12 +37,23 @@ type Server struct {
 	recallEngine    recall.Recaller
 	extractor       *extract.Extractor
 	coveVerifier    *cove.Verifier
-	llmProvider     llm.Provider // LLM provider for CoVe and Ralph
+	llmProvider     llm.Provider // LLM provider for CoVe
 	taskService     *tasks.Service
 	modeCtrl        *execution.Controller
+	enforcer        *enforcement.Recorder
 	ctx             context.Context
 	cancel          context.CancelFunc
 }
+
+const (
+	enforcementCodeModeCompliance = "MODE_COMPLIANCE"
+	enforcementCodeModeTooLow     = "MODE_TOO_LOW"
+	enforcementCodeModeNotSet     = "MODE_NOT_SET"
+	enforcementCodeStrictRequired = "STRICT_REQUIRED"
+	enforcementCodeFactEvidence   = "FACT_EVIDENCE_REQUIRED"
+	enforcementCodeClaimViolation = "CLAIM_WITHOUT_ENFORCEMENT"
+	enforcementCodeModeUpdated    = "MODE_UPDATED"
+)
 
 // MCPRequest represents a request from the MCP client
 type MCPRequest struct {
@@ -86,6 +97,7 @@ func NewServer(a *app.App) *Server {
 		llmProvider:     recallServices.LLMProvider,
 		taskService:     taskService,
 		modeCtrl:        a.Execution,
+		enforcer:        a.Enforcement,
 		ctx:             ctx,
 		cancel:          cancel,
 	}
@@ -177,7 +189,7 @@ func (s *Server) handleToolsList(req *MCPRequest) {
 	tools := []map[string]interface{}{
 		{
 			"name":        "memory_query",
-			"description": "Search memories using full-text or semantic search",
+			"description": "Search memories via lexical CoVe recall (Boundary: ActionMemoryQuery; mode: PASSIVE+; outcomes: ALLOW/BLOCK).",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
@@ -189,18 +201,13 @@ func (s *Server) handleToolsList(req *MCPRequest) {
 						"type":        "number",
 						"description": "Maximum number of results to return (default: 10)",
 					},
-					"semantic": map[string]interface{}{
-						"type":        "boolean",
-						"description": "Enable semantic (vector) search - REQUIRES STRICT MODE. High coverage, high cost. Default: false (lexical-only)",
-						"default":     false,
-					},
 				},
 				"required": []string{"query"},
 			},
 		},
 		{
 			"name":        "memory_set_mode",
-			"description": "Update tinyMem's execution mode (PASSIVE, GUARDED, STRICT)",
+			"description": "Explicitly set the execution mode (Boundary: execution_mode; this call must happen before sensitive actions).",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
@@ -215,7 +222,7 @@ func (s *Server) handleToolsList(req *MCPRequest) {
 		},
 		{
 			"name":        "memory_recent",
-			"description": "Retrieve the most recent memories",
+			"description": "Retrieve the most recent memories (Boundary: ActionMemoryQuery; PASSIVE).",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
@@ -227,8 +234,42 @@ func (s *Server) handleToolsList(req *MCPRequest) {
 			},
 		},
 		{
+			"name":        "memory_run_metadata",
+			"description": "Read the enforcement run metadata (execution_mode, events, proven counts).",
+			"inputSchema": map[string]interface{}{
+				"type":       "object",
+				"properties": map[string]interface{}{},
+			},
+		},
+		{
+			"name":        "memory_claim_success",
+			"description": "Record a claimed success and flag adversarial claims that lack enforcement.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"success": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Was a success claimed?",
+					},
+					"enforced": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Was enforcement observed for the claimed success?",
+					},
+					"boundary": map[string]interface{}{
+						"type":        "string",
+						"description": "Optional boundary label describing the claim context.",
+					},
+					"details": map[string]interface{}{
+						"type":        "string",
+						"description": "Optional detail text for auditing.",
+					},
+				},
+				"required": []string{"success", "enforced"},
+			},
+		},
+		{
 			"name":        "memory_write",
-			"description": "Create a new memory entry with optional evidence",
+			"description": "Create a new memory entry (Boundary: memory write/task creation; GUARDED/STRICT).",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
@@ -310,93 +351,6 @@ func (s *Server) handleToolsList(req *MCPRequest) {
 				"properties": map[string]interface{}{},
 			},
 		},
-		{
-			"name":        "memory_ralph",
-			"description": "Execute an evidence-gated repair loop with memory-assisted recall and bounded autonomous retries. NOTE: This may take several minutes to complete and may exceed default client timeouts.",
-			"inputSchema": map[string]interface{}{
-				"type":     "object",
-				"required": []string{"task", "command", "evidence"},
-				"properties": map[string]interface{}{
-					"task": map[string]interface{}{
-						"type":        "string",
-						"description": "Human-readable objective. Used for logging and memory recall context.",
-					},
-					"command": map[string]interface{}{
-						"type":        "string",
-						"description": "Shell command to execute for verification (e.g. 'go test ./...').",
-					},
-					"evidence": map[string]interface{}{
-						"type": "array",
-						"items": map[string]interface{}{
-							"type": "string",
-						},
-						"minItems":    1,
-						"description": "MANDATORY: List of evidence predicates using 'type::content' format. Supported types: 'cmd_exit0', 'test_pass', 'file_exists', 'grep_hit'. Example: 'test_pass::go test ./...'.",
-					},
-					"max_iterations": map[string]interface{}{
-						"type":        "integer",
-						"minimum":     1,
-						"default":     5,
-						"description": "Hard cap on autonomous attempts.",
-					},
-					"recall": map[string]interface{}{
-						"type": "object",
-						"properties": map[string]interface{}{
-							"query_terms": map[string]interface{}{
-								"type": "array",
-								"items": map[string]interface{}{
-									"type": "string",
-								},
-								"description": "Optional explicit memory query terms. If omitted, tinyMem derives them from failure output.",
-							},
-							"limit": map[string]interface{}{
-								"type":        "integer",
-								"default":     5,
-								"description": "Maximum number of recalled memory entries.",
-							},
-						},
-					},
-					"safety": map[string]interface{}{
-						"type": "object",
-						"properties": map[string]interface{}{
-							"forbid_paths": map[string]interface{}{
-								"type": "array",
-								"items": map[string]interface{}{
-									"type": "string",
-								},
-								"description": "Paths that must not be modified or deleted.",
-							},
-							"forbid_commands": map[string]interface{}{
-								"type": "array",
-								"items": map[string]interface{}{
-									"type": "string",
-								},
-								"description": "Shell commands that must never be executed.",
-							},
-							"require_diff_review": map[string]interface{}{
-								"type":        "boolean",
-								"default":     false,
-								"description": "If true, pause for human approval when a diff is produced.",
-							},
-						},
-					},
-					"human_gate": map[string]interface{}{
-						"type": "object",
-						"properties": map[string]interface{}{
-							"on_ambiguity": map[string]interface{}{
-								"type":        "boolean",
-								"default":     true,
-								"description": "Pause and request human input if multiple viable fixes are detected.",
-							},
-							"after_iterations": map[string]interface{}{
-								"type":        "integer",
-								"description": "Require human approval after N failed iterations.",
-							},
-						},
-					},
-				},
-			},
-		},
 	}
 
 	response := map[string]interface{}{
@@ -452,61 +406,15 @@ func (s *Server) handleToolCall(req *MCPRequest) {
 		s.handleMemoryDoctor(req)
 	case "memory_eval_stats":
 		s.handleMemoryEvalStats(req)
-	case "memory_ralph":
-		s.handleMemoryRalph(req, argsBytes)
+	case "memory_run_metadata":
+		s.handleMemoryRunMetadata(req)
+	case "memory_claim_success":
+		s.handleMemoryClaimSuccess(req, argsBytes)
 	case "memory_set_mode":
 		s.handleMemorySetMode(req, argsBytes)
 	default:
 		s.sendError(req.ID, -32601, fmt.Sprintf("Tool not found: %s", params.Name))
 	}
-}
-
-// handleMemoryRalph handles the Ralph autonomous repair loop request
-func (s *Server) handleMemoryRalph(req *MCPRequest, args json.RawMessage) {
-	s.app.Core.Logger.Debug("Received memory_ralph request", zap.String("args", string(args)))
-
-	var options ralph.Options
-	if err := json.Unmarshal(args, &options); err != nil {
-		s.sendToolError(req.ID, -32602, fmt.Sprintf("Invalid arguments for memory_ralph: %v", err), "memory_ralph")
-		return
-	}
-
-	s.modeCtrl.MarkRalphInvocation()
-	if !s.requireMode(req.ID, "memory_ralph", execution.ActionMemoryRalph, execution.ModeStrict) {
-		return
-	}
-
-	// Initialize Ralph engine with LLM provider
-	if s.llmProvider == nil {
-		s.sendToolError(req.ID, -32603, "Ralph requires LLM provider - build with -tags llmgen or configure external LLM", "memory_ralph")
-		return
-	}
-	engine := ralph.NewEngine(s.config, s.memoryService, s.llmProvider, s.app.Project.ID, s.app.Core.Logger)
-
-	// Execute the loop
-	result, err := engine.ExecuteLoop(context.Background(), options)
-	if err != nil {
-		s.sendToolError(req.ID, -32603, fmt.Sprintf("Ralph loop failed: %v", err), "memory_ralph")
-		return
-	}
-
-	// Format result as JSON for display
-	resultJSON, _ := json.MarshalIndent(result, "", "  ")
-
-	response := map[string]interface{}{
-		"jsonrpc": "2.0",
-		"result": map[string]interface{}{
-			"content": []map[string]interface{}{
-				{
-					"type": "text",
-					"text": string(resultJSON),
-				},
-			},
-		},
-		"id": req.ID,
-	}
-
-	s.sendResponse(response)
 }
 
 func (s *Server) handleMemorySetMode(req *MCPRequest, args json.RawMessage) {
@@ -534,6 +442,16 @@ func (s *Server) handleMemorySetMode(req *MCPRequest, args json.RawMessage) {
 		return
 	}
 
+	if s.enforcer != nil {
+		s.enforcer.SetMode(string(mode))
+		s.recordEnforcementEvent(enforcement.Event{
+			Code:     enforcementCodeModeUpdated,
+			Boundary: "execution_mode",
+			Mode:     string(mode),
+			Outcome:  enforcement.OutcomeAllow,
+		})
+	}
+
 	response := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"result": map[string]interface{}{
@@ -550,12 +468,90 @@ func (s *Server) handleMemorySetMode(req *MCPRequest, args json.RawMessage) {
 	s.sendResponse(response)
 }
 
+func (s *Server) handleMemoryRunMetadata(req *MCPRequest) {
+	if s.enforcer == nil {
+		s.sendToolError(req.ID, -32603, "Enforcement metadata unavailable", "memory_run_metadata")
+		return
+	}
+
+	meta := s.enforcer.Metadata()
+	payload, err := json.Marshal(meta)
+	if err != nil {
+		s.sendToolError(req.ID, -32603, fmt.Sprintf("Failed to marshal metadata: %v", err), "memory_run_metadata")
+		return
+	}
+
+	response := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"result": map[string]interface{}{
+			"content": []map[string]interface{}{
+				{
+					"type": "json",
+					"text": string(payload),
+				},
+			},
+		},
+		"id": req.ID,
+	}
+
+	s.sendResponse(response)
+}
+
+func (s *Server) handleMemoryClaimSuccess(req *MCPRequest, args json.RawMessage) {
+	if args == nil {
+		s.sendToolError(req.ID, -32602, "Missing arguments for memory_claim_success", "memory_claim_success")
+		return
+	}
+
+	var payload struct {
+		Success  bool   `json:"success"`
+		Enforced bool   `json:"enforced"`
+		Boundary string `json:"boundary"`
+		Details  string `json:"details"`
+	}
+	if err := json.Unmarshal(args, &payload); err != nil {
+		s.sendToolError(req.ID, -32602, "Invalid arguments for memory_claim_success", "memory_claim_success")
+		return
+	}
+
+	if payload.Boundary == "" {
+		payload.Boundary = "claimed_success"
+	}
+
+	if s.enforcer != nil && payload.Success {
+		s.enforcer.RecordClaimedSuccess()
+		if !payload.Enforced {
+			s.recordEnforcementEvent(enforcement.Event{
+				Code:     enforcementCodeClaimViolation,
+				Boundary: payload.Boundary,
+				Mode:     string(s.modeCtrl.Mode()),
+				Outcome:  enforcement.OutcomeViolation,
+				Details:  payload.Details,
+			})
+		}
+	}
+
+	response := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"result": map[string]interface{}{
+			"content": []map[string]interface{}{
+				{
+					"type": "text",
+					"text": fmt.Sprintf("Claim recorded: success=%t enforced=%t", payload.Success, payload.Enforced),
+				},
+			},
+		},
+		"id": req.ID,
+	}
+
+	s.sendResponse(response)
+}
+
 // handleMemoryQuery handles memory query requests
 func (s *Server) handleMemoryQuery(req *MCPRequest, args json.RawMessage) {
 	var queryReq struct {
-		Query    string `json:"query"`
-		Limit    int    `json:"limit"`
-		Semantic bool   `json:"semantic"`
+		Query string `json:"query"`
+		Limit int    `json:"limit"`
 	}
 
 	if err := json.Unmarshal(args, &queryReq); err != nil {
@@ -563,15 +559,9 @@ func (s *Server) handleMemoryQuery(req *MCPRequest, args json.RawMessage) {
 		return
 	}
 
-	// Enforce STRICT mode for semantic recall
-	if queryReq.Semantic {
-		if !s.requireMode(req.ID, "memory_query", execution.ActionMemoryQuery, execution.ModeStrict) {
-			return
-		}
-	} else {
-		if !s.requireMode(req.ID, "memory_query", execution.ActionMemoryQuery, execution.ModePassive) {
-			return
-		}
+	// Memory query allowed in PASSIVE mode (lexical-only recall)
+	if !s.requireMode(req.ID, "memory_query", execution.ActionMemoryQuery, execution.ModePassive) {
+		return
 	}
 
 	if queryReq.Limit == 0 {
@@ -582,7 +572,6 @@ func (s *Server) handleMemoryQuery(req *MCPRequest, args json.RawMessage) {
 		ProjectID: s.app.Project.ID,
 		Query:     queryReq.Query,
 		MaxItems:  queryReq.Limit,
-		Semantic:  queryReq.Semantic,
 	})
 	if err != nil {
 		s.sendToolError(req.ID, -32603, fmt.Sprintf("Query failed: %v", err), "memory_query")
@@ -816,6 +805,13 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 
 	if memType == memory.Fact {
 		if len(writeReq.Evidence) == 0 {
+			s.recordEnforcementEvent(enforcement.Event{
+				Code:     enforcementCodeFactEvidence,
+				Boundary: string(execution.ActionFactPromotion),
+				Mode:     string(s.modeCtrl.Mode()),
+				Outcome:  enforcement.OutcomeBlock,
+				Details:  "evidence required for fact creation",
+			})
 			s.sendToolError(req.ID, -32603, "Fact creation requires verified evidence", "memory_write")
 			return
 		}
@@ -1105,6 +1101,12 @@ func (s *Server) sendToolError(id *int, code int, message, tool string) {
 	s.sendError(id, code, message)
 }
 
+func (s *Server) recordEnforcementEvent(evt enforcement.Event) {
+	if s.enforcer != nil {
+		s.enforcer.RecordEvent(evt)
+	}
+}
+
 func (s *Server) requireMode(reqID *int, tool string, action execution.Action, minimum execution.Mode) bool {
 	if s.modeCtrl == nil {
 		return true
@@ -1114,14 +1116,38 @@ func (s *Server) requireMode(reqID *int, tool string, action execution.Action, m
 		s.app.Core.Logger.Warn("Failed to inspect tinyTasks.md", zap.Error(err))
 	}
 
+	mode := s.modeCtrl.Mode()
+	modeSet := s.modeCtrl.ModeSet()
+
 	if err := s.modeCtrl.Enforce(action, minimum); err != nil {
 		message := err.Error()
+		code := enforcementCodeModeTooLow
+		if !modeSet {
+			code = enforcementCodeModeNotSet
+		}
 		if errors.Is(err, execution.ErrStrictRequired) {
 			message = "STRICT mode required"
+			code = enforcementCodeStrictRequired
 		}
+
+		s.recordEnforcementEvent(enforcement.Event{
+			Code:     code,
+			Boundary: string(action),
+			Mode:     string(mode),
+			Outcome:  enforcement.OutcomeBlock,
+			Details:  message,
+		})
+
 		s.sendToolError(reqID, -32603, message, tool)
 		return false
 	}
+
+	s.recordEnforcementEvent(enforcement.Event{
+		Code:     enforcementCodeModeCompliance,
+		Boundary: string(action),
+		Mode:     string(mode),
+		Outcome:  enforcement.OutcomeAllow,
+	})
 
 	return true
 }

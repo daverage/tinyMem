@@ -54,7 +54,6 @@ type RecallOptions struct {
 	MaxTokens         int
 	Types             []memory.Type
 	ExcludeSuperseded bool
-	Semantic          bool // Explicit flag for semantic recall (STRICT-only)
 }
 
 // RecallResult represents a recalled memory with relevance score

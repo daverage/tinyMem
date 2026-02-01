@@ -23,10 +23,11 @@ type Client struct {
 
 // ChatCompletionRequest represents a request to the chat completion API
 type ChatCompletionRequest struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
-	Stream   bool      `json:"stream"`
-	// Add other fields as needed
+	Model       string    `json:"model"`
+	Messages    []Message `json:"messages"`
+	Stream      bool      `json:"stream"`
+	Temperature float64   `json:"temperature,omitempty"`
+	TopP        float64   `json:"top_p,omitempty"`
 }
 
 // Message represents a chat message

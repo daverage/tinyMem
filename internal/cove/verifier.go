@@ -111,7 +111,9 @@ func (v *Verifier) callLLMForCandidateVerification(ctx context.Context, candidat
 				Content: prompt,
 			},
 		},
-		Stream: false,
+		Stream:      false,
+		Temperature: 0.0,
+		TopP:        1.0,
 	}
 
 	resp, err := v.llmClient.ChatCompletions(ctx, req)
@@ -284,7 +286,9 @@ func (v *Verifier) callLLMForRecallFilter(ctx context.Context, memories []Recall
 				Content: prompt,
 			},
 		},
-		Stream: false,
+		Stream:      false,
+		Temperature: 0.0,
+		TopP:        1.0,
 	}
 
 	resp, err := v.llmClient.ChatCompletions(ctx, req)

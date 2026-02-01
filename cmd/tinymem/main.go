@@ -247,15 +247,8 @@ func runHealthCmd(a *app.App, cmd *cobra.Command, args []string) {
 		fmt.Println("  ○ CoVe: Disabled")
 	}
 
-	// Ralph status
-	fmt.Println("  ✓ Ralph: Available (autonomous repair)")
-
-	// Semantic search status
-	if a.Core.Config.SemanticEnabled {
-		fmt.Printf("  ✓ Semantic Search: Enabled (hybrid weight: %.2f)\n", a.Core.Config.HybridWeight)
-	} else {
-		fmt.Println("  ○ Semantic Search: Disabled (lexical only)")
-	}
+	// Recall engine status (lexical-only with FTS5)
+	fmt.Println("  ✓ Recall Engine: Lexical (FTS5) with CoVe filtering")
 
 	a.Core.Logger.Info("Health check complete.")
 	fmt.Println("\nHealth check complete.")

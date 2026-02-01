@@ -397,22 +397,9 @@ func truncateString(str string, maxLen int) string {
 	return str[:maxLen] + "..."
 }
 
-// memoriesToCandidates converts memory.Memory objects to cove.CandidateMemory for verification
+// memoriesToCandidates is deprecated - use cove.MemoriesToCandidates instead
 func memoriesToCandidates(memories []*memory.Memory) []cove.CandidateMemory {
-	candidates := make([]cove.CandidateMemory, 0, len(memories))
-
-	for i, mem := range memories {
-		// Generate temporary ID for tracking (we'll use index since memories don't have IDs yet)
-		candidates = append(candidates, cove.CandidateMemory{
-			ID:      strconv.Itoa(i),
-			Type:    string(mem.Type),
-			Summary: mem.Summary,
-			Detail:  mem.Detail,
-			Score:   1.0, // Extracted facts default to pass-through (no semantic score)
-		})
-	}
-
-	return candidates
+	return cove.MemoriesToCandidates(memories)
 }
 
 // filterMemoriesByCoVe filters memories based on CoVe verification results

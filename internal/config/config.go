@@ -15,8 +15,6 @@ const (
 	DefaultProxyPort               = 8080
 	DefaultExtractionBufferBytes   = 16384 // 16KB default
 	DefaultLLMBaseURL              = "http://localhost:11434/v1"
-	DefaultEmbeddingModel          = "nomic-embed-text"
-	DefaultHybridWeight            = 0.5
 	DefaultCoVeConfidenceThreshold = 0.6
 	DefaultCoVeMaxCandidates       = 20
 	DefaultCoVeTimeoutSeconds      = 30
@@ -33,10 +31,6 @@ type Config struct {
 	LLMBaseURL                    string
 	LLMAPIKey                     string
 	LLMModel                      string
-	EmbeddingBaseURL              string
-	EmbeddingModel                string
-	SemanticEnabled               bool
-	HybridWeight                  float64
 	EvidenceAllowCommand          bool
 	EvidenceAllowedCommands       []string
 	EvidenceCommandTimeoutSeconds int
@@ -75,10 +69,8 @@ type fileConfig struct {
 		BaseURL string `toml:"base_url"`
 	} `toml:"proxy"`
 	Recall struct {
-		MaxItems        int     `toml:"max_items"`
-		MaxTokens       int     `toml:"max_tokens"`
-		SemanticEnabled bool    `toml:"semantic_enabled"`
-		HybridWeight    float64 `toml:"hybrid_weight"`
+		MaxItems  int `toml:"max_items"`
+		MaxTokens int `toml:"max_tokens"`
 	} `toml:"recall"`
 	Memory struct {
 		AutoExtract         bool `toml:"auto_extract"`
@@ -98,10 +90,6 @@ type fileConfig struct {
 		APIKey  string `toml:"api_key"`
 		Model   string `toml:"model"`
 	} `toml:"llm"`
-	Embedding struct {
-		BaseURL string `toml:"base_url"`
-		Model   string `toml:"model"`
-	} `toml:"embedding"`
 	Prompt struct {
 		AlwaysIncludeUserPrompt *bool `toml:"always_include_user_prompt"`
 	} `toml:"prompt"`
@@ -146,10 +134,6 @@ func LoadConfig() (*Config, error) {
 	cfg := &Config{
 		ProxyPort:                     DefaultProxyPort,
 		LLMBaseURL:                    DefaultLLMBaseURL,
-		EmbeddingBaseURL:              "",
-		EmbeddingModel:                DefaultEmbeddingModel,
-		SemanticEnabled:               false,
-		HybridWeight:                  DefaultHybridWeight,
 		EvidenceAllowCommand:          false,
 		EvidenceAllowedCommands:       []string{"go", "npm", "make", "pytest", "python", "python3", "sh", "bash", "grep", "cat"},
 		EvidenceCommandTimeoutSeconds: 20,
@@ -181,7 +165,6 @@ func LoadConfig() (*Config, error) {
 		DBRetentionExcludeTypes: []string{"fact"},
 	}
 
-	embeddingBaseURLSet := false
 	// Try to load config from file if it exists
 	if _, err := os.Stat(configPath); err == nil {
 		fileData, err := os.ReadFile(configPath)
@@ -211,10 +194,6 @@ func LoadConfig() (*Config, error) {
 		if parsed.Recall.MaxTokens != 0 {
 			cfg.RecallMaxTokens = parsed.Recall.MaxTokens
 		}
-		if parsed.Recall.HybridWeight != 0 {
-			cfg.HybridWeight = parsed.Recall.HybridWeight
-		}
-		cfg.SemanticEnabled = parsed.Recall.SemanticEnabled
 		if parsed.Logging.Level != "" {
 			cfg.LogLevel = parsed.Logging.Level
 		}
@@ -236,13 +215,6 @@ func LoadConfig() (*Config, error) {
 		}
 		if parsed.LLM.Model != "" {
 			cfg.LLMModel = parsed.LLM.Model
-		}
-		if parsed.Embedding.BaseURL != "" {
-			cfg.EmbeddingBaseURL = parsed.Embedding.BaseURL
-			embeddingBaseURLSet = true
-		}
-		if parsed.Embedding.Model != "" {
-			cfg.EmbeddingModel = parsed.Embedding.Model
 		}
 		if parsed.Prompt.AlwaysIncludeUserPrompt != nil {
 			cfg.AlwaysIncludeUserPrompt = *parsed.Prompt.AlwaysIncludeUserPrompt
@@ -308,13 +280,6 @@ func LoadConfig() (*Config, error) {
 	if llmModel := os.Getenv("TINYMEM_LLM_MODEL"); llmModel != "" {
 		cfg.LLMModel = llmModel
 	}
-	if embedBaseURL := os.Getenv("TINYMEM_EMBEDDING_BASE_URL"); embedBaseURL != "" {
-		cfg.EmbeddingBaseURL = embedBaseURL
-		embeddingBaseURLSet = true
-	}
-	if embedModel := os.Getenv("TINYMEM_EMBEDDING_MODEL"); embedModel != "" {
-		cfg.EmbeddingModel = embedModel
-	}
 	if allowCmd := os.Getenv("TINYMEM_EVIDENCE_ALLOW_COMMAND"); allowCmd != "" {
 		cfg.EvidenceAllowCommand = allowCmd == "true" || allowCmd == "1"
 	}
@@ -336,15 +301,6 @@ func LoadConfig() (*Config, error) {
 			cfg.EvidenceCommandTimeoutSeconds = timeout
 		}
 	}
-	if semantic := os.Getenv("TINYMEM_SEMANTIC_ENABLED"); semantic != "" {
-		cfg.SemanticEnabled = semantic == "true" || semantic == "1"
-	}
-	if hybridWeight := os.Getenv("TINYMEM_HYBRID_WEIGHT"); hybridWeight != "" {
-		if weight, err := strconv.ParseFloat(hybridWeight, 64); err == nil {
-			cfg.HybridWeight = weight
-		}
-	}
-
 	if search := os.Getenv("TINYMEM_SEARCH_ENABLED"); search != "" {
 		if search == "true" || search == "1" {
 			cfg.SearchEnabled = true
@@ -442,10 +398,6 @@ func LoadConfig() (*Config, error) {
 	}
 
 	cfg.LLMBaseURL = normalizeBaseURL(cfg.LLMBaseURL)
-	if !embeddingBaseURLSet {
-		cfg.EmbeddingBaseURL = cfg.LLMBaseURL
-	}
-	cfg.EmbeddingBaseURL = normalizeBaseURL(cfg.EmbeddingBaseURL)
 
 	return cfg, nil
 }
@@ -505,9 +457,6 @@ func (c *Config) Validate() error {
 	}
 	if c.ExtractionBufferBytes <= 0 {
 		return fmt.Errorf("extraction buffer bytes must be positive")
-	}
-	if c.HybridWeight < 0 || c.HybridWeight > 1 {
-		return fmt.Errorf("hybrid weight must be between 0 and 1")
 	}
 	if c.EvidenceCommandTimeoutSeconds <= 0 {
 		return fmt.Errorf("evidence command timeout must be positive")

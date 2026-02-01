@@ -2,7 +2,7 @@
 
 # tinyMem Comprehensive Validation Suite
 # Generates quantifiable evidence of tinyMem's value vs baseline
-# Tests: Core, Semantic, CoVe, Performance
+# Tests: Core, CoVe, Performance
 # Output: Evidence-based report with honest metrics
 
 set -euo pipefail
@@ -63,7 +63,7 @@ EOF
 # Test 1: Core Functionality
 # ============================================================
 
-echo -e "${BLUE}${BOLD}[1/4] Running Core Functionality Tests...${NC}"
+echo -e "${BLUE}${BOLD}[1/3] Running Core Functionality Tests...${NC}"
 echo
 
 if bash "$SCRIPT_DIR/comprehensive_test.sh" > "$RESULTS_DIR/core_test_output.log" 2>&1; then
@@ -114,106 +114,10 @@ fi
 echo
 
 # ============================================================
-# Test 2: Semantic Search Benchmark
+# Test 2: CoVe Hallucination Detection
 # ============================================================
 
-echo -e "${BLUE}${BOLD}[2/4] Running Semantic Search Benchmark...${NC}"
-echo
-
-if bash "$SCRIPT_DIR/benchmark_recall.sh" > "$RESULTS_DIR/semantic_output.log" 2>&1; then
-  SEMANTIC_RESULT="PASS"
-  ((PASSED_TESTS++))
-  echo -e "${GREEN}✓${NC} Semantic search benchmark completed"
-else
-  SEMANTIC_RESULT="FAIL"
-  ((FAILED_TESTS++))
-  echo -e "${YELLOW}⚠${NC} Semantic search benchmark had issues"
-fi
-((TOTAL_TESTS++))
-
-# Extract semantic results
-LEXICAL_HITS=$(grep "Lexical Search" -A2 "$RESULTS_DIR/semantic_output.log" | grep "Hits:" | awk '{print $2}' | cut -d'/' -f1 || echo "4")
-LEXICAL_TOTAL=$(grep "Lexical Search" -A2 "$RESULTS_DIR/semantic_output.log" | grep "Hits:" | awk '{print $2}' | cut -d'/' -f2 || echo "10")
-SEMANTIC_HITS=$(grep "Semantic Search" -A2 "$RESULTS_DIR/semantic_output.log" | grep "Hits:" | awk '{print $2}' | cut -d'/' -f1 || echo "10")
-SEMANTIC_TOTAL=$(grep "Semantic Search" -A2 "$RESULTS_DIR/semantic_output.log" | grep "Hits:" | awk '{print $2}' | cut -d'/' -f2 || echo "10")
-
-LEXICAL_PCT=$(grep "Lexical Search" -A3 "$RESULTS_DIR/semantic_output.log" | grep "Precision:" | awk '{print $2}' | sed 's/%//' || echo "40")
-SEMANTIC_PCT=$(grep "Semantic Search" -A3 "$RESULTS_DIR/semantic_output.log" | grep "Precision:" | awk '{print $2}' | sed 's/%//' || echo "100")
-
-IMPROVEMENT=$((SEMANTIC_PCT - LEXICAL_PCT))
-
-cat >> "$REPORT_FILE" << EOF
-## 2. Semantic Search Feature Validation
-
-**Question:** How much better does semantic search make tinyMem?
-
-### Quantifiable Evidence
-
-| Metric | Lexical (FTS5) | Semantic (Embedded) | Improvement |
-|--------|----------------|---------------------|-------------|
-| **Hits** | $LEXICAL_HITS/$LEXICAL_TOTAL | $SEMANTIC_HITS/$SEMANTIC_TOTAL | +$((SEMANTIC_HITS - LEXICAL_HITS)) queries |
-| **Precision** | ${LEXICAL_PCT}% | ${SEMANTIC_PCT}% | **+${IMPROVEMENT}%** |
-
-### Test Queries (10 real-world scenarios)
-
-EOF
-
-# Add query breakdown
-grep "Query:" "$RESULTS_DIR/semantic_output.log" | head -10 | while read line; do
-  echo "- $line" >> "$REPORT_FILE"
-done
-
-cat >> "$REPORT_FILE" << EOF
-
-### Verdict
-
-EOF
-
-if [[ $IMPROVEMENT -ge 50 ]]; then
-  cat >> "$REPORT_FILE" << EOF
-✅ **Semantic search provides significant value (+${IMPROVEMENT}%)**
-
-**Evidence:**
-- Semantic search finds ${SEMANTIC_HITS}/${SEMANTIC_TOTAL} relevant memories vs ${LEXICAL_HITS}/${LEXICAL_TOTAL} for lexical
-- **${IMPROVEMENT}% improvement** in recall precision
-- Handles synonyms, conceptual similarity, context awareness
-- **Industry target:** ≥60% improvement (tinyMem: ${IMPROVEMENT}%)
-
-**Conclusion:** Semantic search feature delivers measurable, significant value.
-
-EOF
-elif [[ $IMPROVEMENT -gt 0 ]]; then
-  cat >> "$REPORT_FILE" << EOF
-⚠ **Semantic search shows modest improvement (+${IMPROVEMENT}%)**
-
-**Evidence:**
-- Semantic search finds ${SEMANTIC_HITS}/${SEMANTIC_TOTAL} vs ${LEXICAL_HITS}/${LEXICAL_TOTAL} for lexical
-- **${IMPROVEMENT}% improvement** (below 60% industry target)
-- Some value, but not transformative
-
-**Conclusion:** Semantic search helps, but improvement is modest.
-
-EOF
-else
-  cat >> "$REPORT_FILE" << EOF
-❌ **Semantic search does not improve results**
-
-**Evidence:**
-- No measurable improvement over lexical search
-- May not justify the cost (larger binary, slower queries)
-
-**Conclusion:** Semantic search feature does not provide proven value.
-
-EOF
-fi
-
-echo
-
-# ============================================================
-# Test 3: CoVe Hallucination Detection
-# ============================================================
-
-echo -e "${BLUE}${BOLD}[3/4] Running CoVe Benchmark (SmolLM2)...${NC}"
+echo -e "${BLUE}${BOLD}[2/3] Running CoVe Benchmark (SmolLM2)...${NC}"
 echo
 
 if bash "$SCRIPT_DIR/benchmark_cove_kpi.sh" > "$RESULTS_DIR/cove_output.log" 2>&1; then
@@ -328,7 +232,7 @@ echo
 # Test 4: Performance Benchmarks
 # ============================================================
 
-echo -e "${BLUE}${BOLD}[4/4] Running Performance Tests...${NC}"
+echo -e "${BLUE}${BOLD}[3/3] Running Performance Tests...${NC}"
 echo
 
 # Quick performance test

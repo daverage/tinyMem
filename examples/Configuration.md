@@ -17,7 +17,6 @@ timeout = 120
 
 [recall]
 max_items = 10
-semantic_enabled = false
 
 [cove]
 enabled = true
@@ -46,47 +45,6 @@ Settings for the internal LLM client (used for CoVe, summarization, and proxying
 Settings for memory retrieval.
 -   `max_items` (integer): Maximum number of memories to retrieve per query. Default: `10`.
 -   `max_tokens` (integer): Maximum total tokens for injected context. Default: `2000`.
--   `semantic_enabled` (boolean): Enable semantic search. Full builds use embedded model, lightweight builds require HTTP endpoint. Default: `false`.
--   `hybrid_weight` (float): Weight for semantic vs lexical search (0.0 = all lexical, 1.0 = all semantic). Default: `0.5`.
-
-### `[embedding]`
-Settings for text embeddings used in semantic search. See [docs/EMBEDDINGS.md](../docs/EMBEDDINGS.md) for details.
-
-**Full builds** (built with `-tags embeddings`):
-- No configuration needed - uses embedded model automatically
-- `base_url` and `model` are optional (only used as HTTP fallback if local model fails)
-
-**Lightweight builds** (built without embeddings tag):
-- `base_url` (string): **Required** - URL of embedding service (e.g., `http://localhost:11434`)
-- `model` (string): Model name to use for embeddings. Default: `nomic-embed-text`
-
-**Example (Full Build - No Config Needed):**
-```toml
-[recall]
-semantic_enabled = true
-# That's it! Embedded model is used automatically.
-```
-
-**Example (Lightweight Build - HTTP Required):**
-```toml
-[recall]
-semantic_enabled = true
-
-[embedding]
-base_url = "http://localhost:11434"  # Ollama or other embedding service
-model = "nomic-embed-text"
-```
-
-**Example (Full Build with HTTP Override):**
-```toml
-[recall]
-semantic_enabled = true
-
-[embedding]
-# Force HTTP mode even with full build (e.g., to use different model)
-base_url = "http://localhost:11434"
-model = "mxbai-embed-large"
-```
 
 ### `[cove]`
 Chain-of-Verification settings for truth validation.
@@ -97,12 +55,6 @@ Chain-of-Verification settings for truth validation.
 ### `[logging]`
 -   `level` (string): Log verbosity. Options: `debug`, `info`, `warn`, `error`. Default: `info`.
 -   `file` (string): Log file path relative to `.tinyMem/`. Default: `tinymem.log`.
-
-### `[memory_ralph]`
-Settings for the Autonomous Repair Loop.
--   `max_iterations` (integer): Maximum repair attempts before giving up. Default: `5`.
--   `allow_shell` (boolean): Allow execution of shell commands. Default: `false`.
--   `forbid_paths` (array of strings): Paths that Ralph must never modify.
 
 ### `[database]`
 Database maintenance and retention policy settings.

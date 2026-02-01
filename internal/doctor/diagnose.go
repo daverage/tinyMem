@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/daverage/tinymem/internal/config"
-	"github.com/daverage/tinymem/internal/embedding"
 	"github.com/daverage/tinymem/internal/memory"
 	"github.com/daverage/tinymem/internal/storage"
 )
@@ -132,31 +131,6 @@ func (d *Runner) checkExternalDependencies() []CheckResult {
 		})
 	}
 
-	if d.config.SemanticEnabled {
-		embedErr := checkReachable(d.config.EmbeddingBaseURL)
-		if embedErr != nil {
-			results = append(results, CheckResult{
-				Name:     "embedding_backend_reachability",
-				Status:   "fail",
-				Message:  fmt.Sprintf("Embedding backend unreachable: %v", embedErr),
-				Severity: "error",
-			})
-		} else {
-			results = append(results, CheckResult{
-				Name:     "embedding_backend_reachability",
-				Status:   "pass",
-				Message:  "Embedding backend reachable",
-				Severity: "info",
-			})
-		}
-	} else {
-		results = append(results, CheckResult{
-			Name:     "embedding_backend_reachability",
-			Status:   "pass",
-			Message:  "Embedding checks skipped (semantic disabled)",
-			Severity: "info",
-		})
-	}
 
 	// Check proxy readiness based on server mode
 	// For MCP mode, this check is not critical since MCP doesn't operate as an HTTP proxy
@@ -688,7 +662,7 @@ func (d *Runner) checkFactEvidenceIntegrity() []CheckResult {
 	return results
 }
 
-// checkFeatureStatus checks the status of tinyMem features (CoVe, Ralph, Semantic Search)
+// checkFeatureStatus checks the status of tinyMem features (CoVe)
 func (d *Runner) checkFeatureStatus() []CheckResult {
 	var results []CheckResult
 
@@ -759,123 +733,7 @@ func (d *Runner) checkFeatureStatus() []CheckResult {
 		})
 	}
 
-	// ============================================================
-	// Ralph (Autonomous Repair Loop) Status
-	// ============================================================
-	if d.serverMode == MCPMode {
-		// In MCP mode, Ralph is handled by the calling AI
-		results = append(results, CheckResult{
-			Name:     "ralph_availability",
-			Status:   "pass",
-			Message:  "Ralph handled by calling AI in MCP mode (no external LLM needed)",
-			Severity: "info",
-		})
-	} else {
-		// In Proxy/Standalone mode, Ralph uses external LLM
-		results = append(results, CheckResult{
-			Name:     "ralph_availability",
-			Status:   "pass",
-			Message:  "Ralph available (autonomous repair with memory-guided fixes)",
-			Severity: "info",
-		})
 
-		// Check if LLM is available for Ralph (needs LLM for repairs in Proxy mode)
-		if d.serverMode == ProxyMode && d.config.LLMBaseURL != "" {
-			llmErr := checkReachable(d.config.LLMBaseURL)
-			if llmErr != nil {
-				results = append(results, CheckResult{
-					Name:     "ralph_llm_availability",
-					Status:   "fail",
-					Message:  fmt.Sprintf("Ralph requires LLM backend for repairs: %v", llmErr),
-					Severity: "warning",
-				})
-			} else {
-				results = append(results, CheckResult{
-					Name:     "ralph_llm_availability",
-					Status:   "pass",
-					Message:  "Ralph LLM backend reachable",
-					Severity: "info",
-				})
-			}
-		} else if d.serverMode == MCPMode {
-			results = append(results, CheckResult{
-				Name:     "ralph_llm_availability",
-				Status:   "pass",
-				Message:  "Ralph not needed in MCP mode (calling AI handles repairs)",
-				Severity: "info",
-			})
-		}
-	}
-
-	// ============================================================
-	// Semantic Search Status
-	// ============================================================
-	if d.config.SemanticEnabled {
-		// Determine embedding mode (local vs HTTP)
-		embedMode := "unknown"
-		embedDetails := ""
-
-		// Try to create local embedder to check if available
-		localEmbedder, localErr := embedding.NewLocalEmbedder()
-		if localErr == nil && localEmbedder != nil {
-			embedMode = "local (embedded model)"
-			embedDetails = "Using built-in embedding model (offline capable)"
-			// Clean up the embedder
-			localEmbedder.Close()
-		} else if d.config.EmbeddingBaseURL != "" {
-			embedMode = "HTTP"
-			embedDetails = fmt.Sprintf("Using HTTP endpoint: %s (model: %s)",
-				d.config.EmbeddingBaseURL,
-				d.config.EmbeddingModel)
-
-			// Check if HTTP endpoint is reachable
-			embedErr := checkReachable(d.config.EmbeddingBaseURL)
-			if embedErr != nil {
-				results = append(results, CheckResult{
-					Name:     "semantic_embedding_reachability",
-					Status:   "fail",
-					Message:  fmt.Sprintf("Semantic search enabled but embedding endpoint unreachable: %v", embedErr),
-					Severity: "error",
-				})
-			} else {
-				results = append(results, CheckResult{
-					Name:     "semantic_embedding_reachability",
-					Status:   "pass",
-					Message:  "Embedding HTTP endpoint reachable",
-					Severity: "info",
-				})
-			}
-		} else {
-			embedMode = "disabled (no embedder available)"
-			embedDetails = "Local embedder not available and no HTTP endpoint configured"
-			results = append(results, CheckResult{
-				Name:     "semantic_embedding_availability",
-				Status:   "fail",
-				Message:  "Semantic search enabled but no embedding provider available",
-				Severity: "error",
-			})
-		}
-
-		semanticMsg := fmt.Sprintf("Semantic search enabled (mode: %s, hybrid weight: %.2f)",
-			embedMode, d.config.HybridWeight)
-		if embedDetails != "" {
-			semanticMsg += " - " + embedDetails
-		}
-
-		results = append(results, CheckResult{
-			Name:     "semantic_search_status",
-			Status:   "pass",
-			Message:  semanticMsg,
-			Severity: "info",
-		})
-	} else {
-		results = append(results, CheckResult{
-			Name:     "semantic_search_status",
-			Status:   "pass",
-			Message:  "Semantic search disabled (using lexical search only)",
-			Severity: "info",
-		})
-	}
 
 	return results
 }

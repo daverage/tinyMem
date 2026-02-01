@@ -10,6 +10,7 @@ import (
 
 	"github.com/daverage/tinymem/internal/config"
 	"github.com/daverage/tinymem/internal/doctor"
+	"github.com/daverage/tinymem/internal/enforcement"
 	"github.com/daverage/tinymem/internal/execution"
 	"github.com/daverage/tinymem/internal/logging"
 	"github.com/daverage/tinymem/internal/memory"
@@ -99,16 +100,17 @@ func NewApp() (*App, error) {
 			DB:     db,
 		},
 		Project: ProjectModule{
-			Path: cfg.ProjectRoot, // Use project root as the project path
-			ID:   projectID,       // Store the generated project ID
+			Path: cfg.ProjectRoot,
+			ID:   projectID,
 		},
 		Server: ServerModule{
-			Mode: doctor.StandaloneMode, // Default to standalone mode
+			Mode: doctor.StandaloneMode,
 		},
-		Memory:    memoryService,
-		Execution: execution.NewController(execution.ModeStrict, tinyTasksPath),
-		Ctx:       ctx,
-		Cancel:    cancel,
+		Memory:      memoryService,
+		Execution:   execution.NewController("", tinyTasksPath),
+		Enforcement: enforcement.NewRecorder(""),
+		Ctx:         ctx,
+		Cancel:      cancel,
 	}
 
 	// Start periodic maintenance if enabled

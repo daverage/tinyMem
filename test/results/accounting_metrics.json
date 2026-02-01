@@ -1,0 +1,30 @@
+{
+  "baseline": {
+    "ProviderName": "baseline",
+    "TotalRequests": 1,
+    "SuccessfulCalls": 1,
+    "FailedCalls": 0,
+    "SuccessRate": 100,
+    "AvgLatencyMs": 200,
+    "MinLatencyMs": 200,
+    "MaxLatencyMs": 200,
+    "TotalTokens": 100,
+    "PromptTokens": 0,
+    "CompletionTokens": 0,
+    "Uptime": 125
+  },
+  "tinyMem_Core": {
+    "ProviderName": "test-provider",
+    "TotalRequests": 3,
+    "SuccessfulCalls": 2,
+    "FailedCalls": 1,
+    "SuccessRate": 66.66666666666666,
+    "AvgLatencyMs": 100,
+    "MinLatencyMs": 50,
+    "MaxLatencyMs": 150,
+    "TotalTokens": 75,
+    "PromptTokens": 0,
+    "CompletionTokens": 0,
+    "Uptime": 458
+  }
+}

@@ -43,7 +43,6 @@ type Action string
 const (
 	ActionMemoryQuery    Action = "memory_query"
 	ActionMemoryWrite    Action = "memory_write"
-	ActionMemoryRalph    Action = "memory_ralph"
 	ActionTaskMutation   Action = "task_mutation"
 	ActionFactPromotion  Action = "fact_promotion"
 	ActionTinyTasksWrite Action = "tinyTasks_edit"
@@ -53,6 +52,7 @@ const (
 type Controller struct {
 	mu                sync.RWMutex
 	currentMode       Mode
+	modeExplicitlySet bool
 	strictRequired    bool
 	strictReason      string
 	failureCounts     map[string]int
@@ -66,19 +66,19 @@ type Controller struct {
 
 // NewController creates a controller with the provided initial mode and tinyTasks path.
 func NewController(initial Mode, tinyTasksPath string) *Controller {
-	if initial == "" {
-		initial = ModePassive
-	}
 
 	ctrl := &Controller{
 		currentMode:       initial,
+		modeExplicitlySet: initial != "",
 		failureCounts:     map[string]int{},
 		fileEditCounts:    map[string]int{},
 		tinyTasksPath:     tinyTasksPath,
 		failureThreshold:  2,
 		fileEditThreshold: 2,
 	}
-	_ = ctrl.setModeNoLock(initial)
+	if initial != "" {
+		_ = ctrl.setModeNoLock(initial)
+	}
 	ctrl.loadTinyTasksSnapshot()
 	return ctrl
 }
@@ -90,15 +90,22 @@ func (c *Controller) Mode() Mode {
 	return c.currentMode
 }
 
+// ModeSet reports whether a mode has been explicitly set via SetMode.
+func (c *Controller) ModeSet() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.modeExplicitlySet
+}
+
 // SetMode updates the controller's mode and updates the environment variable.
 func (c *Controller) SetMode(mode Mode) error {
-	if mode == "" {
-		return fmt.Errorf("mode cannot be empty")
-	}
-
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.setModeNoLock(mode)
+	if err := c.setModeNoLock(mode); err != nil {
+		return err
+	}
+	c.modeExplicitlySet = true
+	return nil
 }
 
 func (c *Controller) setModeNoLock(mode Mode) error {
@@ -137,6 +144,10 @@ func ParseMode(value string) (Mode, error) {
 func (c *Controller) Enforce(action Action, minimum Mode) error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
+
+	if !c.modeExplicitlySet {
+		return fmt.Errorf("execution mode not explicitly set")
+	}
 
 	if c.strictRequired && c.currentMode != ModeStrict {
 		return ErrStrictRequired
@@ -212,11 +223,6 @@ func (c *Controller) RecordFileEdit(path string) {
 		c.strictRequired = true
 		c.strictReason = fmt.Sprintf("multiple edits detected to %s", normalized)
 	}
-}
-
-// MarkRalphInvocation escalates to STRICT mode requirements.
-func (c *Controller) MarkRalphInvocation() {
-	c.TriggerStrict("memory_ralph invoked")
 }
 
 // MarkFactPromotion marks that fact promotion requires STRICT mode.

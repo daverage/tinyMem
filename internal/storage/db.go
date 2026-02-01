@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	SchemaVersion = 8
+	SchemaVersion = 9
 )
 
 // DB represents the database connection
@@ -97,6 +97,10 @@ func (db *DB) migrate() error {
 			}
 		case 8:
 			if err := db.applySchemaV8(tx); err != nil {
+				return fmt.Errorf("failed to apply schema v%d: %w", version, err)
+			}
+		case 9:
+			if err := db.applySchemaV9(tx); err != nil {
 				return fmt.Errorf("failed to apply schema v%d: %w", version, err)
 			}
 		default:
@@ -478,18 +482,6 @@ func (db *DB) applySchemaV1(tx *sql.Tx) error {
 		return err
 	}
 
-	// Create embeddings table
-	_, err = tx.Exec(`
-		CREATE TABLE IF NOT EXISTS embeddings (
-			memory_id INTEGER PRIMARY KEY REFERENCES memories(id) ON DELETE CASCADE,
-			embedding_data TEXT NOT NULL,
-			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-		)
-	`)
-	if err != nil {
-		return err
-	}
-
 	// Check if FTS5 is available by attempting to create a temporary FTS table
 	ftsAvailable := db.isFTS5Available(tx)
 
@@ -687,6 +679,18 @@ func (db *DB) applySchemaV8(tx *sql.Tx) error {
 	`)
 	if err != nil {
 		return err
+	}
+
+	// Update schema version (V8 updates to 8, not SchemaVersion)
+	_, err = tx.Exec("PRAGMA user_version = 8")
+	return err
+}
+
+func (db *DB) applySchemaV9(tx *sql.Tx) error {
+	// V9 Migration: Remove embeddings table (semantic recall removed)
+	_, err := tx.Exec(`DROP TABLE IF EXISTS embeddings`)
+	if err != nil {
+		return fmt.Errorf("failed to drop embeddings table: %w", err)
 	}
 
 	// Update schema version

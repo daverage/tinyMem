@@ -18,7 +18,6 @@ func TestSemanticCannotOverrideLexical(t *testing.T) {
 	cfg := &config.Config{
 		ProjectRoot:     tmpDir,
 		DBPath:          filepath.Join(tmpDir, "test.db"),
-		SemanticEnabled: false, // Lexical only
 	}
 
 	db, err := storage.NewDB(cfg)
@@ -92,8 +91,8 @@ func TestSemanticCannotOverrideLexical(t *testing.T) {
 		t.Fatal("Ground truth fact not in search results - AUTHORITY VIOLATION")
 	}
 
-	// CRITICAL: Even if semantic search is enabled, lexical matches must not be demoted
-	// This test ensures semantic scoring cannot suppress lexical truth
+	// CRITICAL: Lexical matches must not be demoted by recall scoring
+	// This test ensures truth authority is maintained regardless of recall scoring
 
 	allMetrics = append(allMetrics, TestMetrics{
 		TestName: "Authority_SemanticCannotOverrideLexical",
@@ -407,16 +406,16 @@ func TestSemanticScoresNonAuthoritative(t *testing.T) {
 	for _, result := range verifyResults {
 		if result.ID == memID {
 			found = true
-			// Memory must remain a fact (semantic scores cannot demote it)
+			// Memory must remain a fact (recall scoring cannot demote it)
 			if result.Type != memory.Fact {
-				t.Fatal("Fact was demoted - semantic override - AUTHORITY VIOLATION")
+				t.Fatal("Fact was demoted - AUTHORITY VIOLATION")
 			}
 			break
 		}
 	}
 
 	if !found {
-		t.Fatal("Exact match suppressed - semantic override - AUTHORITY VIOLATION")
+		t.Fatal("Exact match suppressed - AUTHORITY VIOLATION")
 	}
 
 	allMetrics = append(allMetrics, TestMetrics{
@@ -428,8 +427,7 @@ func TestSemanticScoresNonAuthoritative(t *testing.T) {
 // TestLLMProposalsNonAuthoritative verifies LLM outputs require validation
 func TestLLMProposalsNonAuthoritative(t *testing.T) {
 	// This test verifies architectural constraint: LLM outputs are proposals only
-	// Already proven by Ralph tests (LLM cannot signal success)
-	// This test adds explicit assertion about memory creation
+	// This test adds explicit assertion that LLM cannot signal success via memory creation
 
 	tmpDir, cleanup := setupAuthorityTestEnv(t)
 	defer cleanup()
@@ -503,7 +501,6 @@ func TestSemanticEnabledLexicalWins(t *testing.T) {
 	cfg := &config.Config{
 		ProjectRoot:     tmpDir,
 		DBPath:          filepath.Join(tmpDir, "test.db"),
-		SemanticEnabled: true,
 	}
 
 	db, err := storage.NewDB(cfg)
@@ -549,13 +546,13 @@ func TestSemanticEnabledLexicalWins(t *testing.T) {
 		if r.Summary == "SecretToken9921" {
 			found = true
 			if r.Type != memory.Fact {
-				t.Error("Fact status lost in semantic-enabled search")
+				t.Error("Fact status lost in recall")
 			}
 		}
 	}
 
 	if !found {
-		t.Fatal("Lexical truth suppressed by semantic search - INVARIANT VIOLATION")
+		t.Fatal("Lexical truth suppressed by recall - INVARIANT VIOLATION")
 	}
 
 	allMetrics = append(allMetrics, TestMetrics{

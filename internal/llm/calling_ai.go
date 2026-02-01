@@ -2,7 +2,6 @@ package llm
 
 import (
 	"context"
-	"fmt"
 	"time"
 )
 
@@ -13,13 +12,11 @@ import (
 // Rather than requiring a separate LLM backend, we provide simplified behavior:
 //
 // - CoVe: Returns facts without verification (calling AI is reliable)
-// - Ralph: Returns errors to calling AI for repair (calling AI handles fixes)
 //
-// For advanced use cases requiring autonomous Ralph in MCP mode:
+// For advanced use cases requiring full CoVe in MCP mode:
 // 1. Configure an external LLM (Ollama) - use external.Client
-// Note: CoVe works without LLM using semantic similarity scoring
 //
-// This provider exists to make CoVe/Ralph "work" in MCP mode without external deps,
+// This provider exists to make CoVe "work" in MCP mode without external deps,
 // but with reduced functionality compared to Proxy mode with full LLM backend.
 type CallingAIProvider struct {
 	// mode specifies how this provider behaves
@@ -40,9 +37,8 @@ func NewCallingAIProvider() *CallingAIProvider {
 
 // ChatCompletions in CallingAI mode returns a pass-through response
 // For CoVe: Returns a simple "verified" response without actual verification
-// For Ralph: Returns error description for calling AI to handle
 //
-// This is intentionally simplified. For full CoVe/Ralph functionality in MCP mode,
+// This is intentionally simplified. For full CoVe functionality in MCP mode,
 // users should configure an external LLM or wait for embedded text generation support.
 func (p *CallingAIProvider) ChatCompletions(ctx context.Context, req ChatCompletionRequest) (*ChatCompletionResponse, error) {
 	start := time.Now()
@@ -58,7 +54,6 @@ func (p *CallingAIProvider) ChatCompletions(ctx context.Context, req ChatComplet
 
 	// Provide a simplified response
 	// CoVe verification: Accept without deep verification (calling AI is reliable)
-	// Ralph repair: Return error info for calling AI to process
 	response := p.generateSimplifiedResponse(userMessage)
 
 	// Record successful request
@@ -94,16 +89,9 @@ func (p *CallingAIProvider) generateSimplifiedResponse(userMessage string) strin
 			"Note: Full CoVe verification requires external LLM configuration in MCP mode."
 	}
 
-	// For Ralph repair requests, return a prompt for the calling AI
-	if containsAny(userMessage, []string{"repair", "fix", "error", "failure"}) {
-		return fmt.Sprintf("Error analysis needed:\n\n%s\n\n"+
-			"Suggestion: Review the error above and apply appropriate fixes. "+
-			"For autonomous repair, configure an external LLM for Ralph.", userMessage)
-	}
-
 	// Generic response
 	return "MCP mode: This request requires external LLM for full functionality. " +
-		"Current response is simplified. Configure LLM backend for CoVe/Ralph, or use calling AI to process manually."
+		"Current response is simplified. Configure LLM backend for CoVe, or use calling AI to process manually."
 }
 
 // containsAny checks if s contains any of the substrings

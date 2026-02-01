@@ -42,12 +42,12 @@ Proxy and MCP transports enqueue requests into the same core process, which rout
 
 - **CoreModule**: Loads configuration, bootstraps structured logging, and opens the SQLite database used for persistent memories and task state.
 - **ProjectModule**: Knows the project root, project ID, and file-system layout so services can locate `tinyTasks.md`, sample data, and per-project metadata.
-- **ServerModule**: Understands the execution mode (proxy, MCP, standalone) and wires transports to MCP tool handlers, health endpoints, and the Ralph repair loop.
+- **ServerModule**: Understands the execution mode (proxy, MCP, standalone) and wires transports to MCP tool handlers and health endpoints.
 
 The service layer sits atop the modules:
 
 - **Memory Service** stores, indexes, and deletes memories while conforming to truth states (verified/asserted/tentative) and allows custom recall tiers.
-- **Evidence Service** ensures evidence predicates are evaluated before admitting facts, constraining claims, or closing a Ralph loop.
+- **Evidence Service** ensures evidence predicates are evaluated before admitting facts or constraining claims.
 - **Recall Engine** decides which memories to inject back into prompts based on tiers, tokens, and freshness heuristics.
 
 ## Memory Pipeline and Persistence
@@ -60,7 +60,9 @@ The service layer sits atop the modules:
 
 ## tinyTasks System
 
-`tinyTasks.md` remains the single source of truth for work. tinyMem keeps this ledger synchronized with memory entries and enforces strict intent semantics.
+**tinyTasks — file-authoritative task ledger enforced by tinyMem**
+
+`tinyTasks.md` is the single source of truth for what work is authorized.
 
 ```
 ┌────────────────────────────────────────────────────────────┐
@@ -82,25 +84,22 @@ The service layer sits atop the modules:
 - Synchronization: CLI/MCP commands read and write `tinyTasks.md`, regenerate memory entries, and drive agent workflows.
 - Safety: Dormant unchecked tasks stay out of recall unless explicitly requested, preventing stale instructions from triggering new work.
 
-## Ralph Mode (Autonomous Repair)
+## Evidence Boundary
 
-Ralph orchestrates evidence-gated repair loops when tasks require verification.
+tinyMem records and evaluates evidence but **never executes commands to gather evidence**.
 
-```
-┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
-│ Execute  │ -> │ Evidence │ -> │ Recall   │ -> │ Repair   │
-│ Phase    │    │ Phase    │    │ Phase    │    │ Phase    │
-└──────────┘    └──────────┘    └──────────┘    └──────────┘
-       ↑                                                    │
-       └───────────────────── Loop control ──────────────────┘
-```
+**Clear boundary:**
+- **Agents execute** - Run tests, build code, verify behavior
+- **tinyMem records** - Stores evidence results (exit codes, file existence, grep matches)
+- **tinyMem evaluates** - Gates fact promotion based on evidence validity
 
-- **Execute**: Runs diagnostic commands or tests (via `memory_ralph` API) capturing stdout/stderr.
-- **Evidence**: Enforces predicates like `cmd_exit0`, `test_pass`, or `file_exists` before declaring success.
-- **Recall**: Fetches relevant memories, including tinyTasks state, to inform repairs.
-- **Repair**: Applies fixes (patches, file edits) while respecting forbidden paths, iteration caps, and human approval gates.
+**Example:**
+- Agent: Runs `go test ./...` and gets exit code 0
+- Agent: Submits evidence `cmd_exit0::go test ./...` with memory
+- tinyMem: Verifies evidence format and gates fact promotion
+- tinyMem: **DOES NOT** re-run the command itself
 
-Safety measures include iteration limits, forbidden-path enforcement, diagnostics logging, and human gating for high-risk repairs.
+This keeps tinyMem as pure memory governance, never execution.
 
 ## Tooling and Interfaces
 
@@ -109,7 +108,7 @@ tinyMem exposes capabilities through CLI commands, MCP tool calls, and the dashb
 | Interface | Purpose |
 | --- | --- |
 | `tinymem` CLI | Launches commands such as `memory_query`, `memory_recent`, `memory_write`, `memory_stats`, `memory_doctor`, `dashboard`, `proxy`, and `mcp` for dev workflows. |
-| MCP tools | `memory_query`, `memory_recent`, `memory_write`, `memory_stats`, `memory_health`, `memory_doctor`, `memory_ralph`, and others feed LLM agents. |
+| MCP tools | `memory_query`, `memory_recent`, `memory_write`, `memory_stats`, `memory_health`, `memory_doctor`, and others feed LLM agents. |
 | Proxy endpoints | `/v1/chat/completions` (OpenAI-compatible) forwards requests through tinyMem to enforce recall and filtering. |
 | Dashboard | Visualizes memory state, tinyTasks progress, and health signals to operators. |
 
@@ -121,7 +120,7 @@ tinyMem owns the execution mode and enforces what actions agents may perform. Th
 
 - **PASSIVE** – read-only operations such as `memory_query`, health checks, and diagnostics remain available.
 - **GUARDED** – writes (e.g., `memory_write`) and mutable operations are allowed once the agent explicitly declares guarded intent.
-- **STRICT** – authorizes the highest-risk operations: modifying `tinyTasks.md`, running `memory_ralph`, or promoting claims to facts.
+- **STRICT** – authorizes the highest-risk operations: modifying `tinyTasks.md` or promoting claims to facts.
 
 The current mode is stored in the controller, exposed on the environment (`TINYMEMP_MODE`), and surfaced in MCP (`memory_set_mode`) and proxy responses (`X-TinyMem-Mode`). Attempts to violate the gating rules (e.g., write outside guarded mode, edit tinyTasks without strict mode, or trigger repeated failures) are rejected with a clear “STRICT mode required” response. tinyMem also escalates to strict mode automatically when it detects multiple failed tool calls, repeated edits to the same file, tinyTasks mutations, or claim→fact promotions, ensuring the working mode always tracks the agent’s risk level.
 

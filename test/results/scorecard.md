@@ -1,12 +1,17 @@
 # tinyMem Comparative Benchmark Scorecard
 
-## Overall Status: **PASS**
+## Overall Outcome: **PASS**
 
-| Mode | Success Rate | True Success | False Success | Tokens/Success | LLM Honesty | Noise Filtered |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| baseline | 25.0% | 0.0% | 25.0% | 6231 | 75.0% | 33.3% |
-| tinyMem + CoVe | 40.0% | 40.0% | 0.0% | 2681 | 100.0% | 25.0% |
-| tinyMem + CoVe + Ralph | 35.0% | 35.0% | 0.0% | 3064 | 100.0% | 25.0% |
-| tinyMem + CoVe + Ralph + Semantic | 27.5% | 27.5% | 0.0% | 3900 | 100.0% | 25.0% |
-| tinyMem + Ralph | 30.0% | 30.0% | 0.0% | 3575 | 100.0% | 25.0% |
-| tinyMem core | 27.5% | 27.5% | 0.0% | 3900 | 100.0% | 25.0% |
+## Proven Enforcement Outcomes
+
+| Mode | Allowed Actions | Blocked Actions | Violations | Claimed Successes | Enforced Successes |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| baseline | 0 | 0 | 0 | 0 | 0 |
+| tinyMem | 1320 | 40 | 0 | 0 | 1320 |
+
+## Observed Scenario Metrics
+
+| Mode | Success Rate | False Success Rate | Tokens/Success | LLM Honesty | Noise Filtered |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| baseline | 0.0% | 75.0% | 0 | 25.0% | 0.0% |
+| tinyMem | 75.0% | 25.0% | 600 | 75.0% | 2887.5% |

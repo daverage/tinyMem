@@ -121,15 +121,12 @@ if [[ -f "$PROJECT_ROOT/libllama_go.dylib" ]]; then
   echo -e "${GREEN}✓${NC} Copied libllama_go.dylib for embedded model support"
 fi
 
-# Configure for full testing (CoVe disabled but semantic enabled)
+# Configure for testing with CoVe enabled (production mode)
 mkdir -p .tinyMem
 cat > .tinyMem/config.toml << 'EOF'
 [cove]
-enabled = false
-
-[recall]
-semantic_enabled = true
-hybrid_weight = 0.7
+enabled = true
+confidence_threshold = 0.6
 EOF
 
 echo -e "${GREEN}✓${NC} Test directory: $TEST_DIR"

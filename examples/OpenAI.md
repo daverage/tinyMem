@@ -6,7 +6,7 @@ This guide covers using tinyMem with the official OpenAI Python/Node.js SDKs, as
 
 tinyMem acts as a **transparent proxy**. You change your client's `base_url` to point to tinyMem (default `http://localhost:8080/v1`).
 1.  tinyMem receives the user prompt.
-2.  It performs a semantic/keyword search in the local project memory.
+2.  It performs a lexical search in the local project memory.
 3.  It injects relevant memories into the system prompt.
 4.  It forwards the enriched request to the *actual* LLM provider (OpenAI, Ollama, LM Studio, etc.) defined in your config.
 

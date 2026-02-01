@@ -33,8 +33,8 @@ type mockLLMClient struct {
 
 func (m *mockLLMClient) ChatCompletions(ctx context.Context, req llm.ChatCompletionRequest) (*llm.ChatCompletionResponse, error) {
 	m.callCount++
-	// Should never be called for CoVe with semantic scoring
-	panic("LLM called - CoVe should use semantic scores only!")
+	// Should never be called for CoVe filtering in this test (uses pre-computed scores)
+	panic("LLM called - CoVe should use pre-computed scores only in this test!")
 }
 
 // TestCoVeFilteringWithThresholds verifies threshold-based filtering with zero LLM calls
@@ -75,7 +75,7 @@ func TestCoVeFilteringWithThresholds(t *testing.T) {
 
 			// Verify LLM was never called
 			if mockClient.callCount > 0 {
-				t.Fatalf("LLM was called %d times - CoVe should use semantic scores only!", mockClient.callCount)
+				t.Fatalf("LLM was called %d times - CoVe should use pre-computed scores only in this test!", mockClient.callCount)
 			}
 
 			// Verify exact count matches expected

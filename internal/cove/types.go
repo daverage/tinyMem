@@ -48,7 +48,7 @@ type CandidateMemory struct {
 	Type    string
 	Summary string
 	Detail  string
-	Score   float64 // Similarity score from semantic search (0-1), or 1.0 if not using semantic
+	Score   float64 // Relevance score (0-1), defaults to 1.0 for lexical recall
 }
 
 // RecallFilterRequest is the internal request structure for recall filtering

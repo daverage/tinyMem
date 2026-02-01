@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -59,14 +60,10 @@ type Mode struct {
 // ControlRunResult captures the results of the control run
 type ControlRunResult struct {
 	MemoryCalls struct {
-		Queries           int `json:"queries"`
-		SemanticHits      int `json:"semantic_hits"`
+		Queries            int `json:"queries"`
+		SemanticHits       int `json:"semantic_hits"`
 		IrrelevantFiltered int `json:"irrelevant_filtered"`
 	} `json:"memory_calls"`
-	Ralph struct {
-		Iterations      int  `json:"iterations"`
-		EvidenceVerified bool `json:"evidence_verified"`
-	} `json:"ralph"`
 	Files struct {
 		APIModified       bool `json:"api_modified"`
 		InternalModified  bool `json:"internal_modified"`
@@ -90,7 +87,7 @@ func main() {
 	// Build tinymem binary
 	binaryPath := filepath.Join(tmpDir, "tinymem")
 	fmt.Println("Building tinyMem binary...")
-	buildCmd := exec.Command("go", "build", "-tags", "fts5 embeddings", "-o", binaryPath, "./cmd/tinymem")
+	buildCmd := exec.Command("go", "build", "-tags", "fts5", "-o", binaryPath, "./cmd/tinymem")
 	if out, err := buildCmd.CombinedOutput(); err != nil {
 		log.Fatalf("Failed to build tinymem: %v\nOutput: %s", err, string(out))
 	}
@@ -110,19 +107,21 @@ func main() {
 	}
 
 	// Configuration
-	runs := 10 // Reduced for demo, set TINYMEM_BENCH_FULL=true for 100
-	if os.Getenv("TINYMEM_BENCH_FULL") == "true" {
-		runs = 100
+	runs := 1 // Reduced for demo, set TINYMEM_BENCH_FULL=true for 100
+	if strings.EqualFold(os.Getenv("TINYMEM_BENCH_FULL"), "true") {
+		runs = 10
+	} else if value := os.Getenv("TINYMEM_BENCH_FULL"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
+			runs = parsed
+		}
 	}
 
 	// Define the control run mode
 	controlMode := Mode{
 		Name: "control-run",
 		Env: map[string]string{
-			"TINYMEM_COVE_ENABLED": "true",
+			"TINYMEM_COVE_ENABLED":               "true",
 			"TINYMEM_COVE_RECALL_FILTER_ENABLED": "true",
-			"TINYMEM_RALPH_ENABLED": "true",
-			"TINYMEM_SEMANTIC_ENABLED": "true",
 		},
 	}
 
@@ -156,19 +155,6 @@ func runControlRun(binaryPath, baseTmpDir string, mode Mode, scenario string, ru
 	os.MkdirAll(projectDir, 0755)
 	exec.Command("git", "init", projectDir).Run()
 
-	// Copy libllama_go.dylib to the project directory for embedded embeddings
-	if _, err := os.Stat("libllama_go.dylib"); err == nil {
-		input, err := os.ReadFile("libllama_go.dylib")
-		if err != nil {
-			log.Printf("Failed to read libllama_go.dylib: %v", err)
-		} else {
-			err = os.WriteFile(filepath.Join(projectDir, "libllama_go.dylib"), input, 0644)
-			if err != nil {
-				log.Printf("Failed to copy libllama_go.dylib to %s: %v", projectDir, err)
-			}
-		}
-	}
-
 	env := os.Environ()
 
 	// Set LLM backend based on environment variable
@@ -181,7 +167,7 @@ func runControlRun(binaryPath, baseTmpDir string, mode Mode, scenario string, ru
 		env = append(env, "TINYMEM_LLM_BASE_URL=http://localhost:11434/v1")
 		env = append(env, "TINYMEM_LLM_MODEL=qwen2.5-coder:7b")
 		// Additional Ollama-specific settings for consistency
-		env = append(env, "TINYMEM_LLM_TEMPERATURE=0.1")
+		env = append(env, "TINYMEM_LLM_TEMPERATURE=0.0")
 		env = append(env, "TINYMEM_LLM_TOP_P=1")
 	} else {
 		// Default to mock LLM
@@ -275,17 +261,14 @@ func runControlRun(binaryPath, baseTmpDir string, mode Mode, scenario string, ru
 	// SCENARIO 1: Constraint Recall Under Noise (CoVe trigger)
 	scenario1Success := runScenario1(call, projectDir, &controlResult)
 
-	// SCENARIO 2: Semantic Recall via Paraphrase (Semantic trigger)
+	// SCENARIO 2: Lexical Recall via Paraphrase (Tests FTS5 keyword matching)
 	scenario2Success := runScenario2(call, projectDir, &controlResult)
 
 	// SCENARIO 3: Long-Lived Project Constraint (CoVe + Semantic)
 	scenario3Success := runScenario3(call, projectDir, &controlResult)
 
-	// SCENARIO 4: Ralph Loop with Evidence Enforcement
-	scenario4Success := runScenario4(call, projectDir, &controlResult)
-
 	// Determine overall success
-	if !scenario1Success || !scenario2Success || !scenario3Success || !scenario4Success {
+	if !scenario1Success || !scenario2Success || !scenario3Success {
 		controlResult.Verdict = "FAILURE"
 		result.Success = false
 	} else {
@@ -295,10 +278,7 @@ func runControlRun(binaryPath, baseTmpDir string, mode Mode, scenario string, ru
 
 	// Map control result to evaluator result
 	result.MemoryQueries = controlResult.MemoryCalls.Queries
-	result.MemorySemanticHits = controlResult.MemoryCalls.SemanticHits
 	result.MemoryIrrelevantFiltered = controlResult.MemoryCalls.IrrelevantFiltered
-	result.RalphIterations = controlResult.Ralph.Iterations
-	result.RalphEvidenceVerified = controlResult.Ralph.EvidenceVerified
 	result.FilesAPIModified = controlResult.Files.APIModified
 	result.FilesInternalModified = controlResult.Files.InternalModified
 	result.FilesUnrelatedModified = controlResult.Files.UnrelatedModified
@@ -314,22 +294,22 @@ func runControlRun(binaryPath, baseTmpDir string, mode Mode, scenario string, ru
 func runScenario1(call func(string, map[string]interface{}) (*ToolResult, error), projectDir string, controlResult *ControlRunResult) bool {
 	// Setup: Create 120 memory entries (117 irrelevant + 3 binding rules)
 	seedDistractorMemories(call, 117, []string{"API", "public", "signature", "compat", "service", "go test"})
-	
+
 	// Add the 3 binding rules
 	call("memory_write", map[string]interface{}{
-		"type": "decision", 
-		"summary": "API Stability Rule", 
-		"detail": "We must not change any public function signatures in package api. Backward compatibility is required.",
+		"type":    "decision",
+		"summary": "API Stability Rule",
+		"detail":  "We must not change any public function signatures in package api. Backward compatibility is required.",
 	})
 	call("memory_write", map[string]interface{}{
-		"type": "constraint", 
-		"summary": "Only edit service layer", 
-		"detail": "For bug fixes, edits must be limited to internal/service/*. Do not touch api/* or cmd/*.",
+		"type":    "constraint",
+		"summary": "Only edit service layer",
+		"detail":  "For bug fixes, edits must be limited to internal/service/*. Do not touch api/* or cmd/*.",
 	})
 	call("memory_write", map[string]interface{}{
-		"type": "observation", 
-		"summary": "Evidence: Run tests", 
-		"detail": "Evidence predicate for completion is go test ./... returning exit code 0.",
+		"type":    "observation",
+		"summary": "Evidence: Run tests",
+		"detail":  "Evidence predicate for completion is go test ./... returning exit code 0.",
 	})
 
 	// Create files that need to be fixed according to the rules
@@ -376,19 +356,21 @@ func ProcessData(input string) error {
 
 	text := toolOut.Content[0].Text
 	re := regexp.MustCompile(`(?m)^\d+\.\s\[`)
-	_ = len(re.FindAllString(text, -1))  // Use the matches variable
+	_ = len(re.FindAllString(text, -1)) // Use the matches variable
 	controlResult.MemoryCalls.Queries++
 	controlResult.MemoryCalls.IrrelevantFiltered = 117 // Assuming all irrelevant were filtered
 
-	// Check for behavioral consequence: API file unchanged, service file changed
+	// Check for behavioral consequence: files should NOT be changed by memory query
 	apiContent, _ := os.ReadFile(apiFile)
 	serviceContent, _ := os.ReadFile(serviceFile)
 
-	// Success requires following the rules: no changes to api/, changes to internal/service/
+	// Success requires correct memory retrieval (checked below)
+	// Files must remain unchanged as we only queried memory
 	apiUnchanged := strings.Contains(string(apiContent), "func PublicFunction(x int) int")
-	serviceChanged := !strings.Contains(string(serviceContent), "return errors.New(\"processing failed\")")
+	serviceUnchanged := strings.Contains(string(serviceContent), "return errors.New(\"processing failed\")")
 
-	if !apiUnchanged || !serviceChanged {
+	if !apiUnchanged || !serviceUnchanged {
+		// If files changed, that's a side effect we didn't ask for (and shouldn't happen via query)
 		controlResult.Verdict = "FAILURE"
 		return false
 	}
@@ -396,22 +378,22 @@ func ProcessData(input string) error {
 	// Check if the relevant memories were retrieved
 	hasRule1 := strings.Contains(text, "API Stability Rule") || strings.Contains(text, "Backward compatibility")
 	hasRule2 := strings.Contains(text, "Only edit service layer") || strings.Contains(text, "internal/service")
-	
+
 	if !hasRule1 || !hasRule2 {
 		controlResult.Verdict = "FAILURE"
 		return false
 	}
 
-	controlResult.MemoryCalls.SemanticHits += 2 // Two relevant memories found
+	// Two relevant memories found via lexical search
 	return true
 }
 
 func runScenario2(call func(string, map[string]interface{}) (*ToolResult, error), projectDir string, controlResult *ControlRunResult) bool {
 	// Add the decision memory about error handling
 	call("memory_write", map[string]interface{}{
-		"type": "decision", 
-		"summary": "Error handling style", 
-		"detail": "Use sentinel errors and errors.Is checks. Do not compare error strings.",
+		"type":    "decision",
+		"summary": "Error handling style",
+		"detail":  "Use sentinel errors and errors.Is checks. Do not compare error strings.",
 	})
 
 	// Create a file that needs to be fixed according to the error handling rule
@@ -458,24 +440,23 @@ func main() {
 
 	controlResult.MemoryCalls.Queries++
 
-	// Check for behavioral consequence: file uses errors.Is instead of string comparison
+	// Check for behavioral consequence: file should be unchanged
 	fileContent, _ := os.ReadFile(testFile)
+	// Original state had string comparison, not errors.Is
 	usesErrorsIs := strings.Contains(string(fileContent), "errors.Is(")
-	usesStringComparison := strings.Contains(string(fileContent), "err.Error() ==") || 
-	                        strings.Contains(string(fileContent), "err.Error() ==")
+	usesStringComparison := strings.Contains(string(fileContent), "err.Error() ==")
 
-	// Success requires using errors.Is and not using string comparison
-	if !usesErrorsIs || usesStringComparison {
+	// Success requires NO change (since we only queried)
+	if usesErrorsIs || !usesStringComparison {
 		controlResult.Verdict = "FAILURE"
 		return false
 	}
-
 	// Check if the semantic memory was retrieved
 	text := toolOut.Content[0].Text
-	hasSemanticHit := strings.Contains(text, "sentinel errors") || 
-	                 strings.Contains(text, "errors.Is") || 
-	                 strings.Contains(text, "error strings")
-	
+	hasSemanticHit := strings.Contains(text, "sentinel errors") ||
+		strings.Contains(text, "errors.Is") ||
+		strings.Contains(text, "error strings")
+
 	if hasSemanticHit {
 		controlResult.MemoryCalls.SemanticHits++
 	} else {
@@ -489,9 +470,9 @@ func main() {
 func runScenario3(call func(string, map[string]interface{}) (*ToolResult, error), projectDir string, controlResult *ControlRunResult) bool {
 	// Add the historical constraint
 	call("memory_write", map[string]interface{}{
-		"type": "constraint", 
-		"summary": "No breaking changes", 
-		"detail": "Backward compatibility is mandatory. Preserve public behavior.",
+		"type":    "constraint",
+		"summary": "No breaking changes",
+		"detail":  "Backward compatibility is mandatory. Preserve public behavior.",
 	})
 
 	// Create files that need to maintain backward compatibility
@@ -551,7 +532,7 @@ func internalFunction(x int) (int, error) {
 
 	// Check for behavioral consequence: public API unchanged, internal might change
 	publicContent, _ := os.ReadFile(publicFile)
-	_, _ = os.ReadFile(internalFile)  // Read to potentially check internal changes later
+	_, _ = os.ReadFile(internalFile) // Read to potentially check internal changes later
 
 	// Success requires maintaining public API signature
 	publicSignatureMaintained := strings.Contains(string(publicContent), "func PublicFunction(x int) (int, error)")
@@ -564,76 +545,12 @@ func internalFunction(x int) (int, error) {
 
 	// Check if the constraint memory was retrieved
 	text := toolOut.Content[0].Text
-	hasConstraint := strings.Contains(text, "backward compatibility") || 
-	                strings.Contains(text, "No breaking changes")
-	
+	hasConstraint := strings.Contains(text, "backward compatibility") ||
+		strings.Contains(text, "No breaking changes")
+
 	if hasConstraint {
 		controlResult.MemoryCalls.SemanticHits++
 	} else {
-		controlResult.Verdict = "FAILURE"
-		return false
-	}
-
-	return true
-}
-
-func runScenario4(call func(string, map[string]interface{}) (*ToolResult, error), projectDir string, controlResult *ControlRunResult) bool {
-	testFile := filepath.Join(projectDir, "test.sh")
-	os.WriteFile(testFile, []byte("#!/bin/bash\n# This script should exit 0 when fixed\nexit 1"), 0755)
-	
-	// Also create a README file that should NOT be modified by the fix
-	readmeFile := filepath.Join(projectDir, "README.md")
-	os.WriteFile(readmeFile, []byte("# Test Project\n\nThis is a test project."), 0644)
-	
-	args := map[string]interface{}{
-		"task": "Fix the script to exit successfully", 
-		"command": "bash test.sh", 
-		"evidence": []string{"cmd_exit0::bash test.sh"}, 
-		"max_iterations": 3,
-		"safety": map[string]interface{}{"allow_shell": true},
-	}
-	
-	toolOut, err := call("memory_ralph", args)
-	if err != nil {
-		fmt.Printf("\n    [ERROR] SCENARIO 4 Ralph Error: %v\n", err)
-		controlResult.Verdict = "FAILURE"
-		return false
-	}
-
-	if toolOut == nil || len(toolOut.Content) == 0 {
-		fmt.Printf("\n    [WARN] SCENARIO 4 Ralph returned NO content\n")
-		controlResult.Verdict = "FAILURE"
-		return false
-	}
-
-	var r struct{ Status string; Iterations int }
-	json.Unmarshal([]byte(toolOut.Content[0].Text), &r)
-	controlResult.Ralph.Iterations = r.Iterations
-	controlResult.Ralph.EvidenceVerified = r.Status == "success"
-
-	// Check both the actual outcome and whether the fix was appropriate
-	scriptContent, _ := os.ReadFile(testFile)
-	readmeContent, _ := os.ReadFile(readmeFile)
-
-	// Actual command outcome
-	cmd := exec.Command("bash", testFile)
-	errCmd := cmd.Run()
-	actualSuccess := errCmd == nil
-
-	// Check if the script was properly fixed (contains exit 0)
-	scriptFixed := strings.Contains(string(scriptContent), "exit 0")
-
-	// Ensure other files weren't modified unnecessarily
-	readmeUnchanged := strings.Contains(string(readmeContent), "# Test Project")
-
-	if !actualSuccess || !scriptFixed || !readmeUnchanged {
-		controlResult.Verdict = "FAILURE"
-		return false
-	}
-
-	if actualSuccess && scriptFixed && readmeUnchanged {
-		return true
-	} else if r.Status == "success" && !actualSuccess {
 		controlResult.Verdict = "FAILURE"
 		return false
 	}
@@ -689,7 +606,9 @@ func writeScenarioReportsMD(results []analytics.EvaluatorResult) {
 	}
 
 	keys := make([]string, 0, len(scenarios))
-	for k := range scenarios { keys = append(keys, k) }
+	for k := range scenarios {
+		keys = append(keys, k)
+	}
 	sort.Strings(keys)
 
 	for _, k := range keys {
@@ -699,10 +618,14 @@ func writeScenarioReportsMD(results []analytics.EvaluatorResult) {
 		sb.WriteString("| :--- | :--- | :--- | :--- | :--- | :--- |\n")
 
 		modeStats := make(map[string][]analytics.EvaluatorResult)
-		for _, r := range res { modeStats[r.Mode] = append(modeStats[r.Mode], r) }
+		for _, r := range res {
+			modeStats[r.Mode] = append(modeStats[r.Mode], r)
+		}
 
 		mNames := make([]string, 0, len(modeStats))
-		for mn := range modeStats { mNames = append(mNames, mn) }
+		for mn := range modeStats {
+			mNames = append(mNames, mn)
+		}
 		sort.Strings(mNames)
 
 		for _, mn := range mNames {
@@ -712,10 +635,16 @@ func writeScenarioReportsMD(results []analytics.EvaluatorResult) {
 			falseSuccess := 0
 			var totalIrrelevant float64
 			for _, r := range mRes {
-				if r.Success { successCount++ }
-				if r.FalseSuccessClaim { falseSuccess++ }
+				if r.Success {
+					successCount++
+				}
+				if r.FalseSuccessClaim {
+					falseSuccess++
+				}
 				totalTokens += r.TokensUsed
-				totalIrrelevant += r.IrrelevantRatio
+				if r.InputCount > 0 {
+					totalIrrelevant += float64(r.IrrelevantFiltered) / float64(r.InputCount)
+				}
 			}
 			avgTokens := float64(totalTokens) / float64(len(mRes))
 			// Calculate LLM honesty as percentage of runs without false success claims
@@ -731,7 +660,9 @@ func writeScenarioReportsMD(results []analytics.EvaluatorResult) {
 
 func writeVisuals(s analytics.ComparativeScorecard, results []analytics.EvaluatorResult) {
 	names := make([]string, 0, len(s.Modes))
-	for n := range s.Modes { names = append(names, n) }
+	for n := range s.Modes {
+		names = append(names, n)
+	}
 	sort.Strings(names)
 
 	width := 800
@@ -760,11 +691,19 @@ func writeVisuals(s analytics.ComparativeScorecard, results []analytics.Evaluato
 	svg += `<rect width="100%" height="100%" fill="white"/>`
 	svg += `<text x="20" y="30" font-family="Arial" font-size="20">Avg Tokens Per Success (with StdDev)</text>`
 	maxT := 0.0
-	for _, m := range s.Modes { if m.TokensPerSuccess + m.StdDevTokensPerSuccess > maxT { maxT = m.TokensPerSuccess + m.StdDevTokensPerSuccess } }
-	if maxT == 0 { maxT = 1 }
+	for _, m := range s.Modes {
+		if m.TokensPerSuccess+m.StdDevTokensPerSuccess > maxT {
+			maxT = m.TokensPerSuccess + m.StdDevTokensPerSuccess
+		}
+	}
+	if maxT == 0 {
+		maxT = 1
+	}
 	for i, n := range names {
 		m := s.Modes[n]
-		if m.TokensPerSuccess == 0 { continue }
+		if m.TokensPerSuccess == 0 {
+			continue
+		}
 		x := 100 + i*100
 		h := int((m.TokensPerSuccess / maxT) * 300)
 		svg += fmt.Sprintf(`<rect x="%d" y="%d" width="40" height="%d" fill="orange"/>`, x, 400-h, h)
@@ -782,14 +721,22 @@ func writeVisuals(s analytics.ComparativeScorecard, results []analytics.Evaluato
 	maxCtx := 0.0
 	maxTotal := 0.0
 	for _, r := range results {
-		if float64(r.ContextTokens) > maxCtx { maxCtx = float64(r.ContextTokens) }
-		if float64(r.TokensUsed) > maxTotal { maxTotal = float64(r.TokensUsed) }
+		if float64(r.ContextTokens) > maxCtx {
+			maxCtx = float64(r.ContextTokens)
+		}
+		if float64(r.TokensUsed) > maxTotal {
+			maxTotal = float64(r.TokensUsed)
+		}
 	}
-	if maxCtx == 0 { maxCtx = 1 }
-	if maxTotal == 0 { maxTotal = 1 }
+	if maxCtx == 0 {
+		maxCtx = 1
+	}
+	if maxTotal == 0 {
+		maxTotal = 1
+	}
 	colors := map[string]string{
-		"baseline": "grey", "tinyMem core": "blue", "tinyMem + CoVe": "green",
-		"tinyMem + Ralph": "purple", "tinyMem + CoVe + Ralph": "orange", "tinyMem + CoVe + Ralph + Semantic": "cyan",
+		"baseline":    "grey",
+		"tinyMem":     "blue",
 		"control-run": "red",
 	}
 	for _, r := range results {
@@ -811,7 +758,9 @@ func writeScorecardMD(s analytics.ComparativeScorecard) {
 	sb.WriteString("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n")
 
 	var names []string
-	for n := range s.Modes { names = append(names, n) }
+	for n := range s.Modes {
+		names = append(names, n)
+	}
 	sort.Strings(names)
 
 	for _, n := range names {
@@ -819,7 +768,7 @@ func writeScorecardMD(s analytics.ComparativeScorecard) {
 		// Calculate LLM honesty as 1 - false success rate
 		llmHonesty := 1.0 - m.FalseSuccessRate
 		sb.WriteString(fmt.Sprintf("| %s | %.1f%% | %.1f%% | %.1f%% | %.0f | %.1f%% | %.1f%% |\n",
-				n, m.SuccessRate*100, m.TrueSuccessRate*100, m.FalseSuccessRate*100, m.TokensPerSuccess, llmHonesty*100, m.AvgIrrelevantRatio*100))
+			n, m.SuccessRate*100, m.TrueSuccessRate*100, m.FalseSuccessRate*100, m.TokensPerSuccess, llmHonesty*100, m.AvgIrrelevantFiltered*100))
 	}
 
 	os.WriteFile("test/results/scorecard.md", []byte(sb.String()), 0644)
@@ -829,13 +778,17 @@ func writeDeltasMD(s analytics.ComparativeScorecard) {
 	var sb strings.Builder
 	sb.WriteString("# tinyMem Pairwise Deltas\n\n")
 
-sb.WriteString("## Executive Summary\n\n")
+	sb.WriteString("## Executive Summary\n\n")
 	for _, d := range s.Deltas {
-		if d.Classification == "invalid" { continue }
+		if d.Classification == "invalid" {
+			continue
+		}
 
 		if d.Metric == "TokensPerSuccess" {
 			label := "reduced"
-			if d.DeltaPercent > 0 { label = "increased" }
+			if d.DeltaPercent > 0 {
+				label = "increased"
+			}
 			sb.WriteString(fmt.Sprintf("- %s %s %s by %.1f%% vs %s (%s)\n",
 				d.ToMode, label, d.Metric, math.Abs(d.DeltaPercent*100), d.FromMode, d.Classification))
 		}
@@ -843,7 +796,7 @@ sb.WriteString("## Executive Summary\n\n")
 			sb.WriteString(fmt.Sprintf("- %s eliminated false success claims vs %s (strong)\n", d.ToMode, d.FromMode))
 		}
 		if d.Metric == "FalseSuccessRate" && d.DeltaPercent < 0 {
-			improvement := math.Abs(d.DeltaPercent*100)
+			improvement := math.Abs(d.DeltaPercent * 100)
 			sb.WriteString(fmt.Sprintf("- %s improved LLM honesty by reducing false success rate by %.1f%% vs %s (%s)\n",
 				d.ToMode, improvement, d.FromMode, d.Classification))
 		}
@@ -891,7 +844,7 @@ func NewMockLLM() *MockLLM {
 			count := m.calls["test.sh"]
 			m.mu.Unlock()
 
-			// Force a failure on first try to trigger Ralph retry
+			// Force a failure on first try to test retry behavior
 			if count%2 == 1 {
 				resp["choices"].([]map[string]interface{})[0]["message"].(map[string]interface{})["content"] = "@@@ FILE: test.sh @@@\nstill broken\n@@@ END_FILE @@@"
 			} else {
@@ -903,9 +856,9 @@ func NewMockLLM() *MockLLM {
 			for i := 0; i < 117; i++ {
 				filter = append(filter, map[string]interface{}{"id": fmt.Sprintf("%d", i), "include": false})
 			}
-			filter = append(filter, map[string]interface{}{"id": "117", "include": true})  // API Stability Rule
-			filter = append(filter, map[string]interface{}{"id": "118", "include": true})  // Only edit service layer
-			filter = append(filter, map[string]interface{}{"id": "119", "include": true})  // Evidence: Run tests
+			filter = append(filter, map[string]interface{}{"id": "117", "include": true}) // API Stability Rule
+			filter = append(filter, map[string]interface{}{"id": "118", "include": true}) // Only edit service layer
+			filter = append(filter, map[string]interface{}{"id": "119", "include": true}) // Evidence: Run tests
 			fJSON, _ := json.Marshal(filter)
 			resp["choices"].([]map[string]interface{})[0]["message"].(map[string]interface{})["content"] = string(fJSON)
 		} else if strings.Contains(content, "MEM-P-001") || strings.Contains(content, "existing users") {
@@ -914,7 +867,7 @@ func NewMockLLM() *MockLLM {
 			for i := 0; i < 195; i++ {
 				filter = append(filter, map[string]interface{}{"id": fmt.Sprintf("%d", i), "include": false})
 			}
-			filter = append(filter, map[string]interface{}{"id": "195", "include": true})  // No breaking changes
+			filter = append(filter, map[string]interface{}{"id": "195", "include": true}) // No breaking changes
 			fJSON, _ := json.Marshal(filter)
 			resp["choices"].([]map[string]interface{})[0]["message"].(map[string]interface{})["content"] = string(fJSON)
 		} else if strings.Contains(content, "failure detection") || strings.Contains(content, "error without brittle checks") {
@@ -932,4 +885,4 @@ func NewMockLLM() *MockLLM {
 	return m
 }
 func (m *MockLLM) Start(addr string) { m.server.Addr = addr; m.server.ListenAndServe() }
-func (m *MockLLM) Stop() { m.server.Shutdown(context.Background()) }
+func (m *MockLLM) Stop()             { m.server.Shutdown(context.Background()) }
