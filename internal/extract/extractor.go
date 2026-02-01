@@ -2,8 +2,10 @@ package extract
 
 import (
 	"fmt"
+
 	"github.com/daverage/tinymem/internal/cove"
 	"github.com/daverage/tinymem/internal/evidence"
+	"github.com/daverage/tinymem/internal/execution"
 	"github.com/daverage/tinymem/internal/memory"
 	"regexp"
 	"strconv"
@@ -15,13 +17,15 @@ import (
 type Extractor struct {
 	evidenceService *evidence.Service
 	coveVerifier    *cove.Verifier
+	modeController  *execution.Controller
 }
 
 // NewExtractor creates a new memory extractor
-func NewExtractor(evidenceService *evidence.Service) *Extractor {
+func NewExtractor(evidenceService *evidence.Service, controller *execution.Controller) *Extractor {
 	return &Extractor{
 		evidenceService: evidenceService,
 		coveVerifier:    nil, // Can be set later via SetCoVeVerifier
+		modeController:  controller,
 	}
 }
 
@@ -364,6 +368,14 @@ func (e *Extractor) ExtractAndQueueForVerification(responseText string, memorySe
 			}
 
 			if isValidated {
+				if e.modeController != nil {
+					e.modeController.MarkFactPromotion()
+					if err := e.modeController.Enforce(execution.ActionFactPromotion, execution.ModeStrict); err != nil {
+						// STRICT mode required before promoting claims
+						continue
+					}
+				}
+
 				// Promote the claim to a fact if it has valid evidence
 				err = memoryService.PromoteToFact(mem.ID, projectID, true)
 				if err != nil {

@@ -3,11 +3,16 @@ package mcp
 import (
 	"encoding/json"
 
+	"github.com/daverage/tinymem/internal/execution"
 	"github.com/daverage/tinymem/internal/llm"
 )
 
 // handleMemoryEvalStats handles the memory_eval_stats tool call
 func (s *Server) handleMemoryEvalStats(req *MCPRequest) {
+	if !s.requireMode(req.ID, "memory_eval_stats", execution.ActionMemoryQuery, execution.ModePassive) {
+		return
+	}
+
 	stats := make(map[string]interface{})
 
 	// Collect LLM metrics from all registered providers

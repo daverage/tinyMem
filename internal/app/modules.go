@@ -8,6 +8,7 @@ import (
 	"github.com/daverage/tinymem/internal/doctor"
 	"github.com/daverage/tinymem/internal/embedding"
 	"github.com/daverage/tinymem/internal/evidence"
+	"github.com/daverage/tinymem/internal/execution"
 	"github.com/daverage/tinymem/internal/extract"
 	"github.com/daverage/tinymem/internal/llm"
 	"github.com/daverage/tinymem/internal/memory"
@@ -41,6 +42,7 @@ type App struct {
 	Project   ProjectModule
 	Server    ServerModule
 	Memory    *memory.Service
+	Execution *execution.Controller
 	Ctx       context.Context
 	Cancel    context.CancelFunc
 }
@@ -50,8 +52,8 @@ type RecallServices struct {
 	EvidenceService *evidence.Service
 	RecallEngine    recall.Recaller
 	Extractor       *extract.Extractor
-	CoVeVerifier    *cove.Verifier   // May be nil if CoVe is disabled
-	LLMProvider     llm.Provider     // Provider interface for LLM (local, external, or calling AI)
+	CoVeVerifier    *cove.Verifier // May be nil if CoVe is disabled
+	LLMProvider     llm.Provider   // Provider interface for LLM (local, external, or calling AI)
 }
 
 // InitializeRecallServices creates and configures the shared recall-related services
@@ -96,7 +98,7 @@ func (a *App) InitializeRecallServices() *RecallServices {
 	}
 
 	// Create extractor
-	extractor := extract.NewExtractor(evidenceService)
+	extractor := extract.NewExtractor(evidenceService, a.Execution)
 
 	// Initialize LLM provider for Ralph (generative repairs)
 	// Strategy:

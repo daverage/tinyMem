@@ -15,6 +15,7 @@ import (
 	"github.com/daverage/tinymem/internal/app"
 	"github.com/daverage/tinymem/internal/config"
 	"github.com/daverage/tinymem/internal/evidence"
+	"github.com/daverage/tinymem/internal/execution"
 	"github.com/daverage/tinymem/internal/extract"
 	"github.com/daverage/tinymem/internal/inject"
 	"github.com/daverage/tinymem/internal/llm"
@@ -61,6 +62,7 @@ type Server struct {
 	processorDone   chan struct{} // Signals when processResponseCaptures has finished
 	shutdownOnce    sync.Once
 	server          *http.Server
+	modeCtrl        *execution.Controller
 }
 
 // NewServer creates a new proxy server
@@ -93,6 +95,7 @@ func NewServer(a *app.App) *Server {
 		responseBuffer:  make(chan ResponseCapture, 10), // Buffered channel to prevent blocking
 		shutdownCh:      make(chan struct{}),
 		processorDone:   make(chan struct{}),
+		modeCtrl:        a.Execution,
 	}
 
 	// Start a goroutine to process response captures
@@ -193,6 +196,12 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s.modeCtrl != nil {
+		if err := s.modeCtrl.RefreshTinyTasksState(); err != nil {
+			s.app.Core.Logger.Warn("Failed to inspect tinyTasks.md state", zap.Error(err))
+		}
+	}
+
 	notification := MemoryNotification{
 		RecallStatus: recallStatusNone,
 	}
@@ -263,6 +272,7 @@ func (s *Server) handleStreamingRequest(w http.ResponseWriter, ctx context.Conte
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
+	s.writeModeHeader(w)
 
 	// Get the streaming response from the LLM
 	chunkChan, errChan := s.llmClient.StreamChatCompletions(ctx, req)
@@ -368,6 +378,8 @@ func (s *Server) handleNonStreamingRequest(w http.ResponseWriter, ctx context.Co
 	// For non-streaming responses, limit the amount of data captured for extraction.
 	rollingBuffer := NewRollingBuffer(s.config.ExtractionBufferBytes)
 
+	s.writeModeHeader(w)
+
 	for key, values := range resp.Header {
 		for _, value := range values {
 			w.Header().Add(key, value)
@@ -414,11 +426,19 @@ func (s *Server) handleNonStreamingRequest(w http.ResponseWriter, ctx context.Co
 // handleHealth handles health check requests
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	s.writeModeHeader(w)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{
 		"status": "healthy",
 		"time":   time.Now().Format(time.RFC3339),
 	})
+}
+
+func (s *Server) writeModeHeader(w http.ResponseWriter) {
+	if s.modeCtrl == nil {
+		return
+	}
+	w.Header().Set("X-TinyMem-Mode", string(s.modeCtrl.Mode()))
 }
 
 func (s *Server) emitMemoryNotificationEvent(w http.ResponseWriter, notification MemoryNotification) {

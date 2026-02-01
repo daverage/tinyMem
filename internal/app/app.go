@@ -10,6 +10,7 @@ import (
 
 	"github.com/daverage/tinymem/internal/config"
 	"github.com/daverage/tinymem/internal/doctor"
+	"github.com/daverage/tinymem/internal/execution"
 	"github.com/daverage/tinymem/internal/logging"
 	"github.com/daverage/tinymem/internal/memory"
 	"github.com/daverage/tinymem/internal/storage"
@@ -89,6 +90,8 @@ func NewApp() (*App, error) {
 	// Create context for managing goroutines
 	ctx, cancel := context.WithCancel(context.Background())
 
+	tinyTasksPath := filepath.Join(cfg.ProjectRoot, "tinyTasks.md")
+
 	app := &App{
 		Core: CoreModule{
 			Config: cfg,
@@ -96,15 +99,16 @@ func NewApp() (*App, error) {
 			DB:     db,
 		},
 		Project: ProjectModule{
-			Path: cfg.ProjectRoot,        // Use project root as the project path
-			ID:   projectID,             // Store the generated project ID
+			Path: cfg.ProjectRoot, // Use project root as the project path
+			ID:   projectID,       // Store the generated project ID
 		},
 		Server: ServerModule{
 			Mode: doctor.StandaloneMode, // Default to standalone mode
 		},
-		Memory: memoryService,
-		Ctx:    ctx,
-		Cancel: cancel,
+		Memory:    memoryService,
+		Execution: execution.NewController(execution.ModeStrict, tinyTasksPath),
+		Ctx:       ctx,
+		Cancel:    cancel,
 	}
 
 	// Start periodic maintenance if enabled

@@ -66,7 +66,7 @@ func TestCoVeIntegrationWithExtractor(t *testing.T) {
 	evidenceService := evidence.NewService(db, cfg)
 
 	// Create extractor with CoVe
-	extractor := NewExtractor(evidenceService)
+	extractor := NewExtractor(evidenceService, nil)
 	mockClient := &mockCoVeLLMClient{}
 	coveVerifier := cove.NewVerifier(cfg, mockClient)
 	extractor.SetCoVeVerifier(coveVerifier)
@@ -132,11 +132,11 @@ func TestCoVeDisabledIdenticalBehavior(t *testing.T) {
 
 	// Create two extractors
 	evidenceService1 := evidence.NewService(db1, cfgDisabled)
-	extractor1 := NewExtractor(evidenceService1)
+	extractor1 := NewExtractor(evidenceService1, nil)
 	// No CoVe for extractor1
 
 	evidenceService2 := evidence.NewService(db2, cfgEnabled)
-	extractor2 := NewExtractor(evidenceService2)
+	extractor2 := NewExtractor(evidenceService2, nil)
 	mockClient := &mockCoVeLLMClient{}
 	coveVerifier := cove.NewVerifier(cfgEnabled, mockClient)
 	extractor2.SetCoVeVerifier(coveVerifier)
@@ -195,7 +195,7 @@ func TestCoVeInvariantNoFactPromotion(t *testing.T) {
 
 	evidenceService := evidence.NewService(db, cfg)
 	memoryService := memory.NewService(db)
-	extractor := NewExtractor(evidenceService)
+	extractor := NewExtractor(evidenceService, nil)
 	mockClient := &mockCoVeLLMClient{}
 	coveVerifier := cove.NewVerifier(cfg, mockClient)
 	extractor.SetCoVeVerifier(coveVerifier)

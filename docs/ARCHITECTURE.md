@@ -115,6 +115,16 @@ tinyMem exposes capabilities through CLI commands, MCP tool calls, and the dashb
 
 All interfaces observe the same architecture, retrieving memories, verifying evidence, and updating tinyTasks, so every agent or operator experiences a consistent view of project state.
 
+## Execution Modes and Gating
+
+tinyMem owns the execution mode and enforces what actions agents may perform. The three modes are:
+
+- **PASSIVE** – read-only operations such as `memory_query`, health checks, and diagnostics remain available.
+- **GUARDED** – writes (e.g., `memory_write`) and mutable operations are allowed once the agent explicitly declares guarded intent.
+- **STRICT** – authorizes the highest-risk operations: modifying `tinyTasks.md`, running `memory_ralph`, or promoting claims to facts.
+
+The current mode is stored in the controller, exposed on the environment (`TINYMEMP_MODE`), and surfaced in MCP (`memory_set_mode`) and proxy responses (`X-TinyMem-Mode`). Attempts to violate the gating rules (e.g., write outside guarded mode, edit tinyTasks without strict mode, or trigger repeated failures) are rejected with a clear “STRICT mode required” response. tinyMem also escalates to strict mode automatically when it detects multiple failed tool calls, repeated edits to the same file, tinyTasks mutations, or claim→fact promotions, ensuring the working mode always tracks the agent’s risk level.
+
 ## Operational Notes
 
 - Versioned container images (e.g., GHCR) package the tinyMem binary along with schema migrations and dashboards.

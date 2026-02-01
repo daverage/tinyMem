@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/daverage/tinymem/internal/cove"
 	"github.com/daverage/tinymem/internal/doctor" // Add doctor import
 	"github.com/daverage/tinymem/internal/evidence"
+	"github.com/daverage/tinymem/internal/execution"
 	"github.com/daverage/tinymem/internal/extract"
 	"github.com/daverage/tinymem/internal/llm"
 	"github.com/daverage/tinymem/internal/memory"
@@ -36,6 +39,7 @@ type Server struct {
 	coveVerifier    *cove.Verifier
 	llmProvider     llm.Provider // LLM provider for CoVe and Ralph
 	taskService     *tasks.Service
+	modeCtrl        *execution.Controller
 	ctx             context.Context
 	cancel          context.CancelFunc
 }
@@ -81,6 +85,7 @@ func NewServer(a *app.App) *Server {
 		coveVerifier:    recallServices.CoVeVerifier,
 		llmProvider:     recallServices.LLMProvider,
 		taskService:     taskService,
+		modeCtrl:        a.Execution,
 		ctx:             ctx,
 		cancel:          cancel,
 	}
@@ -186,6 +191,21 @@ func (s *Server) handleToolsList(req *MCPRequest) {
 					},
 				},
 				"required": []string{"query"},
+			},
+		},
+		{
+			"name":        "memory_set_mode",
+			"description": "Update tinyMem's execution mode (PASSIVE, GUARDED, STRICT)",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"mode": map[string]interface{}{
+						"type":        "string",
+						"description": "Target execution mode",
+						"enum":        []string{"PASSIVE", "GUARDED", "STRICT"},
+					},
+				},
+				"required": []string{"mode"},
 			},
 		},
 		{
@@ -429,6 +449,8 @@ func (s *Server) handleToolCall(req *MCPRequest) {
 		s.handleMemoryEvalStats(req)
 	case "memory_ralph":
 		s.handleMemoryRalph(req, argsBytes)
+	case "memory_set_mode":
+		s.handleMemorySetMode(req, argsBytes)
 	default:
 		s.sendError(req.ID, -32601, fmt.Sprintf("Tool not found: %s", params.Name))
 	}
@@ -440,13 +462,18 @@ func (s *Server) handleMemoryRalph(req *MCPRequest, args json.RawMessage) {
 
 	var options ralph.Options
 	if err := json.Unmarshal(args, &options); err != nil {
-		s.sendError(req.ID, -32602, fmt.Sprintf("Invalid arguments for memory_ralph: %v", err))
+		s.sendToolError(req.ID, -32602, fmt.Sprintf("Invalid arguments for memory_ralph: %v", err), "memory_ralph")
+		return
+	}
+
+	s.modeCtrl.MarkRalphInvocation()
+	if !s.requireMode(req.ID, "memory_ralph", execution.ActionMemoryRalph, execution.ModeStrict) {
 		return
 	}
 
 	// Initialize Ralph engine with LLM provider
 	if s.llmProvider == nil {
-		s.sendError(req.ID, -32603, "Ralph requires LLM provider - build with -tags llmgen or configure external LLM")
+		s.sendToolError(req.ID, -32603, "Ralph requires LLM provider - build with -tags llmgen or configure external LLM", "memory_ralph")
 		return
 	}
 	engine := ralph.NewEngine(s.config, s.memoryService, s.llmProvider, s.app.Project.ID, s.app.Core.Logger)
@@ -454,7 +481,7 @@ func (s *Server) handleMemoryRalph(req *MCPRequest, args json.RawMessage) {
 	// Execute the loop
 	result, err := engine.ExecuteLoop(context.Background(), options)
 	if err != nil {
-		s.sendError(req.ID, -32603, fmt.Sprintf("Ralph loop failed: %v", err))
+		s.sendToolError(req.ID, -32603, fmt.Sprintf("Ralph loop failed: %v", err), "memory_ralph")
 		return
 	}
 
@@ -477,6 +504,47 @@ func (s *Server) handleMemoryRalph(req *MCPRequest, args json.RawMessage) {
 	s.sendResponse(response)
 }
 
+func (s *Server) handleMemorySetMode(req *MCPRequest, args json.RawMessage) {
+	if args == nil {
+		s.sendToolError(req.ID, -32602, "Missing arguments for memory_set_mode", "memory_set_mode")
+		return
+	}
+
+	var payload struct {
+		Mode string `json:"mode"`
+	}
+	if err := json.Unmarshal(args, &payload); err != nil {
+		s.sendToolError(req.ID, -32602, "Invalid arguments for memory_set_mode", "memory_set_mode")
+		return
+	}
+
+	mode, err := execution.ParseMode(payload.Mode)
+	if err != nil {
+		s.sendToolError(req.ID, -32602, fmt.Sprintf("Unsupported mode: %v", err), "memory_set_mode")
+		return
+	}
+
+	if err := s.modeCtrl.SetMode(mode); err != nil {
+		s.sendToolError(req.ID, -32603, fmt.Sprintf("Failed to set mode: %v", err), "memory_set_mode")
+		return
+	}
+
+	response := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"result": map[string]interface{}{
+			"content": []map[string]interface{}{
+				{
+					"type": "text",
+					"text": fmt.Sprintf("Execution mode updated to %s", mode),
+				},
+			},
+		},
+		"id": req.ID,
+	}
+
+	s.sendResponse(response)
+}
+
 // handleMemoryQuery handles memory query requests
 func (s *Server) handleMemoryQuery(req *MCPRequest, args json.RawMessage) {
 	var queryReq struct {
@@ -485,7 +553,11 @@ func (s *Server) handleMemoryQuery(req *MCPRequest, args json.RawMessage) {
 	}
 
 	if err := json.Unmarshal(args, &queryReq); err != nil {
-		s.sendError(req.ID, -32602, "Invalid arguments for memory_query")
+		s.sendToolError(req.ID, -32602, "Invalid arguments for memory_query", "memory_query")
+		return
+	}
+
+	if !s.requireMode(req.ID, "memory_query", execution.ActionMemoryQuery, execution.ModePassive) {
 		return
 	}
 
@@ -499,7 +571,7 @@ func (s *Server) handleMemoryQuery(req *MCPRequest, args json.RawMessage) {
 		MaxItems:  queryReq.Limit,
 	})
 	if err != nil {
-		s.sendError(req.ID, -32603, fmt.Sprintf("Query failed: %v", err))
+		s.sendToolError(req.ID, -32603, fmt.Sprintf("Query failed: %v", err), "memory_query")
 		return
 	}
 
@@ -587,9 +659,13 @@ func (s *Server) handleMemoryRecent(req *MCPRequest, args json.RawMessage) {
 		recentReq.Count = 10
 	}
 
+	if !s.requireMode(req.ID, "memory_recent", execution.ActionMemoryQuery, execution.ModePassive) {
+		return
+	}
+
 	memories, err := s.memoryService.GetAllMemories(s.app.Project.ID) // In real impl, get from context
 	if err != nil {
-		s.sendError(req.ID, -32603, fmt.Sprintf("Failed to get recent memories: %v", err))
+		s.sendToolError(req.ID, -32603, fmt.Sprintf("Failed to get recent memories: %v", err), "memory_recent")
 		return
 	}
 
@@ -648,15 +724,31 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 	}
 
 	if err := json.Unmarshal(args, &writeReq); err != nil {
-		s.sendError(req.ID, -32602, "Invalid arguments for memory.write")
+		s.sendToolError(req.ID, -32602, "Invalid arguments for memory.write", "memory_write")
 		return
 	}
 
 	// Validate memory type
 	memType := memory.Type(writeReq.Type)
 	if !memType.IsValid() {
-		s.sendError(req.ID, -32602, "Invalid memory type")
+		s.sendToolError(req.ID, -32602, "Invalid memory type", "memory_write")
 		return
+	}
+
+	if isTinyTasksPath(writeReq.Source) {
+		if !s.requireMode(req.ID, "memory_write", execution.ActionTinyTasksWrite, execution.ModeStrict) {
+			return
+		}
+	}
+
+	if memType == memory.Task {
+		if !s.requireMode(req.ID, "memory_write", execution.ActionTaskMutation, execution.ModeStrict) {
+			return
+		}
+	} else {
+		if !s.requireMode(req.ID, "memory_write", execution.ActionMemoryWrite, execution.ModeGuarded) {
+			return
+		}
 	}
 
 	// Optional CoVe filtering for non-fact writes (fail-safe on error)
@@ -710,7 +802,7 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 
 	if memType == memory.Fact {
 		if len(writeReq.Evidence) == 0 {
-			s.sendError(req.ID, -32603, "Fact creation requires verified evidence")
+			s.sendToolError(req.ID, -32603, "Fact creation requires verified evidence", "memory_write")
 			return
 		}
 		var inputs []memory.EvidenceInput
@@ -725,14 +817,18 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 			return evidence.VerifyEvidence(evidenceType, content, s.config)
 		}
 		if err := s.memoryService.CreateFactWithEvidence(newMemory, inputs, verify); err != nil {
-			s.sendError(req.ID, -32603, fmt.Sprintf("Failed to create fact: %v", err))
+			s.sendToolError(req.ID, -32603, fmt.Sprintf("Failed to create fact: %v", err), "memory_write")
 			return
 		}
 	} else {
 		if err := s.memoryService.CreateMemory(newMemory); err != nil {
-			s.sendError(req.ID, -32603, fmt.Sprintf("Failed to create memory: %v", err))
+			s.sendToolError(req.ID, -32603, fmt.Sprintf("Failed to create memory: %v", err), "memory_write")
 			return
 		}
+	}
+
+	if writeReq.Source != "" {
+		s.modeCtrl.RecordFileEdit(writeReq.Source)
 	}
 
 	response := map[string]interface{}{
@@ -754,11 +850,14 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 
 // handleMemoryStats handles memory statistics requests
 func (s *Server) handleMemoryStats(req *MCPRequest) {
+	if !s.requireMode(req.ID, "memory_stats", execution.ActionMemoryQuery, execution.ModePassive) {
+		return
+	}
 	// Get all memories to calculate stats
 	memories, err := s.memoryService.GetAllMemories(s.app.Project.ID)
 	if err != nil {
 		s.app.Core.Logger.Error("Failed to get memory stats for MCP", zap.Error(err))
-		s.sendError(req.ID, -32603, "Failed to retrieve memory statistics")
+		s.sendToolError(req.ID, -32603, "Failed to retrieve memory statistics", "memory_stats")
 		return
 	}
 
@@ -811,17 +910,20 @@ func (s *Server) handleMemoryStats(req *MCPRequest) {
 
 // handleMemoryHealth handles memory health check requests
 func (s *Server) handleMemoryHealth(req *MCPRequest) {
+	if !s.requireMode(req.ID, "memory_health", execution.ActionMemoryQuery, execution.ModePassive) {
+		return
+	}
 	// Check database connectivity
 	if err := s.db.GetConnection().Ping(); err != nil {
 		s.app.Core.Logger.Error("Database health check failed for MCP", zap.Error(err))
-		s.sendError(req.ID, -32603, "Database health check failed")
+		s.sendToolError(req.ID, -32603, "Database health check failed", "memory_health")
 		return
 	}
 
 	// Check if we can perform a simple query
 	if _, err := s.memoryService.GetAllMemories(s.app.Project.ID); err != nil {
 		s.app.Core.Logger.Error("Memory service health check failed for MCP", zap.Error(err))
-		s.sendError(req.ID, -32603, "Memory service health check failed")
+		s.sendToolError(req.ID, -32603, "Memory service health check failed", "memory_health")
 		return
 	}
 
@@ -846,6 +948,9 @@ func (s *Server) handleMemoryHealth(req *MCPRequest) {
 
 // handleMemoryDoctor handles memory doctor diagnostic requests
 func (s *Server) handleMemoryDoctor(req *MCPRequest) {
+	if !s.requireMode(req.ID, "memory_doctor", execution.ActionMemoryQuery, execution.ModePassive) {
+		return
+	}
 	doctorRunner := doctor.NewRunnerWithMode(s.app.Core.Config, s.app.Core.DB, s.app.Project.ID, s.app.Memory, doctor.MCPMode)
 	diagnostics := doctorRunner.RunAll()
 
@@ -977,4 +1082,40 @@ func (s *Server) sendError(id *int, code int, message string) {
 
 	responseBytes, _ := json.Marshal(errorResp)
 	fmt.Println(string(responseBytes))
+}
+
+func (s *Server) sendToolError(id *int, code int, message, tool string) {
+	if tool != "" && s.modeCtrl != nil {
+		s.modeCtrl.RecordFailure(tool)
+	}
+	s.sendError(id, code, message)
+}
+
+func (s *Server) requireMode(reqID *int, tool string, action execution.Action, minimum execution.Mode) bool {
+	if s.modeCtrl == nil {
+		return true
+	}
+
+	if err := s.modeCtrl.RefreshTinyTasksState(); err != nil {
+		s.app.Core.Logger.Warn("Failed to inspect tinyTasks.md", zap.Error(err))
+	}
+
+	if err := s.modeCtrl.Enforce(action, minimum); err != nil {
+		message := err.Error()
+		if errors.Is(err, execution.ErrStrictRequired) {
+			message = "STRICT mode required"
+		}
+		s.sendToolError(reqID, -32603, message, tool)
+		return false
+	}
+
+	return true
+}
+
+func isTinyTasksPath(path string) bool {
+	if path == "" {
+		return false
+	}
+
+	return strings.EqualFold(filepath.Base(path), "tinyTasks.md")
 }

@@ -44,6 +44,10 @@ func (m *mockRalphLLM) Close() error {
 	return nil
 }
 
+func (m *mockRalphLLM) GetMetrics() *llm.Metrics {
+	return nil
+}
+
 // TestRalphLoopStopsOnEvidence verifies loop terminates only when evidence passes
 func TestRalphLoopStopsOnEvidence(t *testing.T) {
 	// Create temporary test environment
@@ -66,7 +70,7 @@ fi
 `), 0755)
 
 	cfg := &config.Config{
-		ProjectRoot:                  tmpDir,
+		ProjectRoot:                   tmpDir,
 		EvidenceCommandTimeoutSeconds: 5,
 	}
 
@@ -145,7 +149,7 @@ func TestRalphLoopMaxIterations(t *testing.T) {
 	os.WriteFile(failScript, []byte("#!/bin/sh\nexit 1"), 0755)
 
 	cfg := &config.Config{
-		ProjectRoot:                  tmpDir,
+		ProjectRoot:                   tmpDir,
 		EvidenceCommandTimeoutSeconds: 5,
 	}
 
@@ -203,7 +207,7 @@ func TestRalphEvidencePredicates(t *testing.T) {
 	os.WriteFile(testFile, []byte("important content"), 0644)
 
 	cfg := &config.Config{
-		ProjectRoot:                  tmpDir,
+		ProjectRoot:                   tmpDir,
 		EvidenceCommandTimeoutSeconds: 5,
 	}
 
@@ -213,43 +217,43 @@ func TestRalphEvidencePredicates(t *testing.T) {
 
 	// Use relative paths for file_exists and grep_hit evidence (relative to ProjectRoot)
 	tests := []struct {
-		name      string
-		evidence  string
+		name       string
+		evidence   string
 		shouldPass bool
 	}{
 		{
-			name:      "cmd_exit0_pass",
-			evidence:  "cmd_exit0::test -f test_file.txt",
+			name:       "cmd_exit0_pass",
+			evidence:   "cmd_exit0::test -f test_file.txt",
 			shouldPass: true,
 		},
 		{
-			name:      "cmd_exit0_fail",
-			evidence:  "cmd_exit0::test -f nonexistent.txt",
+			name:       "cmd_exit0_fail",
+			evidence:   "cmd_exit0::test -f nonexistent.txt",
 			shouldPass: false,
 		},
 		{
-			name:      "test_pass_alias",
-			evidence:  "test_pass::test -f test_file.txt",
+			name:       "test_pass_alias",
+			evidence:   "test_pass::test -f test_file.txt",
 			shouldPass: true,
 		},
 		{
-			name:      "file_exists_pass",
-			evidence:  "file_exists::test_file.txt",
+			name:       "file_exists_pass",
+			evidence:   "file_exists::test_file.txt",
 			shouldPass: true,
 		},
 		{
-			name:      "file_exists_fail",
-			evidence:  "file_exists::nonexistent.txt",
+			name:       "file_exists_fail",
+			evidence:   "file_exists::nonexistent.txt",
 			shouldPass: false,
 		},
 		{
-			name:      "grep_hit_pass",
-			evidence:  "grep_hit::important::test_file.txt",
+			name:       "grep_hit_pass",
+			evidence:   "grep_hit::important::test_file.txt",
 			shouldPass: true,
 		},
 		{
-			name:      "grep_hit_fail",
-			evidence:  "grep_hit::missing::test_file.txt",
+			name:       "grep_hit_fail",
+			evidence:   "grep_hit::missing::test_file.txt",
 			shouldPass: false,
 		},
 	}
@@ -303,7 +307,7 @@ func TestRalphSafetyForbidCommands(t *testing.T) {
 	defer cleanup()
 
 	cfg := &config.Config{
-		ProjectRoot:                  tmpDir,
+		ProjectRoot:                   tmpDir,
 		EvidenceCommandTimeoutSeconds: 5,
 	}
 
@@ -360,7 +364,7 @@ func TestRalphSafetyForbidPaths(t *testing.T) {
 	os.WriteFile(testFile, []byte("fail"), 0644)
 
 	cfg := &config.Config{
-		ProjectRoot:                  tmpDir,
+		ProjectRoot:                   tmpDir,
 		EvidenceCommandTimeoutSeconds: 5,
 	}
 
@@ -405,7 +409,7 @@ func TestRalphDeterministicIteration(t *testing.T) {
 	os.WriteFile(failScript, []byte("#!/bin/sh\nexit 1"), 0755)
 
 	cfg := &config.Config{
-		ProjectRoot:                  tmpDir,
+		ProjectRoot:                   tmpDir,
 		EvidenceCommandTimeoutSeconds: 5,
 	}
 
