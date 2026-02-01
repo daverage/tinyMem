@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "tinymem": {
+      "command": "tinymem",
+      "args": ["mcp"],
+      "env": {
+        "TINYMEM_LOG_LEVEL": "info",
+        "TINYMEM_METRICS_ENABLED": "true",
+        "TINYMEM_COVE_ENABLED": "true"
+      }
+    }
+  }
+}

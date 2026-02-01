@@ -116,10 +116,16 @@ func (d *Runner) checkExternalDependencies() []CheckResult {
 	// For memory-only operations, LLM backend is not required, so we'll downgrade this to a warning
 	llmErr := checkReachable(d.config.LLMBaseURL)
 	if llmErr != nil {
+		msg := fmt.Sprintf("LLM backend unreachable: %v", llmErr)
+		if d.serverMode == MCPMode {
+			msg += " (expected in MCP mode - uses calling AI)"
+		} else {
+			msg += " (not critical for memory-only operations)"
+		}
 		results = append(results, CheckResult{
 			Name:     "llm_backend_reachability",
 			Status:   "fail",
-			Message:  fmt.Sprintf("LLM backend unreachable: %v (not critical for memory-only operations)", llmErr),
+			Message:  msg,
 			Severity: "warning", // Downgrade to warning since LLM isn't always required
 		})
 	} else {
@@ -139,9 +145,9 @@ func (d *Runner) checkExternalDependencies() []CheckResult {
 		if err := checkProxyListening(d.config.ProxyPort); err != nil {
 			results = append(results, CheckResult{
 				Name:     "proxy_readiness",
-				Status:   "fail", // Still mark as fail but with warning severity for MCP mode
-				Message:  fmt.Sprintf("Proxy not listening on port %d: %v (not critical in MCP mode)", d.config.ProxyPort, err),
-				Severity: "warning", // Downgrade to warning for MCP mode
+				Status:   "pass", // Consider this a pass in MCP mode
+				Message:  fmt.Sprintf("Proxy not listening on port %d (expected in MCP mode - uses stdio transport)", d.config.ProxyPort),
+				Severity: "info", // This is expected, not a warning
 			})
 		} else {
 			results = append(results, CheckResult{
