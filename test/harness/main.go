@@ -84,6 +84,24 @@ func main() {
 		mockLLM = NewMockLLM()
 		go mockLLM.Start(":8888")
 		defer mockLLM.Stop()
+
+		// Wait for mock LLM to be ready
+		fmt.Println("Waiting for mock LLM server to start...")
+		maxRetries := 50
+		ready := false
+		for i := 0; i < maxRetries; i++ {
+			resp, err := http.Get("http://localhost:8888/v1/chat/completions")
+			if err == nil {
+				resp.Body.Close()
+				ready = true
+				fmt.Println("Mock LLM server ready!")
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		if !ready {
+			log.Fatalf("Mock LLM server failed to start after %d attempts", maxRetries)
+		}
 	}
 
 	// Configuration
@@ -198,7 +216,7 @@ func runBenchmark(binaryPath, baseTmpDir string, mode Mode, scenario string, run
 
 	// Force high max candidates for CoVe pressure
 	env = append(env, "TINYMEM_COVE_MAX_CANDIDATES=50")
-	
+
 	for k, v := range mode.Env {
 		env = append(env, k+"="+v)
 	}
@@ -275,6 +293,33 @@ func runBenchmark(binaryPath, baseTmpDir string, mode Mode, scenario string, run
 		return &tr, nil
 	}
 
+	// Helper function to get eval stats (real token counts)
+	getEvalStats := func() (totalTokens int64, contextTokens int64) {
+		statsOut, err := call("memory_eval_stats", map[string]interface{}{})
+		if err != nil || statsOut == nil || len(statsOut.Content) == 0 {
+			return 0, 0
+		}
+
+		var stats struct {
+			LLM struct {
+				TotalTokens   int64 `json:"total_tokens"`
+				PromptTokens  int64 `json:"prompt_tokens"`
+				OutputTokens  int64 `json:"output_tokens"`
+			} `json:"llm"`
+			ActiveProvider struct {
+				TotalTokens int64 `json:"total_tokens"`
+			} `json:"active_provider"`
+		}
+
+		json.Unmarshal([]byte(statsOut.Content[0].Text), &stats)
+
+		// Prefer active_provider metrics, fallback to llm aggregate
+		if stats.ActiveProvider.TotalTokens > 0 {
+			return stats.ActiveProvider.TotalTokens, 0
+		}
+		return stats.LLM.TotalTokens, 0
+	}
+
 	// Logic per scenario
 	switch scenario {
 	case "COVE-001": // Noise Pressure Retrieval
@@ -343,7 +388,15 @@ func ProcessData(input string) error {
 				result.SemanticHit = true
 			}
 		}
-		result.TokensUsed = 1000 + result.ContextTokens
+
+		// Get real token counts from eval stats
+		totalTokens, _ := getEvalStats()
+		if totalTokens > 0 {
+			result.TokensUsed = totalTokens + result.ContextTokens
+		} else {
+			// Fallback to estimate if stats unavailable
+			result.TokensUsed = 1000 + result.ContextTokens
+		}
 
 	case "SEM-001": // Paraphrase Recall Follow-up
 		// Phase A: Seed distractors then decision
@@ -402,7 +455,14 @@ func main() {
 				result.Success = false
 			}
 		}
-		result.TokensUsed = 500 + result.ContextTokens
+
+		// Get real token counts from eval stats
+		totalTokens, _ := getEvalStats()
+		if totalTokens > 0 {
+			result.TokensUsed = totalTokens + result.ContextTokens
+		} else {
+			result.TokensUsed = 500 + result.ContextTokens
+		}
 
 	case "COVE+SEM-002": // Long-lived Project Memory Under Load
 		seedDistractorMemories(call, 195, []string{"breaking", "changes", "compatibility", "public", "behavior"})
@@ -472,7 +532,14 @@ func internalFunction(x int) (int, error) {
 				result.SemanticHit = true
 			}
 		}
-		result.TokensUsed = 1500 + result.ContextTokens
+
+		// Get real token counts from eval stats
+		totalTokens, _ := getEvalStats()
+		if totalTokens > 0 {
+			result.TokensUsed = totalTokens + result.ContextTokens
+		} else {
+			result.TokensUsed = 1500 + result.ContextTokens
+		}
 
 	case "RALPH-001": // Ralph Stress
 		testFile := filepath.Join(projectDir, "test.sh")
@@ -517,7 +584,14 @@ func internalFunction(x int) (int, error) {
 				result.FalseSuccessClaim = true
 			}
 		}
-		result.TokensUsed = 1200
+
+		// Get real token counts from eval stats
+		totalTokens, _ := getEvalStats()
+		if totalTokens > 0 {
+			result.TokensUsed = totalTokens
+		} else {
+			result.TokensUsed = 1200
+		}
 	}
 
 	return result
@@ -541,27 +615,129 @@ func seedDistractorMemories(call func(string, map[string]interface{}) (*ToolResu
 }
 
 func runBaselineScenario(scenario string, r analytics.EvaluatorResult) analytics.EvaluatorResult {
+	// Baseline simulates an AI without tinyMem making LLM calls
+	// We make actual LLM calls and measure real tokens
+
+	llmBackend := os.Getenv("TINYMEM_LLM_BACKEND")
+	if llmBackend == "" {
+		llmBackend = "mock"
+	}
+
+	var baseURL string
+	if llmBackend == "ollama" {
+		baseURL = "http://localhost:11434/v1"
+	} else {
+		baseURL = "http://localhost:8888/v1" // Fixed: was missing /v1
+	}
+
+	log.Printf("Running baseline scenario %s with %s LLM at %s", scenario, llmBackend, baseURL)
+	totalTokens := int64(0)
+
+	// Simulate LLM calls for each scenario
 	switch scenario {
 	case "COVE-001":
 		r.Success = false
-		r.TokensUsed = 4000
 		r.InputCount = 120
 		r.OutputCount = 50
+
+		// Simulate: AI tries to solve with large context (no memory filtering)
+		// 1. Large prompt with all 120 memories embedded
+		prompt := "Fix the failing test. Here are all 120 memories:\n"
+		for i := 0; i < 120; i++ {
+			prompt += fmt.Sprintf("Memory %d: Some distractor about API or service...\n", i)
+		}
+		prompt += "Task: Fix the failing test by updating the service logic. Keep the public API unchanged."
+		totalTokens += int64(makeLLMCall(baseURL, prompt))
+
 	case "SEM-001":
 		r.Success = false
-		r.TokensUsed = 1000
+
+		// Simulate: AI tries to match paraphrased query without semantic understanding
+		// 1. Query all memories with basic keyword matching (fails on paraphrase)
+		prompt := "Make the failure detection more robust. Here are 30 distractor memories about errors and handling..."
+		totalTokens += int64(makeLLMCall(baseURL, prompt))
+
 	case "COVE+SEM-002":
 		r.Success = false
-		r.TokensUsed = 5000
 		r.InputCount = 200
 		r.OutputCount = 50
+
+		// Simulate: AI overwhelmed with 200 memories, no filtering
+		prompt := "Keep things working for existing users. Here are all 200 memories:\n"
+		for i := 0; i < 200; i++ {
+			prompt += fmt.Sprintf("Memory %d: Breaking changes, compatibility, public behavior...\n", i)
+		}
+		totalTokens += int64(makeLLMCall(baseURL, prompt))
+
 	case "RALPH-001":
 		// Baseline might claim success but not actually fix the issue
 		r.Success = true
 		r.FalseSuccessClaim = true
-		r.TokensUsed = 2000
+
+		// Simulate: AI tries to fix script without verification loop
+		prompt := "Fix this test script that's failing. Here's the script: exit 1\nMake it pass."
+		totalTokens += int64(makeLLMCall(baseURL, prompt))
+		// No retry, no verification - just claims success
 	}
+
+	r.TokensUsed = totalTokens
 	return r
+}
+
+// makeLLMCall makes an actual LLM call (to mock or real Ollama) and returns the token count
+// FAILS LOUDLY if the call doesn't succeed - no silent fallbacks in testing!
+func makeLLMCall(baseURL, prompt string) int {
+	reqBody := map[string]interface{}{
+		"messages": []map[string]string{
+			{"role": "user", "content": prompt},
+		},
+		"model": "qwen2.5-coder:7b", // Doesn't matter for mock
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		log.Fatalf("FATAL: Failed to marshal LLM request: %v", err)
+	}
+
+	url := baseURL + "/chat/completions"
+	log.Printf("Making LLM call to %s (prompt length: %d chars)", url, len(prompt))
+
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Fatalf("FATAL: LLM call failed to %s: %v\nMake sure the LLM server is running!", url, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		log.Fatalf("FATAL: LLM returned status %d from %s: %s", resp.StatusCode, url, string(body))
+	}
+
+	var result struct {
+		Usage struct {
+			PromptTokens     int `json:"prompt_tokens"`
+			CompletionTokens int `json:"completion_tokens"`
+			TotalTokens      int `json:"total_tokens"`
+		} `json:"usage"`
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalf("FATAL: Failed to read LLM response body from %s: %v", url, err)
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		log.Fatalf("FATAL: Failed to parse LLM response from %s: %v\nResponse body: %s", url, err, string(body))
+	}
+
+	if result.Usage.TotalTokens == 0 {
+		log.Fatalf("FATAL: LLM response from %s missing usage.total_tokens field!\nResponse: %s", url, string(body))
+	}
+
+	log.Printf("✓ LLM call succeeded: %d prompt + %d completion = %d total tokens",
+		result.Usage.PromptTokens, result.Usage.CompletionTokens, result.Usage.TotalTokens)
+
+	return result.Usage.TotalTokens
 }
 
 func writeBenchmarkOutputs(s analytics.ComparativeScorecard, results []analytics.EvaluatorResult) {
@@ -650,7 +826,7 @@ func writeVisuals(s analytics.ComparativeScorecard, results []analytics.Evaluato
 
 	width := 800
 	height := 500
-	
+
 	// 1. Success & False Success Rate Bar Chart
 	svg := fmt.Sprintf(`<svg width="%d" height="%d" xmlns="http://www.w3.org/2000/svg">`, width, height)
 	svg += `<rect width="100%" height="100%" fill="white"/>`
@@ -741,7 +917,7 @@ func writeScorecardMD(s analytics.ComparativeScorecard) {
 func writeDeltasMD(s analytics.ComparativeScorecard) {
 	var sb strings.Builder
 	sb.WriteString("# tinyMem Pairwise Deltas\n\n")
-	
+
 sb.WriteString("## Executive Summary\n\n")
 	for _, d := range s.Deltas {
 		if d.Classification == "invalid" { continue }
@@ -785,6 +961,14 @@ type MockLLM struct {
 	calls  map[string]int
 }
 
+// estimateTokenCount provides a realistic token estimate for strings
+func estimateTokenCount(text string) int {
+	// GPT-style tokenization: roughly 4 chars per token, but conservative
+	// Use 3.5 chars/token to be more accurate
+	chars := len(text)
+	return int(float64(chars) / 3.5)
+}
+
 func NewMockLLM() *MockLLM {
 	mux := http.NewServeMux()
 	m := &MockLLM{
@@ -794,6 +978,22 @@ func NewMockLLM() *MockLLM {
 		body, _ := io.ReadAll(r.Body)
 		content := string(body)
 
+		// Parse request to get messages
+		var req struct {
+			Messages []struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		json.Unmarshal(body, &req)
+
+		// Calculate prompt tokens from all messages
+		promptTokens := 0
+		for _, msg := range req.Messages {
+			promptTokens += estimateTokenCount(msg.Content)
+		}
+
+		responseContent := ""
 		resp := map[string]interface{}{
 			"choices": []map[string]interface{}{{"message": map[string]interface{}{"role": "assistant", "content": ""}}},
 		}
@@ -806,9 +1006,9 @@ func NewMockLLM() *MockLLM {
 
 			// Force a failure on first try to trigger Ralph retry
 			if count%2 == 1 {
-				resp["choices"].([]map[string]interface{})[0]["message"].(map[string]interface{})["content"] = "@@@ FILE: test.sh @@@\nstill broken\n@@@ END_FILE @@@"
+				responseContent = "@@@ FILE: test.sh @@@\nstill broken\n@@@ END_FILE @@@"
 			} else {
-				resp["choices"].([]map[string]interface{})[0]["message"].(map[string]interface{})["content"] = "@@@ FILE: test.sh @@@\nexit 0\n@@@ END_FILE @@@"
+				responseContent = "@@@ FILE: test.sh @@@\nexit 0\n@@@ END_FILE @@@"
 			}
 		} else if strings.Contains(content, "MEM-R-") || strings.Contains(content, "Irrelevant noise") {
 			// CoVe filter logic for COVE-001
@@ -820,7 +1020,7 @@ func NewMockLLM() *MockLLM {
 			filter = append(filter, map[string]interface{}{"id": "118", "include": true})
 			filter = append(filter, map[string]interface{}{"id": "119", "include": true})
 			fJSON, _ := json.Marshal(filter)
-			resp["choices"].([]map[string]interface{})[0]["message"].(map[string]interface{})["content"] = string(fJSON)
+			responseContent = string(fJSON)
 		} else if strings.Contains(content, "MEM-P-001") || strings.Contains(content, "existing users") {
 			// CoVe filter logic for COVE+SEM-002
 			var filter []map[string]interface{}
@@ -829,10 +1029,27 @@ func NewMockLLM() *MockLLM {
 			}
 			filter = append(filter, map[string]interface{}{"id": "195", "include": true})
 			fJSON, _ := json.Marshal(filter)
-			resp["choices"].([]map[string]interface{})[0]["message"].(map[string]interface{})["content"] = string(fJSON)
+			responseContent = string(fJSON)
 		} else if strings.Contains(content, "keep the interface stable") || strings.Contains(content, "MEM-S-001") {
 			// Semantic response for SEM-001
-			resp["choices"].([]map[string]interface{})[0]["message"].(map[string]interface{})["content"] = "Sentinel errors should be used."
+			responseContent = "Sentinel errors should be used."
+		} else {
+			// Default response for other requests
+			responseContent = "OK"
+		}
+
+		// Set response content
+		resp["choices"].([]map[string]interface{})[0]["message"].(map[string]interface{})["content"] = responseContent
+
+		// Calculate completion tokens from response
+		completionTokens := estimateTokenCount(responseContent)
+		totalTokens := promptTokens + completionTokens
+
+		// Add usage field to match OpenAI API format
+		resp["usage"] = map[string]interface{}{
+			"prompt_tokens":     promptTokens,
+			"completion_tokens": completionTokens,
+			"total_tokens":      totalTokens,
 		}
 
 		w.Header().Set("Content-Type", "application/json")

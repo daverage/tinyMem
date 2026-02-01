@@ -51,15 +51,19 @@ func (s *SemanticEngine) Close() {
 
 // SemanticRecall performs semantic recall combined with lexical recall
 func (s *SemanticEngine) SemanticRecall(options recall.RecallOptions) ([]recall.RecallResult, error) {
-	// First, try to get embeddings for the query
+	// If semantic recall is not explicitly requested, use lexical-only
+	if !options.Semantic {
+		return s.fallbackLexicalRecall(options)
+	}
+
+	// Semantic recall is requested - proceed with embedding
 	var queryEmbedding []float32
 	if options.Query != "" {
 		var err error
 		queryEmbedding, err = s.embedder.GenerateEmbedding(options.Query)
 		if err != nil {
-			// If embedding fails, fall back to lexical search only
-			// This ensures the system remains functional even if semantic is unavailable
-			return s.fallbackLexicalRecall(options)
+			// If semantic is explicitly requested but fails, return error (no silent fallback)
+			return nil, fmt.Errorf("semantic recall failed (explicit request): %w", err)
 		}
 	}
 

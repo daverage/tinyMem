@@ -246,7 +246,7 @@ CoVe (Chain-of-Verification) Statistics:
 
 ### Cost
 - **Model**: Uses configured LLM (same as main system)
-- **Small model recommended**: Consider using `gpt-3.5-turbo` or equivalent
+- **Small model recommended**: Consider using `qwen2.5-coder:7b` or equivalent
 - **Typical cost**: $0.001-0.005 per extraction event (depending on model)
 
 ## Testing

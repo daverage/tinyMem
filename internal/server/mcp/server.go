@@ -189,6 +189,11 @@ func (s *Server) handleToolsList(req *MCPRequest) {
 						"type":        "number",
 						"description": "Maximum number of results to return (default: 10)",
 					},
+					"semantic": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Enable semantic (vector) search - REQUIRES STRICT MODE. High coverage, high cost. Default: false (lexical-only)",
+						"default":     false,
+					},
 				},
 				"required": []string{"query"},
 			},
@@ -548,8 +553,9 @@ func (s *Server) handleMemorySetMode(req *MCPRequest, args json.RawMessage) {
 // handleMemoryQuery handles memory query requests
 func (s *Server) handleMemoryQuery(req *MCPRequest, args json.RawMessage) {
 	var queryReq struct {
-		Query string `json:"query"`
-		Limit int    `json:"limit"`
+		Query    string `json:"query"`
+		Limit    int    `json:"limit"`
+		Semantic bool   `json:"semantic"`
 	}
 
 	if err := json.Unmarshal(args, &queryReq); err != nil {
@@ -557,8 +563,15 @@ func (s *Server) handleMemoryQuery(req *MCPRequest, args json.RawMessage) {
 		return
 	}
 
-	if !s.requireMode(req.ID, "memory_query", execution.ActionMemoryQuery, execution.ModePassive) {
-		return
+	// Enforce STRICT mode for semantic recall
+	if queryReq.Semantic {
+		if !s.requireMode(req.ID, "memory_query", execution.ActionMemoryQuery, execution.ModeStrict) {
+			return
+		}
+	} else {
+		if !s.requireMode(req.ID, "memory_query", execution.ActionMemoryQuery, execution.ModePassive) {
+			return
+		}
 	}
 
 	if queryReq.Limit == 0 {
@@ -569,6 +582,7 @@ func (s *Server) handleMemoryQuery(req *MCPRequest, args json.RawMessage) {
 		ProjectID: s.app.Project.ID,
 		Query:     queryReq.Query,
 		MaxItems:  queryReq.Limit,
+		Semantic:  queryReq.Semantic,
 	})
 	if err != nil {
 		s.sendToolError(req.ID, -32603, fmt.Sprintf("Query failed: %v", err), "memory_query")

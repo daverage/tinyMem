@@ -96,7 +96,7 @@ func (v *Verifier) callLLMForCandidateVerification(ctx context.Context, candidat
 	}
 	if model == "" {
 		// Final fallback for cloud/generic environments
-		model = "gpt-3.5-turbo"
+		model = "qwen2.5-coder:7b"
 	}
 
 	req := llm.ChatCompletionRequest{
@@ -269,7 +269,7 @@ func (v *Verifier) callLLMForRecallFilter(ctx context.Context, memories []Recall
 		model = v.config.LLMModel
 	}
 	if model == "" {
-		model = "gpt-3.5-turbo"
+		model = "qwen2.5-coder:7b"
 	}
 
 	req := llm.ChatCompletionRequest{
