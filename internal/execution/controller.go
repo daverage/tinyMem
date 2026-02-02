@@ -141,22 +141,34 @@ func ParseMode(value string) (Mode, error) {
 }
 
 // Enforce checks whether an action can proceed given the requested minimum mode.
+// Read-only operations (PASSIVE level) are always allowed without explicit mode.
+// Mutating operations (GUARDED/STRICT) require explicit mode declaration.
 func (c *Controller) Enforce(action Action, minimum Mode) error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	if !c.modeExplicitlySet {
-		return fmt.Errorf("execution mode not explicitly set")
-	}
-
-	if c.strictRequired && c.currentMode != ModeStrict {
-		return ErrStrictRequired
-	}
-
+	// Normalize minimum mode
 	if minimum == "" {
 		minimum = ModePassive
 	}
 
+	// If no mode explicitly set:
+	if !c.modeExplicitlySet {
+		// Allow read-only operations (PASSIVE level) without explicit mode
+		// This implements "observation is free, mutation is explicit"
+		if minimum == ModePassive {
+			return nil
+		}
+		// Mutating operations require explicit mode
+		return fmt.Errorf("mutation requires explicit mode; call memory_set_mode")
+	}
+
+	// Mode is explicitly set - check if STRICT is required
+	if c.strictRequired && c.currentMode != ModeStrict {
+		return ErrStrictRequired
+	}
+
+	// Check mode hierarchy
 	if modeHierarchy[c.currentMode] < modeHierarchy[minimum] {
 		return fmt.Errorf("action %s requires %s mode (current: %s)", action, minimum, c.currentMode)
 	}

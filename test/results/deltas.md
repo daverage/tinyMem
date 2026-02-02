@@ -9,7 +9,7 @@
 
 | Comparison | Metric | Base | New | Delta | Classification |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| baseline → tinyMem | TokensPerSuccess | 0.00 | 599.63 | +0.0% | neutral |
+| baseline → tinyMem | TokensPerSuccess | 0.00 | 607.33 | +0.0% | neutral |
 | baseline → tinyMem | SuccessRate | 0.00 | 0.50 | +0.0% | strong |
 | baseline → tinyMem | FalseSuccessRate | 0.75 | 0.25 | -66.7% | meaningful |
-| baseline → tinyMem | ContextTokens | 0.00 | 24.73 | +0.0% | neutral |
+| baseline → tinyMem | ContextTokens | 0.00 | 30.50 | +0.0% | neutral |

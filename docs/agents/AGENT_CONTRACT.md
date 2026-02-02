@@ -1,303 +1,88 @@
-Below is a **clean, complete rewrite of the contract**, suitable to be copied verbatim into `AGENTS.md`, `GEMINI.md`, `QWEN.md`, etc.
-
-This is **not a cosmetic edit**.
-It incorporates the enforcement-first semantics you’ve converged on, without weakening any existing guarantees, and without retrofitting language just to satisfy tests.
-
-The tone, structure, and wording are deliberate: precise, auditable, and hard to misinterpret.
-
----
-
 # TINYMEM AGENT CONTRACT
 
-## Enforcement-First Memory Governance & Task Authority
+## Memory Governance & Task Authority Specification
 
 This contract governs **all repository-related behavior** when tinyMem is present.
 
 It is **authoritative**, **mandatory**, and **self-validating**.
-Non-compliance **invalidates the response by definition**.
-
-tinyMem is an **enforcement system**, not a suggestion engine.
+Non-compliance invalidates the response by definition.
 
 ---
 
-## 0. Purpose and Scope
+## Core Principle
 
-tinyMem exists to **govern memory, tasks, and durable state**.
+> **Observation is free. Mutation is explicit.**
 
-It does **not** exist to:
-
-* execute work
-* retry failures
-* autonomously complete goals
-* reason its way around constraints
-
-Its responsibilities are strictly limited to:
-
-* What may be remembered
-* What may be recalled
-* What may be trusted
-* What may become durable
-* What task state is authoritative
-* What actions are permitted, blocked, or rejected
-
-Execution and reasoning belong to the agent.
-**Reality enforcement belongs to tinyMem.**
+Reading, inspecting, recalling, and reasoning require no ceremony.
+Only durable state mutation requires explicit intent and gating.
 
 ---
 
 ## 1. Binding Definitions
 
-### Repository-related request
+**Repository-related request**
+Any request that touches code, files, documentation, architecture, configuration, planning, tasks, or repository state.
 
-Any request that touches:
-
-* code
-* files
-* documentation
-* architecture
-* configuration
-* planning
-* tasks
-* repository state
-
-### Repository-impacting action
-
-Any action that would change durable project state, including:
-
-* writing or modifying files
-* creating, updating, or completing tasks
-* promoting memory entries to durable truth
-* persisting decisions, constraints, or assumptions
-
-### TinyMem command
-
-A **real, externally executed** tinyMem tool invocation, including:
-
-* `memory_query`
-* `memory_recent`
-* `memory_write`
-* `memory_set_mode`
-
-Internal inference, recall, or chat reconstruction **does not qualify**.
-
----
-
-## 2. Enforcement Outcomes (Authoritative)
-
-Every repository-impacting attempt results in **exactly one enforcement outcome** determined by tinyMem:
-
-### **ALLOW**
-
-The action is permitted under the current mode and executed.
-
-### **BLOCK**
-
-The action is forbidden under the current mode and correctly prevented.
-
-### **VIOLATION**
-
-The action is forbidden but executed, partially executed, or not detected.
-
-**ALLOW and BLOCK are both successful outcomes.**
-**VIOLATION is the only failure.**
-
-Blocked actions are **not errors**.
-They are proof of correct enforcement.
-
----
-
-## 3. Modes (Authoritative)
-
-The effective mode is **owned and enforced by tinyMem**, not inferred by the agent.
-
-### PASSIVE
-
-Read-only analysis and explanation.
-
-### GUARDED
-
-Bounded, reversible edits.
-No task authority.
-No durable memory without explicit confirmation.
-
-### STRICT
-
-Multi-step, stateful, or durable work.
-Task authority and memory authority required.
-
----
-
-## 4. Intent vs Enforcement
-
-* The **agent declares intent** (desired mode and action class)
-* **tinyMem enforces reality** (ALLOW, BLOCK, or VIOLATION)
-
-The agent must never:
-
-* reinterpret BLOCK as failure
-* retry forbidden actions
-* assume permission from intent alone
-
----
-
-## 5. Mode Declaration (Hard Requirement)
-
-Before any repository-impacting action, the agent MUST:
-
-1. Declare the intended mode (PASSIVE, GUARDED, STRICT)
-2. Operate only within permissions enforced by tinyMem
-3. Explicitly escalate or stop if additional authority is required
-
-Bypassing or inferring mode is forbidden.
-
----
-
-## 6. PASSIVE Mode Contract
-
-### Allowed
-
-* Reading and analysis
-* Explanation and review
-* Text-only guidance or diffs (not applied)
-* Clarifying questions
-
-### Forbidden
-
+**Durable mutation**
+Any action that changes repository state or creates durable project state:
 * Writing or modifying files
-* Creating or updating tasks
-* Writing durable memory
-
-### Enforcement
-
-* BLOCK is expected for any forbidden action
-* BLOCK is a successful outcome
-
----
-
-## 7. GUARDED Mode Contract
-
-### Allowed
-
-* Small, bounded, reversible edits
-* Memory recall to resolve ambiguity
-
-### Forbidden
-
 * Creating, updating, or completing tasks
-* Writing durable memory unless explicitly confirmed
+* Promoting claims to facts
+* Writing decision or constraint memories
 
-### Enforcement
-
-* Forbidden actions MUST be BLOCKED
-* BLOCK is correct behavior
-
----
-
-## 8. STRICT Mode Contract
-
-STRICT is required for:
-
-* multi-step workflows across turns
-* task tracking via `tinyTasks.md`
-* any durable memory write
-
-STRICT **fails closed**.
+**Task Authority**
+`tinyTasks.md` in the project root is the **single source of truth** for task state.
+Task state must never be inferred.
 
 ---
 
-### 8.1 STRICT Absolute Preconditions (Hard Gate)
+## 2. Observation (Always Allowed)
 
-Before repository-impacting actions, the agent MUST:
+The following require no mode declaration:
+* Query memory (`memory_query`, `memory_recent`)
+* Read health/diagnostics (`memory_health`, `memory_doctor`, `memory_stats`)
+* Read files
+* Analyze code
+* Provide guidance
+* Ask questions
 
-1. Execute at least one tinyMem recall command
-   (`memory_query` or `memory_recent`)
-2. Read `tinyTasks.md` **or explicitly confirm it does not exist**
-
-If either step fails:
-
-* the agent MUST stop
-* irreversible actions are forbidden
-
----
-
-### 8.2 Task Authority Lock
-
-`tinyTasks.md` is the **single source of truth** for task state.
-
-If the file exists:
-
-* task state MUST NOT be inferred
-* execution MUST resume from the **first unchecked subtask**
-* if no unchecked tasks exist, execution MUST be refused
-
-Required structure:
-
-```md
-# Tasks – <Goal>
-
-- [ ] Top-level task
-  - [ ] Atomic subtask
-```
+Memory recall is **strongly recommended** for all repository-related conversations, and **mandatory** before any durable mutation.
 
 ---
 
-### 8.3 Execution Discipline
+## 3. Mutation (Requires Explicit Intent)
 
-tinyMem does **not** execute work.
+Before performing any durable mutation, you MUST:
 
-The agent may:
+1. **Query project memory** using `memory_query` or `memory_recent`
+   - Retrieve facts, decisions, constraints, and patterns
+   - Ensure work aligns with project truth
 
-* perform edits
-* run commands
-* make decisions
+2. **Declare intent** by calling `memory_set_mode`
+   - The system will enforce the appropriate clearance for the requested mutation
 
-tinyMem enforces:
-
-* permission gating
-* task authority
-* memory durability
-
-Task state MUST be updated after each major milestone.
+3. **Check task authority** by reading `tinyTasks.md` (or confirming it doesn't exist)
+   - If unchecked tasks exist, resume from the first unchecked subtask
+   - If tasks exist but none are unchecked, refuse execution and request user input
+   - If file doesn't exist, you may create it for multi-step work
 
 ---
 
-## 9. Durable Memory Writeback
+## 4. tinyTasks.md (Task Authority)
 
-### When required
+### When Required
+Multi-step work persisting across turns requires task tracking via `tinyTasks.md`.
 
-If a response introduces or confirms durable knowledge
-(decisions, constraints, corrected assumptions),
-the agent MUST write it via tinyMem in STRICT mode.
-
-### Evidence requirements
-
-* Promotion to **fact** requires evidence
-* Without evidence, store as `claim` or `note`
-
-### If no durable knowledge was produced
-
-The agent MUST state verbatim:
-
-> No durable memory write required for this response.
-
----
-
-## 10. tinyTasks Auto-Creation (Mechanical, Inert)
-
+### Auto-Creation
 The system may auto-create `tinyTasks.md` when multi-step work is implied.
 
-Invariants:
+**Critical invariants:**
+* Presence of `tinyTasks.md` is **not** authorization
+* Presence of unchecked, human-authored tasks **is** authorization
 
-* File presence ≠ intent
-* Human-authored unchecked tasks = intent
+If the file exists with no unchecked tasks, refuse execution and request human input.
 
-If the file exists with no unchecked tasks:
-
-* execution MUST be refused
-* human input is required
-
-Canonical inert template:
-
+### Canonical Inert Template
 ```md
 # Tasks — NOT STARTED
 >
@@ -310,60 +95,99 @@ Canonical inert template:
 <!-- No tasks defined yet -->
 ```
 
----
+### Required Structure
+```md
+# Tasks – <Goal>
 
-## 11. Error Handling
-
-### STRICT
-
-* Fail closed
-* BLOCK irreversible actions
-* Retry tool calls up to 2 times
-* Then stop and request intervention
-
-### PASSIVE / GUARDED
-
-* Continue with explanation-only assistance
-
-Errors do not imply failure unless they cause a **VIOLATION**.
+- [ ] Top-level task
+  - [ ] Atomic subtask
+```
 
 ---
 
-## 12. Invalid Actions (STRICT)
+## 5. Durable Memory Writeback (MANDATORY)
 
-Any of the following constitute a **VIOLATION**:
+### When to Write
 
-* No tinyMem recall executed
-* No task-state read or confirmation
+**Write memories immediately when:**
+
+1. **User states a preference or decision**
+   - Example: "We prefer React over Vue"
+   - Action: `memory_write` with type `decision`
+
+2. **A constraint is established**
+   - Example: "Never commit secrets to git"
+   - Action: `memory_write` with type `constraint`
+
+3. **You discover a verifiable fact**
+   - Example: "API runs on port 8080"
+   - Action: `memory_write` with type `fact` (include evidence)
+
+4. **Architectural pattern is defined**
+   - Example: "All services use dependency injection"
+   - Action: `memory_write` with type `decision`
+
+5. **User corrects your understanding**
+   - Example: "No, we use PostgreSQL, not MySQL"
+   - Action: `memory_write` with type `fact`
+
+### Evidence Requirements
+
+* **Facts** require evidence: `cmd_exit0::test command`, `file_exists::path`, `grep_hit::pattern::file`
+* **Decisions and constraints** require rationale in `detail` field
+* **Notes and observations** are free-form
+
+### After Writing
+
+Confirm the memory write to the user:
+```
+✅ Stored decision: "Prefer TypeScript for new features"
+```
+
+---
+
+## 6. Error Handling
+
+If a required tool operation fails:
+* Declare the failure
+* Retry up to 2 times
+* Stop and request user intervention
+* Do NOT proceed with irreversible actions
+
+---
+
+## 7. Invalid Actions
+
+The following invalidate the response:
+* No memory recall executed before repository-related work
+* No task-state read when multi-step work is involved (or confirmation of absence)
 * Inferring task or memory state
-* Ignoring unchecked tasks
-* Writing speculative memory as durable
-* Continuing after enforcement refusal
+* Ignoring unchecked tasks in `tinyTasks.md`
+* Writing speculative memory as durable facts
+* Mutating state without explicit intent declaration
 
 ---
 
-## 13. End-of-Response Validation (STRICT)
+## 8. End-of-Response Checklist (Multi-Step Work)
 
-STRICT responses MUST end with explicit confirmation of:
+When performing multi-step work, validate:
 
-* [ ] Mode declared and enforced
-* [ ] tinyMem recall executed
-* [ ] `tinyTasks.md` read or confirmed absent
+* [ ] Memory recall executed (grounded in project truth)
+* [ ] Intent declared via `memory_set_mode`
+* [ ] `tinyTasks.md` read (or confirmed missing)
 * [ ] Tasks updated if applicable
-* [ ] Durable memory written OR explicitly declined
+* [ ] Durable memory written OR explicit declaration of none needed
 
 ---
 
-## 14. Enforcement Invariant (Final)
+## 9. Summary
 
-> **Agents declare intent.
-> tinyMem enforces reality.**
+**Simple rules:**
 
-ALLOW and BLOCK are success.
-Only VIOLATION is failure.
+1. **Think freely** — read, query, analyze without restriction
+2. **Declare intent** — call `memory_set_mode` before mutation
+3. **Respect tasks** — never bypass `tinyTasks.md` authority
+4. **Write memories** — capture decisions, constraints, facts as you learn
+5. **Fail closed** — if unsure, ask; if blocked, stop
 
-PASSIVE remains lightweight.
-GUARDED remains bounded.
-STRICT fails closed.
-
-**End of Contract**
+**End of Protocol**

@@ -114,50 +114,32 @@ func (d *Runner) checkExternalDependencies() []CheckResult {
 
 	// Check LLM backend reachability (relevant for both proxy and MCP when using LLM features)
 	// For memory-only operations, LLM backend is not required, so we'll downgrade this to a warning
-	llmErr := checkReachable(d.config.LLMBaseURL)
-	if llmErr != nil {
-		msg := fmt.Sprintf("LLM backend unreachable: %v", llmErr)
-		if d.serverMode == MCPMode {
-			msg += " (expected in MCP mode - uses calling AI)"
+	// Only check LLM backend in Proxy mode where it's actually needed
+	if d.serverMode == ProxyMode {
+		llmErr := checkReachable(d.config.LLMBaseURL)
+		if llmErr != nil {
+			results = append(results, CheckResult{
+				Name:     "llm_backend_reachability",
+				Status:   "fail",
+				Message:  fmt.Sprintf("LLM backend unreachable: %v", llmErr),
+				Severity: "error",
+			})
 		} else {
-			msg += " (not critical for memory-only operations)"
+			results = append(results, CheckResult{
+				Name:     "llm_backend_reachability",
+				Status:   "pass",
+				Message:  "LLM backend reachable",
+				Severity: "info",
+			})
 		}
-		results = append(results, CheckResult{
-			Name:     "llm_backend_reachability",
-			Status:   "fail",
-			Message:  msg,
-			Severity: "warning", // Downgrade to warning since LLM isn't always required
-		})
-	} else {
-		results = append(results, CheckResult{
-			Name:     "llm_backend_reachability",
-			Status:   "pass",
-			Message:  "LLM backend reachable",
-			Severity: "info",
-		})
 	}
+	// In MCP mode, LLM backend check is skipped (uses calling AI instead)
 
 
 	// Check proxy readiness based on server mode
 	// For MCP mode, this check is not critical since MCP doesn't operate as an HTTP proxy
-	if d.serverMode == MCPMode {
-		// For MCP mode, only log if proxy is not available but don't treat as a critical error
-		if err := checkProxyListening(d.config.ProxyPort); err != nil {
-			results = append(results, CheckResult{
-				Name:     "proxy_readiness",
-				Status:   "pass", // Consider this a pass in MCP mode
-				Message:  fmt.Sprintf("Proxy not listening on port %d (expected in MCP mode - uses stdio transport)", d.config.ProxyPort),
-				Severity: "info", // This is expected, not a warning
-			})
-		} else {
-			results = append(results, CheckResult{
-				Name:     "proxy_readiness",
-				Status:   "pass",
-				Message:  fmt.Sprintf("Proxy listening on port %d", d.config.ProxyPort),
-				Severity: "info",
-			})
-		}
-	} else {
+	// Proxy readiness check - only relevant in Proxy mode
+	if d.serverMode == ProxyMode {
 		// For proxy mode, check if we're actually supposed to be running in proxy mode
 		// For standalone mode, the proxy not running might be expected
 		if d.serverMode == ProxyMode {
