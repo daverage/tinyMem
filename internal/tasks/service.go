@@ -423,3 +423,105 @@ func computeHash(data []byte) string {
 	hash := sha256.Sum256(data)
 	return fmt.Sprintf("%x", hash[:])
 }
+
+// CreateInertTaskFile creates the canonical inert tinyTasks.md template
+// This file is intentionally non-authorizing - humans must edit it to add tasks
+func CreateInertTaskFile(projectPath string) error {
+	tasksPath := projectPath + "/tinyTasks.md"
+
+	// Check if file already exists
+	if _, err := os.Stat(tasksPath); err == nil {
+		// File exists, don't overwrite
+		return fmt.Errorf("tinyTasks.md already exists")
+	}
+
+	// Canonical inert template from the agent contract
+	template := `# Tasks — NOT STARTED
+>
+> This file was created automatically because a multi-step workflow
+> may be required.
+>
+> No work is authorised until a human edits this file and defines tasks.
+
+## Tasks
+<!-- No tasks defined yet -->
+`
+
+	// Write the template to the file
+	err := os.WriteFile(tasksPath, []byte(template), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to create tinyTasks.md: %w", err)
+	}
+
+	return nil
+}
+
+// ShouldAutoCreateTaskFile detects if a request implies multi-step work
+func ShouldAutoCreateTaskFile(input string) bool {
+	input = strings.ToLower(input)
+
+	// Multi-step indicators
+	multiStepPatterns := []string{
+		"implement",
+		"create",
+		"build",
+		"add",
+		"refactor",
+		"update",
+		"migrate",
+		"setup",
+		"configure",
+	}
+
+	// Count how many action verbs are present
+	actionCount := 0
+	for _, pattern := range multiStepPatterns {
+		if strings.Contains(input, pattern) {
+			actionCount++
+		}
+	}
+
+	// Also check for explicit multi-step indicators
+	explicitMultiStep := []string{
+		"step",
+		"steps",
+		"tasks",
+		"task list",
+		"workflow",
+		"series",
+		"sequence",
+		"multiple",
+		"several",
+	}
+
+	for _, indicator := range explicitMultiStep {
+		if strings.Contains(input, indicator) {
+			return true
+		}
+	}
+
+	// If we see 2+ action verbs, likely multi-step
+	if actionCount >= 2 {
+		return true
+	}
+
+	// Check for conjunction patterns (A and B, A then B, etc.)
+	conjunctions := []string{
+		" and ",
+		" then ",
+		" after ",
+		" before ",
+		" also ",
+		" additionally ",
+	}
+
+	conjunctionCount := 0
+	for _, conj := range conjunctions {
+		if strings.Contains(input, conj) {
+			conjunctionCount++
+		}
+	}
+
+	// Multiple conjunctions suggest multi-step work
+	return conjunctionCount >= 1 && actionCount >= 1
+}

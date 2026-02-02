@@ -41,6 +41,7 @@ type Server struct {
 	taskService     *tasks.Service
 	modeCtrl        *execution.Controller
 	enforcer        *enforcement.Recorder
+	hasRecalled     bool // Track if memory_query/memory_recent was called
 	ctx             context.Context
 	cancel          context.CancelFunc
 }
@@ -53,6 +54,7 @@ const (
 	enforcementCodeFactEvidence   = "FACT_EVIDENCE_REQUIRED"
 	enforcementCodeClaimViolation = "CLAIM_WITHOUT_ENFORCEMENT"
 	enforcementCodeModeUpdated    = "MODE_UPDATED"
+	enforcementCodeRecallRequired = "RECALL_REQUIRED"
 )
 
 // MCPRequest represents a request from the MCP client
@@ -351,6 +353,14 @@ func (s *Server) handleToolsList(req *MCPRequest) {
 				"properties": map[string]interface{}{},
 			},
 		},
+		{
+			"name":        "memory_check_task_authority",
+			"description": "Check tinyTasks.md status and return authorization for multi-step work. Returns file existence, unchecked tasks, and authorization status.",
+			"inputSchema": map[string]interface{}{
+				"type":       "object",
+				"properties": map[string]interface{}{},
+			},
+		},
 	}
 
 	response := map[string]interface{}{
@@ -412,6 +422,8 @@ func (s *Server) handleToolCall(req *MCPRequest) {
 		s.handleMemoryClaimSuccess(req, argsBytes)
 	case "memory_set_mode":
 		s.handleMemorySetMode(req, argsBytes)
+	case "memory_check_task_authority":
+		s.handleMemoryCheckTaskAuthority(req)
 	default:
 		s.sendError(req.ID, -32601, fmt.Sprintf("Tool not found: %s", params.Name))
 	}
@@ -486,7 +498,7 @@ func (s *Server) handleMemoryRunMetadata(req *MCPRequest) {
 		"result": map[string]interface{}{
 			"content": []map[string]interface{}{
 				{
-					"type": "json",
+					"type": "text",
 					"text": string(payload),
 				},
 			},
@@ -495,6 +507,94 @@ func (s *Server) handleMemoryRunMetadata(req *MCPRequest) {
 	}
 
 	s.sendResponse(response)
+}
+
+func (s *Server) handleMemoryCheckTaskAuthority(req *MCPRequest) {
+	// Read tinyTasks.md from project root
+	tasksPath := filepath.Join(s.app.Project.Path, "tinyTasks.md")
+
+	exists := false
+	uncheckedTasks := []string{}
+	authorization := "create_allowed"
+
+	// Check if file exists
+	if _, err := os.Stat(tasksPath); err == nil {
+		exists = true
+
+		// Read file and parse for unchecked tasks
+		content, err := os.ReadFile(tasksPath)
+		if err == nil {
+			lines := strings.Split(string(content), "\n")
+			for _, line := range lines {
+				trimmed := strings.TrimSpace(line)
+				// Look for unchecked task markers: "- [ ]" or "* [ ]"
+				if strings.HasPrefix(trimmed, "- [ ]") || strings.HasPrefix(trimmed, "* [ ]") {
+					// Extract task text after the marker
+					task := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(trimmed, "- [ ]"), "* [ ]"))
+					uncheckedTasks = append(uncheckedTasks, task)
+				}
+			}
+
+			// Determine authorization status
+			if len(uncheckedTasks) > 0 {
+				authorization = "authorized"
+			} else {
+				authorization = "unauthorized"
+			}
+		}
+	}
+
+	// Build response
+	result := map[string]interface{}{
+		"exists":          exists,
+		"unchecked_tasks": uncheckedTasks,
+		"authorization":   authorization,
+		"task_count":      len(uncheckedTasks),
+	}
+
+	if exists && authorization == "authorized" {
+		result["next_task"] = uncheckedTasks[0]
+	}
+
+	payload, err := json.Marshal(result)
+	if err != nil {
+		s.sendToolError(req.ID, -32603, fmt.Sprintf("Failed to marshal task authority: %v", err), "memory_check_task_authority")
+		return
+	}
+
+	response := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"result": map[string]interface{}{
+			"content": []map[string]interface{}{
+				{
+					"type": "text",
+					"text": string(payload),
+				},
+			},
+		},
+		"id": req.ID,
+	}
+
+	s.sendResponse(response)
+}
+
+// checkAndAutoCreateTaskFile detects multi-step work and creates inert tinyTasks.md if needed
+func (s *Server) checkAndAutoCreateTaskFile(context string) error {
+	// Check if tinyTasks.md already exists
+	tasksPath := filepath.Join(s.app.Project.Path, "tinyTasks.md")
+	if _, err := os.Stat(tasksPath); err == nil {
+		// File exists, no need to create
+		return nil
+	}
+
+	// Check if this looks like multi-step work
+	if !tasks.ShouldAutoCreateTaskFile(context) {
+		// Not multi-step, don't create
+		return nil
+	}
+
+	// Create the inert task file
+	return tasks.CreateInertTaskFile(s.app.Project.Path)
 }
 
 func (s *Server) handleMemoryClaimSuccess(req *MCPRequest, args json.RawMessage) {
@@ -577,6 +677,9 @@ func (s *Server) handleMemoryQuery(req *MCPRequest, args json.RawMessage) {
 		s.sendToolError(req.ID, -32603, fmt.Sprintf("Query failed: %v", err), "memory_query")
 		return
 	}
+
+	// Mark that memory recall was performed (required before mutations)
+	s.hasRecalled = true
 
 	// Apply CoVe recall filtering if enabled
 	if s.coveVerifier != nil && len(results) > 0 {
@@ -672,6 +775,9 @@ func (s *Server) handleMemoryRecent(req *MCPRequest, args json.RawMessage) {
 		return
 	}
 
+	// Mark that memory recall was performed (required before mutations)
+	s.hasRecalled = true
+
 	// Take only the most recent ones
 	limit := recentReq.Count
 	if len(memories) < limit {
@@ -751,6 +857,37 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 	} else {
 		if !s.requireMode(req.ID, "memory_write", execution.ActionMemoryWrite, execution.ModeGuarded) {
 			return
+		}
+	}
+
+	// AUTO-CREATE: Check if tinyTasks.md should be created for multi-step work
+	// Use the memory summary and detail to detect multi-step patterns
+	workContext := fmt.Sprintf("%s %s", writeReq.Summary, writeReq.Detail)
+	_ = s.checkAndAutoCreateTaskFile(workContext) // Best-effort, don't fail on error
+
+	// ENFORCEMENT: Recall required before mutation (GUARDED+ modes)
+	currentMode := s.modeCtrl.Mode()
+	if !s.hasRecalled {
+		if currentMode >= execution.ModeGuarded {
+			// BLOCK in GUARDED/STRICT modes
+			s.recordEnforcementEvent(enforcement.Event{
+				Code:     enforcementCodeRecallRequired,
+				Boundary: "memory_write",
+				Mode:     string(currentMode),
+				Outcome:  enforcement.OutcomeBlock,
+				Details:  "Memory recall (memory_query or memory_recent) required before mutations in GUARDED/STRICT modes",
+			})
+			s.sendToolError(req.ID, -32603, "Memory recall required: Call memory_query or memory_recent before memory_write in GUARDED/STRICT modes", "memory_write")
+			return
+		} else {
+			// LOG VIOLATION in PASSIVE mode (don't block)
+			s.recordEnforcementEvent(enforcement.Event{
+				Code:     enforcementCodeRecallRequired,
+				Boundary: "memory_write",
+				Mode:     string(currentMode),
+				Outcome:  enforcement.OutcomeViolation,
+				Details:  "Contract violation: Memory recall should precede mutations (logged in PASSIVE mode, not enforced)",
+			})
 		}
 	}
 

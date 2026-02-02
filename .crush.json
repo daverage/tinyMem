@@ -16,12 +16,12 @@
   "providers": {
     "Ollama": {
       "name": "Ollama",
-      "base_url": "http://localhost:11434/v1",
+      "base_url": "http://localhost:8080/v1",
       "type": "openai-compat",
       "models": [
         {
-          "name": "Llama",
-          "id": "llama3.1:8b",
+          "name": "rnj",
+          "id": "rnj-1",
           "context_window": 256000,
           "default_max_tokens": 20000
         }
