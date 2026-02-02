@@ -24,6 +24,7 @@ tinyMem gives small and medium language models (7B–13B) reliable long-term mem
 
 - [What tinyMem Is (and Isn't)](#-what-tinymem-is-and-isnt)
 - [Purpose](#-purpose)
+- [Benchmarks](#-benchmarks)
 - [Key Features](#-key-features)
 - [Quick Start](#-quick-start)
 - [Installation](#-installation)
@@ -187,6 +188,17 @@ It does guarantee:
 * hallucinations cannot become durable truth
 * unsafe actions are blocked, not trusted
 * memory remains consistent across time
+
+---
+
+## 🎯 Benchmarks
+
+tinyMem is benchmarked on enforcement, not persuasion.
+
+Tests measure whether forbidden actions are reliably blocked, whether hallucinated facts are prevented from becoming durable, and whether task and memory boundaries hold under repeated runs. Agent compliance is measured separately and never treated as authority.
+
+Full methodology and results:
+[BENCHMARK.md](BENCHMARK.md)
 
 ---
 

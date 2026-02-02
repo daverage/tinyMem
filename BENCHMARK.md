@@ -1,25 +1,12 @@
-Below is a **complete, commit-ready `BENCHMARKS.md`** you can drop into `docs/BENCHMARKS.md` (or the repo root if you prefer).
-
-It is written to be:
-
-* honest
-* adversarial-safe
-* aligned with your enforcement contract
-* readable by engineers, not marketers
-
-No fluff. No overclaiming. Everything is framed in terms of **what is measured and why it matters**.
-
----
-
 # tinyMem Benchmarks
 
-## Enforcement, Memory Stability, and Token Economics
+## Enforcement, Memory Stability, Agent Compliance, and Token Economics
 
 This document explains **how tinyMem is benchmarked**, **what is measured**, and **how to interpret the results**.
 
 These benchmarks are designed to answer a narrow but critical question:
 
-> Does tinyMem reliably enforce memory and task boundaries, and what secondary effects does that have on token usage and memory drift?
+> Does tinyMem reliably enforce memory, truth, and task boundaries — and does the agent contract remain clear and followable under that enforcement?
 
 They are **not** intended to measure:
 
@@ -40,6 +27,7 @@ Accordingly:
 * **Allowing forbidden actions is failure**
 * **Model claims are never trusted**
 * **Only enforced outcomes count**
+* **Agent behavior is observed, not relied upon**
 
 The benchmark system reflects this philosophy directly.
 
@@ -49,34 +37,49 @@ The benchmark system reflects this philosophy directly.
 
 Each benchmark run records **enforcement-level facts**, not model output text.
 
-### Core Enforcement Metrics (PROVEN)
+### 2.1 Core Enforcement Metrics (AUTHORITATIVE)
 
-These metrics are derived solely from tinyMem’s internal enforcement recorder:
+These metrics are derived solely from tinyMem’s enforcement engine and are treated as ground truth:
 
 * **Allowed actions**
-  Actions permitted under the current execution mode
+  Actions explicitly permitted under the current execution mode and evidence rules
 
 * **Blocked actions**
-  Forbidden actions correctly prevented
+  Forbidden actions correctly prevented by enforcement
 
 * **Violations**
   Forbidden actions that were executed or not detected
 
   > Any violation is a hard failure
 
-* **Claimed successes**
-  Success asserted by the model (untrusted)
-
 * **Enforced successes**
-  Actions that actually occurred under enforcement
+  Actions that actually occurred after passing enforcement gates
 
-These metrics are authoritative.
+These metrics define correctness.
 
 ---
 
-### Secondary Metrics (OBSERVED)
+### 2.2 Agent Compliance Metrics (OBSERVATIONAL)
 
-These metrics are informative but not proofs:
+Agent compliance metrics measure **whether an agent following `AGENTS.md` behaves as expected**, not whether the system remains safe.
+
+They include:
+
+* Tool invocation order (e.g. query → mode → write)
+* Mode declaration discipline
+* Task authority checks
+* Detected contract violations
+
+Important distinction:
+
+> **Compliance failures are diagnostic, not correctness failures.**
+> Enforcement remains authoritative.
+
+---
+
+### 2.3 Secondary Metrics (SIDE-EFFECTS)
+
+These metrics are reported for analysis only:
 
 * Token usage
 * Context size
@@ -84,7 +87,7 @@ These metrics are informative but not proofs:
 * Irrelevant context filtered
 * Claimed success rate
 
-They are reported to show **side-effects of enforcement**, not guarantees.
+They describe **side-effects of enforcement**, not guarantees.
 
 ---
 
@@ -92,17 +95,17 @@ They are reported to show **side-effects of enforcement**, not guarantees.
 
 ### Baseline
 
-Baseline runs execute the same scenarios **without memory or task enforcement**.
+Baseline runs execute the same scenarios **without memory, task, or truth enforcement**.
 
 Properties:
 
 * No violations are possible (nothing is enforced)
 * All “success” is claimed, not verified
-* Used only for comparison and contrast
+* Claimed success is untrusted by design
 
 Baseline answers:
 
-> What happens when nothing prevents drift or hallucination?
+> What happens when nothing prevents drift, hallucination, or overconfidence?
 
 ---
 
@@ -113,15 +116,15 @@ tinyMem runs execute with full enforcement enabled:
 * Explicit execution mode handshake
 * Evidence-gated fact promotion
 * Task authority enforcement
-* Enforcement outcomes recorded per action
+* Per-action enforcement outcomes recorded
 
 tinyMem answers:
 
-> What changes when memory and truth are enforced?
+> What changes when memory, truth, and task authority are enforced?
 
 ---
 
-## 4. Scenarios
+## 4. Enforcement Scenarios
 
 Each scenario is explicitly labeled as an **ENFORCEMENT TEST**.
 
@@ -131,7 +134,7 @@ Attempts to create or mutate tasks outside STRICT mode.
 
 **Expected outcome**:
 
-* Action is BLOCKED
+* Action is **BLOCKED**
 * No task state is changed
 * No violation recorded
 
@@ -143,9 +146,11 @@ Attempts to promote a claim to a fact without valid evidence.
 
 **Expected outcome**:
 
-* Promotion is BLOCKED
+* Promotion is **BLOCKED**
 * Memory remains a claim
 * No violation recorded
+
+> A 0% “success rate” in this scenario is **correct behavior**.
 
 ---
 
@@ -155,9 +160,21 @@ Introduces ambiguous or low-confidence information.
 
 **Expected outcome**:
 
-* Unsafe promotion is BLOCKED or downgraded
+* Unsafe promotion is **BLOCKED** or downgraded
 * No false facts created
 * No violation recorded
+
+---
+
+### ADVERSARIAL-LLM — Mode and Boundary Evasion
+
+Simulates adversarial or careless agent behavior.
+
+**Expected outcome**:
+
+* Unauthorized actions are **BLOCKED**
+* No violation recorded
+* System state remains intact
 
 ---
 
@@ -184,14 +201,40 @@ A benchmark run is evaluated as follows:
 * **FAIL**
   One or more violations occurred
 
-There is no requirement that a successful run include any ALLOW outcomes.
+A run does **not** need to contain any ALLOW outcomes to pass.
+
 A run where all forbidden actions are blocked is a correct run.
 
 ---
 
-## 7. Example Aggregate Result (40 Runs)
+## 7. Agent Compliance Testing
 
-> This example illustrates how results should be read. Numbers will vary by model and workload.
+In addition to enforcement testing, tinyMem includes **agent compliance tests**.
+
+These tests verify that:
+
+* The `AGENTS.md` contract is clear
+* Cooperative agents can follow it correctly
+* Contract violations are detectable and measurable
+
+Examples include:
+
+* Read-only exploration without mode declaration
+* Explicit mutation sequences
+* Task authority checks for multi-step work
+* Detection of skipped memory queries
+
+Key rule:
+
+> **Agent compliance tests never grant authority and never override enforcement.**
+
+They exist to measure **contract clarity**, not to ensure safety.
+
+---
+
+## 8. Example Aggregate Result (40 Runs)
+
+> Numbers shown here are illustrative. Exact values depend on model and workload.
 
 ### Enforcement Summary
 
@@ -204,7 +247,7 @@ This alone is sufficient for a PASS.
 
 ---
 
-### Claimed vs Enforced Success
+### Claimed vs Enforced Outcomes
 
 * Baseline false success claims: high
 * tinyMem false success claims: reduced by ~66%
@@ -214,33 +257,35 @@ Interpretation:
 
 * Models still attempt incorrect behavior
 * tinyMem consistently detects and neutralizes it
+* Correctness is enforced, not inferred
 
 ---
 
 ### Token Usage (Observed)
 
-* Baseline total tokens: ~32k
+* Baseline total tokens: ~35k
 * tinyMem total tokens: ~18k
-* Reduction: ~44%
+* Reduction: ~45–50%
 
 This reduction is a **side-effect** of enforcement:
 
-* Targeted recall replaces broad file reads
+* Targeted recall replaces broad context reads
 * CoVe filtering removes irrelevant context
 * Enforcement prevents hallucination-driven retries
 * Context resets prevent runaway histories
 
-Token savings are not the goal, but they are real.
+Token efficiency is not the goal, but it is a measurable consequence.
 
 ---
 
-## 8. What These Benchmarks Prove
+## 9. What These Benchmarks Prove
 
 These benchmarks demonstrate that tinyMem:
 
-* Enforces memory and task boundaries deterministically
-* Prevents hallucinated facts from becoming durable
+* Enforces memory, truth, and task boundaries deterministically
+* Prevents hallucinated facts from becoming durable state
 * Detects and contains false success claims
+* Separates agent behavior from system authority
 * Reduces memory drift across repeated runs
 * Improves token efficiency by eliminating wasted work
 
@@ -254,32 +299,31 @@ tinyMem governs **what becomes trusted**, not what is generated.
 
 ---
 
-## 9. Reproducibility
+## 10. Reproducibility
 
 Benchmarks are designed to be reproducible:
 
 * Deterministic model settings (temperature = 0)
 * Identical scenarios per run
 * Explicit execution mode handshake
-* Enforcement metadata recorded per run
+* Enforcement metadata recorded per action
+* Compliance metrics logged separately
 
 All conclusions are derived from **enforced outcomes**, not narrative interpretation.
 
 ---
 
-## 10. How to Use These Results
+## 11. How to Read the Results
 
-If you are:
+* **Engineers**: focus on violations (should always be zero)
+* **Reviewers**: ignore raw success rates without enforcement context
+* **Contributors**: do not weaken enforcement to improve “scores”
 
-* **An engineer**: focus on violations (should be zero)
-* **A reviewer**: ignore raw success rates without enforcement context
-* **A contributor**: do not weaken enforcement to improve “scores”
-
-If a benchmark ever looks “worse” after tightening enforcement, that is expected and correct.
+If a benchmark looks “worse” after tightening enforcement, that is expected and correct.
 
 ---
 
-## 11. Summary
+## 12. Summary
 
 tinyMem benchmarks are intentionally conservative.
 
@@ -294,3 +338,9 @@ When the answer is “yes, consistently”, the system is working.
 **End of Benchmarks**
 
 ---
+
+If you want next steps, good candidates would be:
+
+* a short `BENCHMARKS_README.md` for casual readers
+* a `WHY_NO_PROXY.md` that references these results
+* or a slim appendix explaining “enforced success” as a first-class metric
