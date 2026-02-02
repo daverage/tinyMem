@@ -35,7 +35,7 @@ Aider needs to be told to talk to `localhost:8080` instead of the real API.
 aider \
   --openai-api-base http://localhost:8080/v1 \
   --openai-api-key dummy \
-  --model openai/qwen2.5-coder  # Prefix 'openai/' tells Aider to use generic client
+  --model openai/rnj-1  # Prefix 'openai/' tells Aider to use generic client
 ```
 
 > **Critical:** You MUST use the `openai/` prefix for the model name (e.g., `openai/qwen2.5-coder` or `openai/gpt-4`). This forces Aider to use its generic OpenAI client, which respects the custom API base. If you just say `--model gpt-4`, it might try to hit the official OpenAI API directly.
@@ -79,4 +79,3 @@ aider --model-metadata-file .aider.model.metadata.json --model openai/qwen2.5-co
 -   Ensure `tinymem proxy` is running.
 -   Check `tinymem doctor`.
 -   Try using `127.0.0.1` instead of `localhost` if on Windows/WSL.
-

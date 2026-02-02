@@ -197,7 +197,8 @@ The tinyMem CLI is your primary way to interact with the system from your termin
 | `run` | **Command Wrapper**| To run a script or tool (like `make` or `npm test`) while "reminding" it of project context. | `tinymem run make build` |
 | `proxy` / `mcp` | **Server Modes** | To start the "brain" that connects tinyMem to your IDE or AI client. | `tinymem mcp` |
 | `doctor` | **Diagnostics** | To fix the system if it stops working or has configuration issues. | `tinymem doctor` |
-| `addContract` | **Agent Setup** | To automatically configure your AI agents to use tinyMem properly. | `tinymem addContract` |
+| `init` | **Project Bootstrap** | Creates `.tinyMem`, writes the config, and installs the correct agent contracts for your model size. | `tinymem init` |
+| `update` | **Refresh** | Re-runs migrations and downloads whichever agent contract matches your configuration. | `tinymem update` |
 
 ### Writing Memories
 Think of writing memories as "tagging" reality for the AI.
@@ -298,12 +299,13 @@ When tinyMem is running in MCP mode, your AI agent (like Claude or Gemini) gains
 ### AI Agent Directives
 **CRITICAL**: If you are building an AI agent, you MUST include the appropriate directive in its system prompt to ensure it uses tinyMem correctly.
 
-**Quick Setup:** Run `tinymem addContract` to automatically create these files in your project.
+**Quick Setup:** Run `tinymem init` once to bootstrap `.tinyMem`, create config, and install the correct agent contract for your model size. Use `tinymem update` later to rerun migrations and refresh the contract (it will download the small or large version that your configuration points to).
 
 *   **Claude**: [`docs/agents/CLAUDE.md`](docs/agents/CLAUDE.md)
 *   **Gemini**: [`docs/agents/GEMINI.md`](docs/agents/GEMINI.md)
 *   **Qwen**: [`docs/agents/QWEN.md`](docs/agents/QWEN.md)
-*   **Other**: [`docs/agents/AGENT_CONTRACT.md`](docs/agents/AGENT_CONTRACT.md)
+*   **Other (Large LLMs)**: [`docs/agents/AGENT_CONTRACT.md`](docs/agents/AGENT_CONTRACT.md)
+*   **Other (Tiny LLMs)**: [`docs/agents/AGENT_CONTRACT_SMALL.md`](docs/agents/AGENT_CONTRACT_SMALL.md)
 
 ---
 

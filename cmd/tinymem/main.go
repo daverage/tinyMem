@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"net"
@@ -13,7 +14,10 @@ import (
 
 	"github.com/daverage/tinymem/internal/analytics"
 	"github.com/daverage/tinymem/internal/app"
+	"github.com/daverage/tinymem/internal/config"
 	"github.com/daverage/tinymem/internal/cove"
+	"github.com/daverage/tinymem/internal/memory"
+	"github.com/daverage/tinymem/internal/storage"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
@@ -21,7 +25,6 @@ import (
 	"github.com/daverage/tinymem/internal/evidence"
 	"github.com/daverage/tinymem/internal/inject"
 	"github.com/daverage/tinymem/internal/logging"
-	"github.com/daverage/tinymem/internal/memory"
 	"github.com/daverage/tinymem/internal/recall"
 	"github.com/daverage/tinymem/internal/server/mcp"
 	"github.com/daverage/tinymem/internal/server/proxy"
@@ -44,7 +47,8 @@ func init() {
 	rootCmd.AddCommand(doctorCmd)
 	rootCmd.AddCommand(recentCmd)
 	rootCmd.AddCommand(queryCmd)
-	rootCmd.AddCommand(contractCmd)
+	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(updateCmd)
 	rootCmd.AddCommand(completionCmd)
 	rootCmd.AddCommand(dashboardCmd)
 	rootCmd.AddCommand(writeCmd)
@@ -591,16 +595,55 @@ func runWriteCmd(a *app.App, cmd *cobra.Command, args []string) {
 	}
 }
 
-var contractCmd = &cobra.Command{
-	Use:   "addContract",
-	Short: "Add the MANDATORY TINYMEM CONTROL PROTOCOL to agent markdown files",
+var initCmd = &cobra.Command{
+	Use:   "init",
+	Short: "Initialize tinyMem state (config, database, contract files)",
 }
 
-func runContractCmd(a *app.App, cmd *cobra.Command, args []string) {
-	if err := memory.AddContract(); err != nil {
-		a.Core.Logger.Error("Failed to add contract", zap.Error(err))
-		fmt.Printf("❌ Failed to add contract: %v\n", err)
+var updateCmd = &cobra.Command{
+	Use:   "update",
+	Short: "Update database schema and refresh agent contracts",
+}
+
+func runInitCmd(a *app.App, cmd *cobra.Command, args []string) {
+	projectRoot := a.Project.Path
+	fmt.Printf("Initializing tinyMem in %s\n", projectRoot)
+
+	defaultContract := memory.ParseContractType(a.Core.Config.AgentContract)
+	contractType := selectContractType(defaultContract)
+
+	if err := config.SaveAgentContractChoice(projectRoot, string(contractType)); err != nil {
+		a.Core.Logger.Error("Failed to persist agent contract choice", zap.Error(err))
+		fmt.Printf("❌ Unable to save agent contract choice: %v\n", err)
+		os.Exit(1)
 	}
+	a.Core.Config.AgentContract = string(contractType)
+
+	if err := memory.EnsureProjectContracts(projectRoot, contractType); err != nil {
+		a.Core.Logger.Error("Failed to initialize agent contracts", zap.Error(err))
+		fmt.Printf("❌ Contract initialization failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("tinyMem initialization complete.")
+}
+
+func runUpdateCmd(a *app.App, cmd *cobra.Command, args []string) {
+	fmt.Println("Running database migrations and refreshing contracts...")
+	if err := runMigrations(a.Core.Config); err != nil {
+		a.Core.Logger.Error("Failed to run migrations", zap.Error(err))
+		fmt.Printf("❌ Migration failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	contractType := memory.ParseContractType(a.Core.Config.AgentContract)
+	if err := memory.EnsureProjectContracts(a.Project.Path, contractType); err != nil {
+		a.Core.Logger.Error("Failed to refresh contracts", zap.Error(err))
+		fmt.Printf("❌ Contract refresh failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Update complete.")
 }
 
 var dashboardCmd = &cobra.Command{
@@ -659,6 +702,37 @@ func newAppRunner(a *app.App, runFunc func(*app.App, *cobra.Command, []string)) 
 	}
 }
 
+func runMigrations(cfg *config.Config) error {
+	db, err := storage.NewDB(cfg)
+	if err != nil {
+		return err
+	}
+	return db.Close()
+}
+
+func selectContractType(defaultType memory.ContractType) memory.ContractType {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Println("Which kind of LLM agent are you configuring?")
+	fmt.Println("  small - Claude CLI, Ollama, Qwen3 8B (tiny, instruction-tuned models)")
+	fmt.Println("  large - Claude 3, GPT-4.1 Turbo, Claude 3 Opus (default for bigger agents)")
+	fmt.Printf("Choose contract (small/large) [%s]: ", defaultType)
+
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		fmt.Printf("\nInput error, defaulting to %s\n", defaultType)
+		return defaultType
+	}
+
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return defaultType
+	}
+
+	selection := memory.ParseContractType(input)
+	fmt.Printf("Selected %s agent contract\n", selection)
+	return selection
+}
+
 func main() {
 	appInstance, err := app.NewApp()
 	if err != nil {
@@ -681,7 +755,8 @@ func main() {
 	doctorCmd.Run = newAppRunner(appInstance, runDoctorCmd)
 	recentCmd.Run = newAppRunner(appInstance, runRecentCmd)
 	queryCmd.Run = newAppRunner(appInstance, runQueryCmd)
-	contractCmd.Run = newAppRunner(appInstance, runContractCmd)
+	initCmd.Run = newAppRunner(appInstance, runInitCmd)
+	updateCmd.Run = newAppRunner(appInstance, runUpdateCmd)
 	dashboardCmd.Run = newAppRunner(appInstance, runDashboardCmd)
 	writeCmd.Run = newAppRunner(appInstance, runWriteCmd)
 

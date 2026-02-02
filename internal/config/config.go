@@ -12,17 +12,17 @@ import (
 )
 
 const (
-	DefaultProxyPort               = 8080
-	DefaultExtractionBufferBytes   = 16384 // 16KB default
-	DefaultLLMBaseURL              = "http://localhost:11434/v1"
-	DefaultCoVeConfidenceThreshold = 0.6
-	DefaultCoVeMaxCandidates       = 20
-	DefaultCoVeTimeoutSeconds      = 30
-	DefaultCoVeModel               = "" // Empty = use default LLM
-	DefaultDBAutoMaintenance       = true
+	DefaultProxyPort                  = 8080
+	DefaultExtractionBufferBytes      = 16384 // 16KB default
+	DefaultLLMBaseURL                 = "http://localhost:11434/v1"
+	DefaultCoVeConfidenceThreshold    = 0.6
+	DefaultCoVeMaxCandidates          = 20
+	DefaultCoVeTimeoutSeconds         = 30
+	DefaultCoVeModel                  = "" // Empty = use default LLM
+	DefaultDBAutoMaintenance          = true
 	DefaultDBMaintenanceIntervalHours = 24
-	DefaultDBRetentionMaxAgeDays   = 0 // 0 = unlimited
-	DefaultDBRetentionMaxCount     = 0 // 0 = unlimited
+	DefaultDBRetentionMaxAgeDays      = 0 // 0 = unlimited
+	DefaultDBRetentionMaxCount        = 0 // 0 = unlimited
 )
 
 // Config holds the application configuration
@@ -56,11 +56,13 @@ type Config struct {
 	CoVeModel               string
 	CoVeRecallFilterEnabled bool
 	// Database maintenance configuration
-	DBAutoMaintenance       bool
+	DBAutoMaintenance          bool
 	DBMaintenanceIntervalHours int
-	DBRetentionMaxAgeDays   int
-	DBRetentionMaxCount     int
-	DBRetentionExcludeTypes []string
+	DBRetentionMaxAgeDays      int
+	DBRetentionMaxCount        int
+	DBRetentionExcludeTypes    []string
+	// Agent contract selection (`large` or `small`)
+	AgentContract string
 }
 
 type fileConfig struct {
@@ -105,14 +107,17 @@ type fileConfig struct {
 		RecallFilterEnabled bool    `toml:"recall_filter_enabled"`
 	} `toml:"cove"`
 	Database struct {
-		AutoMaintenance       bool     `toml:"auto_maintenance"`
-		MaintenanceIntervalHours int   `toml:"maintenance_interval_hours"`
-		Retention struct {
+		AutoMaintenance          bool `toml:"auto_maintenance"`
+		MaintenanceIntervalHours int  `toml:"maintenance_interval_hours"`
+		Retention                struct {
 			MaxAgeDays   int      `toml:"max_age_days"`
 			MaxCount     int      `toml:"max_count"`
 			ExcludeTypes []string `toml:"exclude_types"`
 		} `toml:"retention"`
 	} `toml:"database"`
+	Agent struct {
+		Contract string `toml:"contract"`
+	} `toml:"agent"`
 }
 
 // LoadConfig loads configuration from file, environment variables, and defaults
@@ -158,11 +163,12 @@ func LoadConfig() (*Config, error) {
 		CoVeModel:               DefaultCoVeModel,
 		CoVeRecallFilterEnabled: true,
 		// Database defaults
-		DBAutoMaintenance:       DefaultDBAutoMaintenance,
+		DBAutoMaintenance:          DefaultDBAutoMaintenance,
 		DBMaintenanceIntervalHours: DefaultDBMaintenanceIntervalHours,
-		DBRetentionMaxAgeDays:   DefaultDBRetentionMaxAgeDays,
-		DBRetentionMaxCount:     DefaultDBRetentionMaxCount,
-		DBRetentionExcludeTypes: []string{"fact"},
+		DBRetentionMaxAgeDays:      DefaultDBRetentionMaxAgeDays,
+		DBRetentionMaxCount:        DefaultDBRetentionMaxCount,
+		DBRetentionExcludeTypes:    []string{"fact"},
+		AgentContract:              "large",
 	}
 
 	// Try to load config from file if it exists
@@ -253,6 +259,13 @@ func LoadConfig() (*Config, error) {
 			}
 			if len(parsed.Database.Retention.ExcludeTypes) > 0 {
 				cfg.DBRetentionExcludeTypes = parsed.Database.Retention.ExcludeTypes
+			}
+		}
+		if parsed.Agent.Contract != "" {
+			cfg.AgentContract = strings.ToLower(parsed.Agent.Contract)
+		} else if agentSection, ok := raw["agent"].(map[string]any); ok {
+			if contractRaw, ok := agentSection["contract"].(string); ok && contractRaw != "" {
+				cfg.AgentContract = strings.ToLower(contractRaw)
 			}
 		}
 	}
@@ -399,6 +412,10 @@ func LoadConfig() (*Config, error) {
 
 	cfg.LLMBaseURL = normalizeBaseURL(cfg.LLMBaseURL)
 
+	if cfg.AgentContract == "" {
+		cfg.AgentContract = "large"
+	}
+
 	return cfg, nil
 }
 
@@ -408,6 +425,62 @@ func normalizeBaseURL(baseURL string) string {
 		return baseURL
 	}
 	return strings.TrimRight(baseURL, "/")
+}
+
+// SaveAgentContractChoice records the selected agent contract type in config.toml.
+func SaveAgentContractChoice(projectRoot, contract string) error {
+	tinyMemDir := GetTinyMemDir(projectRoot)
+	configPath := filepath.Join(tinyMemDir, "config.toml")
+
+	if err := EnsureTinyMemDirs(tinyMemDir); err != nil {
+		return err
+	}
+
+	data := map[string]any{}
+	if _, err := os.Stat(configPath); err == nil {
+		content, err := os.ReadFile(configPath)
+		if err != nil {
+			return err
+		}
+		if err := toml.Unmarshal(content, &data); err != nil {
+			return fmt.Errorf("failed to parse existing config: %w", err)
+		}
+	}
+
+	agent := toStringAnyMap(data["agent"])
+	if agent == nil {
+		agent = make(map[string]any)
+	}
+	agent["contract"] = strings.ToLower(contract)
+	data["agent"] = agent
+
+	newContent, err := toml.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
+		return err
+	}
+
+	return os.WriteFile(configPath, newContent, 0644)
+}
+
+func toStringAnyMap(value any) map[string]any {
+	if value == nil {
+		return nil
+	}
+	if m, ok := value.(map[string]any); ok {
+		return m
+	}
+	if m, ok := value.(map[string]interface{}); ok {
+		result := make(map[string]any, len(m))
+		for k, v := range m {
+			result[k] = v
+		}
+		return result
+	}
+	return nil
 }
 
 // GenerateProjectID creates a consistent project ID from the project root path.

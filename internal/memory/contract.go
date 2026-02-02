@@ -10,62 +10,56 @@ import (
 	"strings"
 )
 
-// AddContract adds the MANDATORY TINYMEM CONTROL PROTOCOL to agent markdown and JSON settings files
-func AddContract() error {
-	fmt.Println("This function will add the MANDATORY TINYMEM CONTROL PROTOCOL to the following files:")
-	fmt.Println("- AGENTS.md")
-	fmt.Println("- QWEN.md / .qwen/settings.json")
-	fmt.Println("- GEMINI.md / .gemini/settings.json")
-	fmt.Println("- CLAUDE.md")
-	fmt.Println("- CODEX.md / .codex/settings.json")
-	fmt.Println()
-	fmt.Println("Source of truth: docs/agents/AGENT_CONTRACT.md")
-	fmt.Println()
-	fmt.Println("It will:")
-	fmt.Println("1. Replace the contract in existing files (with a warning).")
-	fmt.Println("2. Append the contract to existing markdown files that don't have it.")
-	fmt.Println("3. Create missing markdown files in docs/agents/.")
-	fmt.Println()
+const contractRemoteBase = "https://raw.githubusercontent.com/daverage/tinyMem/refs/heads/main/docs/agents"
 
-	var response string
-	fmt.Print("Are you happy to proceed? (yes/no): ")
-	fmt.Scanln(&response)
+// ContractType determines which agent contract file to apply.
+type ContractType string
 
-	if strings.ToLower(response) != "yes" && strings.ToLower(response) != "y" {
-		fmt.Println("Operation cancelled.")
-		return nil
+const (
+	ContractTypeLarge ContractType = "large"
+	ContractTypeSmall ContractType = "small"
+)
+
+func (c ContractType) fileName() string {
+	switch c {
+	case ContractTypeSmall:
+		return "AGENT_CONTRACT_SMALL.md"
+	default:
+		return "AGENT_CONTRACT.md"
+	}
+}
+
+func (c ContractType) docLink() string {
+	return filepath.ToSlash(filepath.Join("docs", "agents", c.fileName()))
+}
+
+// EnsureProjectContracts writes the appropriate agent contract into the project files.
+func EnsureProjectContracts(projectRoot string, contractType ContractType) error {
+	if contractType == "" {
+		contractType = ContractTypeLarge
 	}
 
-	files := []string{"AGENTS.md", "QWEN.md", "GEMINI.md", "CLAUDE.md", "CODEX.md"}
-	jsonTargets := []string{
-		filepath.Join(".qwen", "settings.json"),
-		filepath.Join(".gemini", "settings.json"),
-		filepath.Join(".codex", "settings.json"),
-	}
-
-	contractContent, err := getContractContent()
+	fmt.Printf("Applying %s agent contract to project files...\n", contractType)
+	contractContent, err := getContractContent(projectRoot, contractType)
 	if err != nil {
 		return fmt.Errorf("error fetching contract content: %w", err)
 	}
 
-	// Ensure docs/agents directory exists
-	agentsDir := filepath.Join("docs", "agents")
+	agentsDir := filepath.Join(projectRoot, "docs", "agents")
 	if err := os.MkdirAll(agentsDir, 0755); err != nil {
 		return fmt.Errorf("error creating directory %s: %w", agentsDir, err)
 	}
 
-	// 1. Process Markdown files
-	locations := []string{".", agentsDir}
+	files := []string{"AGENTS.md", "QWEN.md", "GEMINI.md", "CLAUDE.md", "CODEX.md"}
+	locations := []string{projectRoot, agentsDir}
 	for _, dir := range locations {
 		for _, filename := range files {
 			targetPath := filepath.Join(dir, filename)
 			if _, err := os.Stat(targetPath); err == nil {
-				// File exists, update/append contract
 				if err := updateContractInFile(targetPath, contractContent); err != nil {
 					return fmt.Errorf("error updating %s: %w", targetPath, err)
 				}
 			} else if dir == agentsDir {
-				// File doesn't exist but it's in the primary agents directory, create it
 				if err := createFileWithContract(targetPath, contractContent); err != nil {
 					return fmt.Errorf("error creating %s: %w", targetPath, err)
 				}
@@ -73,7 +67,11 @@ func AddContract() error {
 		}
 	}
 
-	// 2. Process JSON settings files
+	jsonTargets := []string{
+		filepath.Join(projectRoot, ".qwen", "settings.json"),
+		filepath.Join(projectRoot, ".gemini", "settings.json"),
+		filepath.Join(projectRoot, ".codex", "settings.json"),
+	}
 	for _, targetPath := range jsonTargets {
 		if _, err := os.Stat(targetPath); err == nil {
 			if err := updateContractInJson(targetPath, contractContent); err != nil {
@@ -82,12 +80,11 @@ func AddContract() error {
 		}
 	}
 
-	// Update README.md
-	if err := updateReadme(); err != nil {
+	if err := updateReadme(projectRoot, contractType); err != nil {
 		return fmt.Errorf("error updating README.md: %w", err)
 	}
 
-	fmt.Println("Operation completed successfully!")
+	fmt.Println("Agent contracts synchronized.")
 	return nil
 }
 
@@ -99,7 +96,6 @@ func updateContractInJson(filename, contractContent string) error {
 
 	var data map[string]interface{}
 	if err := json.Unmarshal(content, &data); err != nil {
-		// If it's not valid JSON or unexpected format, try string replacement if the marker is there
 		fileContent := string(content)
 		if strings.Contains(fileContent, "# TINYMEM CONTROL PROTOCOL") {
 			return updateContractInFile(filename, contractContent)
@@ -107,10 +103,7 @@ func updateContractInJson(filename, contractContent string) error {
 		return fmt.Errorf("file is not a valid JSON object")
 	}
 
-	fmt.Printf("Updating existing contract in JSON file %s...\n", filename)
-
-	// We'll store the contract in a dedicated "tinymem_protocol" field
-	// This ensures it doesn't break other tools but is visible to the agent
+	fmt.Printf("Updating JSON contract slot in %s...\n", filename)
 	data["tinymem_protocol"] = strings.TrimSpace(contractContent)
 
 	newContent, err := json.MarshalIndent(data, "", "  ")
@@ -121,19 +114,17 @@ func updateContractInJson(filename, contractContent string) error {
 	return os.WriteFile(filename, newContent, 0644)
 }
 
-func getContractContent() (string, error) {
-	// 1. Try local file first (Primary source of truth)
-	localPath := filepath.Join("docs", "agents", "AGENT_CONTRACT.md")
+func getContractContent(projectRoot string, contractType ContractType) (string, error) {
+	localPath := filepath.Join(projectRoot, "docs", "agents", contractType.fileName())
 	if data, err := os.ReadFile(localPath); err == nil {
 		fmt.Printf("Using local contract from %s\n", localPath)
 		return string(data), nil
 	}
 
-	// 2. Fall back to GitHub (Remote fallback)
-	url := "https://raw.githubusercontent.com/daverage/tinyMem/refs/heads/main/docs/agents/AGENT_CONTRACT.md"
-	fmt.Printf("Local contract not found at %s, fetching from %s...\n", localPath, url)
+	remoteURL := fmt.Sprintf("%s/%s", contractRemoteBase, contractType.fileName())
+	fmt.Printf("Local contract not found at %s, fetching from %s...\n", localPath, remoteURL)
 
-	resp, err := http.Get(url)
+	resp, err := http.Get(remoteURL)
 	if err != nil {
 		return "", err
 	}
@@ -158,100 +149,87 @@ func updateContractInFile(filename, contractContent string) error {
 	}
 
 	fileContent := string(content)
-
-	// New markers for bounded replacement (preferred)
 	startMarker := "**Start of tinyMem Protocol**"
 	endMarker := "**End of tinyMem Protocol**"
 
 	startIdx := strings.Index(fileContent, startMarker)
 	endIdx := strings.Index(fileContent, endMarker)
 
-	// Try bounded replacement first (if both markers exist)
 	if startIdx != -1 && endIdx != -1 && endIdx > startIdx {
-		fmt.Printf("Replacing contract between markers in %s...\n", filename)
-
-		// Keep everything before start marker
+		fmt.Printf("Replacing contract block in %s...\n", filename)
 		before := fileContent[:startIdx]
-		// Keep everything after end marker (including the marker line)
 		after := fileContent[endIdx+len(endMarker):]
-
-		// Reconstruct with new contract
 		newContent := before + strings.TrimSpace(contractContent) + after
 		return os.WriteFile(filename, []byte(newContent), 0644)
 	}
 
-	// Fall back to old marker behavior
 	oldMarker := "# TINYMEM CONTROL PROTOCOL"
 	idx := strings.Index(fileContent, oldMarker)
 
 	if idx != -1 {
-		fmt.Printf("WARNING: Existing contract found in %s (old marker). Replacing with latest version.\n", filename)
-		// Remove old contract (from marker to end)
+		fmt.Printf("WARNING: Replacing legacy contract block in %s...\n", filename)
 		fileContent = fileContent[:idx]
 	} else {
 		fmt.Printf("Appending contract to %s...\n", filename)
-		// Ensure there's a newline if we're appending to a non-empty file
 		if len(fileContent) > 0 && !strings.HasSuffix(fileContent, "\n") {
 			fileContent += "\n"
 		}
 	}
 
 	newContent := strings.TrimSpace(fileContent) + "\n\n" + strings.TrimSpace(contractContent) + "\n"
-	err = os.WriteFile(filename, []byte(newContent), 0644)
-	if err != nil {
+	if err := os.WriteFile(filename, []byte(newContent), 0644); err != nil {
 		return err
 	}
-
 	return nil
 }
 
 func createFileWithContract(filename, contractContent string) error {
-	// For new files, we just write the contract content directly
-	err := os.WriteFile(filename, []byte(strings.TrimSpace(contractContent)+"\n"), 0644)
-	if err != nil {
+	if err := os.WriteFile(filename, []byte(strings.TrimSpace(contractContent)+"\n"), 0644); err != nil {
 		return err
 	}
-
 	fmt.Printf("Created %s with contract\n", filename)
 	return nil
 }
 
-func updateReadme() error {
-	content, err := os.ReadFile("README.md")
+func updateReadme(projectRoot string, contractType ContractType) error {
+	readmePath := filepath.Join(projectRoot, "README.md")
+	content, err := os.ReadFile(readmePath)
 	if err != nil {
 		return err
 	}
 
 	readmeContent := string(content)
-	if strings.Contains(readmeContent, "docs/agents/AGENT_CONTRACT.md") {
+	link := contractType.docLink()
+	if strings.Contains(readmeContent, link) {
 		fmt.Println("Contract reference already exists in README.md, skipping.")
 		return nil
 	}
 
-	// Find a good place to insert the MCP setup instructions
 	insertionPoint := strings.Index(readmeContent, "## 🔌 Integration")
+	addition := fmt.Sprintf("\n\n### Agent Setup for MCP Usage\n\nWhen using tinyMem as an MCP server, ensure your agent references the MANDATORY TINYMEM CONTROL PROTOCOL.\n\nInclude the contract content from [%s](%s) in your agent's system prompt to guarantee alignment with tinyMem.\n\n", link, link)
+
 	if insertionPoint == -1 {
-		// If we can't find the Integration section, append to end
-		readmeContent += "\n\n## Setting Up Agents for MCP Usage\n\n"
-		readmeContent += "When using tinyMem as an MCP server for AI agents, ensure that your agents follow the MANDATORY TINYMEM CONTROL PROTOCOL.\n\n"
-		readmeContent += "Include the contract content from [docs/agents/AGENT_CONTRACT.md](docs/agents/AGENT_CONTRACT.md) in your agent's system prompt to ensure proper interaction with tinyMem.\n\n"
+		readmeContent += addition
 	} else {
-		// Insert after the Integration heading
 		before := readmeContent[:insertionPoint+len("## 🔌 Integration")]
 		after := readmeContent[insertionPoint+len("## 🔌 Integration"):]
-
-		addition := "\n\n### Agent Setup for MCP Usage\n\n"
-		addition += "When using tinyMem as an MCP server for AI agents, ensure that your agents follow the MANDATORY TINYMEM CONTROL PROTOCOL.\n\n"
-		addition += "Include the contract content from [docs/agents/AGENT_CONTRACT.md](docs/agents/AGENT_CONTRACT.md) in your agent's system prompt to ensure proper interaction with tinyMem.\n\n"
-
 		readmeContent = before + addition + after
 	}
 
-	err = os.WriteFile("README.md", []byte(readmeContent), 0644)
-	if err != nil {
+	if err := os.WriteFile(readmePath, []byte(readmeContent), 0644); err != nil {
 		return err
 	}
 
 	fmt.Println("README.md updated with MCP setup instructions")
 	return nil
+}
+
+// ParseContractType normalizes a string into a ContractType.
+func ParseContractType(value string) ContractType {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "small", "tiny", "small-llm":
+		return ContractTypeSmall
+	default:
+		return ContractTypeLarge
+	}
 }
