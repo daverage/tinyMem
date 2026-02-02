@@ -41,13 +41,16 @@ Task state must never be inferred.
 
 The following require no mode declaration:
 * Query memory (`memory_query`, `memory_recent`)
-* Read health/diagnostics (`memory_health`, `memory_doctor`, `memory_stats`)
+* Check task authority (`memory_check_task_authority`)
+* Read health/diagnostics (`memory_health`, `memory_doctor`, `memory_stats`, `memory_run_metadata`)
 * Read files
 * Analyze code
 * Provide guidance
 * Ask questions
 
 Memory recall is **strongly recommended** for all repository-related conversations, and **mandatory** before any durable mutation.
+
+**NOTE:** In GUARDED and STRICT modes, memory recall is **enforced** — `memory_write` will fail if `memory_query` or `memory_recent` was not called first. In PASSIVE mode, violations are logged but not blocked.
 
 ---
 
@@ -63,9 +66,11 @@ Before performing any durable mutation, you MUST:
    - The system will enforce the appropriate clearance for the requested mutation
 
 3. **Check task authority** by reading `tinyTasks.md` (or confirming it doesn't exist)
+   - **Recommended:** Use `memory_check_task_authority` to get explicit authorization status
+   - Alternative: Read `tinyTasks.md` directly via file system tools
    - If unchecked tasks exist, resume from the first unchecked subtask
    - If tasks exist but none are unchecked, refuse execution and request user input
-   - If file doesn't exist, you may create it for multi-step work
+   - If file doesn't exist, you may create it for multi-step work (or the system may auto-create it)
 
 ---
 
@@ -181,7 +186,41 @@ When performing multi-step work, validate:
 
 ---
 
-## 9. Summary
+## 9. Enforcement & Tracking
+
+### MCP Boundary Enforcement
+
+The following contract requirements are **enforced at the MCP boundary** (not just recommended):
+
+**Recall Before Mutation (GUARDED/STRICT):**
+- `memory_write` will **fail** if `memory_query` or `memory_recent` was not called first
+- Error returned: "Memory recall required: Call memory_query or memory_recent before memory_write"
+- In PASSIVE mode: Logged as violation but not blocked
+
+**Violation Tracking:**
+- All contract violations are tracked in `memory_run_metadata`
+- Fields: `violations_count`, `blocked_actions_count`, `enforcement_events[]`
+- Violations include: recall not performed, unauthorized task execution attempts
+- Use this data to audit agent compliance and identify enforcement gaps
+
+### Helper Tools
+
+**memory_check_task_authority()**
+- Returns task file status: `{exists, unchecked_tasks, authorization, task_count, next_task}`
+- Authorization values:
+  - `"create_allowed"` - file absent, agent may create
+  - `"authorized"` - unchecked tasks present, agent may proceed
+  - `"unauthorized"` - no unchecked tasks, agent must request user input
+- Use this instead of manually parsing `tinyTasks.md` for clearer contract compliance
+
+**memory_run_metadata()**
+- Returns enforcement metadata for the current session
+- Includes: execution mode, enforcement events, violation counts, success counts
+- Use to verify your own contract compliance during execution
+
+---
+
+## 10. Summary
 
 **Simple rules:**
 
