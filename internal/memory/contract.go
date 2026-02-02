@@ -159,12 +159,33 @@ func updateContractInFile(filename, contractContent string) error {
 
 	fileContent := string(content)
 
-	// Marker for the start of the contract
-	marker := "# TINYMEM CONTROL PROTOCOL"
-	idx := strings.Index(fileContent, marker)
+	// New markers for bounded replacement (preferred)
+	startMarker := "**Start of tinyMem Protocol**"
+	endMarker := "**End of tinyMem Protocol**"
+
+	startIdx := strings.Index(fileContent, startMarker)
+	endIdx := strings.Index(fileContent, endMarker)
+
+	// Try bounded replacement first (if both markers exist)
+	if startIdx != -1 && endIdx != -1 && endIdx > startIdx {
+		fmt.Printf("Replacing contract between markers in %s...\n", filename)
+
+		// Keep everything before start marker
+		before := fileContent[:startIdx]
+		// Keep everything after end marker (including the marker line)
+		after := fileContent[endIdx+len(endMarker):]
+
+		// Reconstruct with new contract
+		newContent := before + strings.TrimSpace(contractContent) + after
+		return os.WriteFile(filename, []byte(newContent), 0644)
+	}
+
+	// Fall back to old marker behavior
+	oldMarker := "# TINYMEM CONTROL PROTOCOL"
+	idx := strings.Index(fileContent, oldMarker)
 
 	if idx != -1 {
-		fmt.Printf("WARNING: Existing contract found in %s. Replacing with latest version.\n", filename)
+		fmt.Printf("WARNING: Existing contract found in %s (old marker). Replacing with latest version.\n", filename)
 		// Remove old contract (from marker to end)
 		fileContent = fileContent[:idx]
 	} else {

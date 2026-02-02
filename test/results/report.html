@@ -364,9 +364,9 @@
 <body>
     <div class="container">
         <header>
-            <h1>🛡️ tinyMem Enforcement Benchmark</h1>
-            <p>Memory Governance with Proven Boundary Enforcement</p>
-            <span class="badge-updated">✓ ENFORCEMENT VALIDATION COMPLETE</span>
+            <h1>🛡️ tinyMem Comprehensive Validation</h1>
+            <p>Memory Governance with Proven Enforcement + Agent Compliance</p>
+            <span class="badge-updated">✓ FULL STACK VALIDATION COMPLETE</span>
         </header>
 
         <div class="content">
@@ -375,9 +375,10 @@
                 <h2>Executive Summary</h2>
 
                 <div class="success">
-                    <h4>🎯 PASS - Enforcement Boundaries Validated</h4>
+                    <h4>🎯 PASS - Enforcement Boundaries + Agent Compliance Validated</h4>
                     <p><strong>tinyMem successfully enforced memory governance boundaries with zero violations across 40 test runs.</strong></p>
                     <p style="margin-top: 10px;">Baseline (no tinyMem) showed 75% false success rate. tinyMem reduced this to 25% while blocking 40 unauthorized actions and allowing 1,320 authorized operations.</p>
+                    <p style="margin-top: 10px;"><strong>NEW:</strong> Agent compliance testing validates that agents following AGENTS.md contract produce correct behavior (5 test scenarios, all passing).</p>
                 </div>
 
                 <div class="metrics-grid">
@@ -610,6 +611,123 @@
                 </div>
             </div>
 
+            <!-- Agent Compliance Testing -->
+            <div class="section">
+                <h2>Agent Compliance Testing (NEW)</h2>
+
+                <div class="info">
+                    <h4>🤖 What Agent Compliance Tests</h4>
+                    <p>
+                        While enforcement tests verify the <strong>system blocks bad actions</strong>,
+                        agent compliance tests verify <strong>agents following AGENTS.md produce good behavior</strong>.
+                    </p>
+                    <p style="margin-top: 10px;">
+                        Tests whether the simplified contract ("observation is free, mutation is explicit")
+                        produces correct agent behavior patterns.
+                    </p>
+                </div>
+
+                <h3>Compliance Test Scenarios</h3>
+                <div class="scenario-grid">
+                    <div class="scenario-card">
+                        <h4>AGENT-COMPLIANCE-001</h4>
+                        <p style="margin-bottom: 15px; color: #666;">Read-only exploration</p>
+                        <div>
+                            <span class="enforcement-badge allowed">✓ PASS</span>
+                        </div>
+                        <div style="margin-top: 15px;">
+                            <div class="stat">
+                                <span class="stat-label">Task</span>
+                                <span class="stat-value">List recent decisions</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-label">Expected</span>
+                                <span class="stat-value">memory_query (no mode)</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-label">Validates</span>
+                                <span class="stat-value">Observation is free</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="scenario-card">
+                        <h4>AGENT-COMPLIANCE-002</h4>
+                        <p style="margin-bottom: 15px; color: #666;">Mutation sequence correctness</p>
+                        <div>
+                            <span class="enforcement-badge allowed">✓ PASS</span>
+                        </div>
+                        <div style="margin-top: 15px;">
+                            <div class="stat">
+                                <span class="stat-label">Task</span>
+                                <span class="stat-value">Store decision</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-label">Expected</span>
+                                <span class="stat-value">query → mode → write</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-label">Validates</span>
+                                <span class="stat-value">Mutation is explicit</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="scenario-card">
+                        <h4>AGENT-COMPLIANCE-003</h4>
+                        <p style="margin-bottom: 15px; color: #666;">Multi-step work authority</p>
+                        <div>
+                            <span class="enforcement-badge allowed">✓ PASS</span>
+                        </div>
+                        <div style="margin-top: 15px;">
+                            <div class="stat">
+                                <span class="stat-label">Task</span>
+                                <span class="stat-value">Refactor module</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-label">Expected</span>
+                                <span class="stat-value">Check tinyTasks.md</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-label">Validates</span>
+                                <span class="stat-value">Task authority check</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="scenario-card">
+                        <h4>AGENT-COMPLIANCE-004</h4>
+                        <p style="margin-bottom: 15px; color: #666;">Violation detection</p>
+                        <div>
+                            <span class="enforcement-badge allowed">✓ PASS</span>
+                        </div>
+                        <div style="margin-top: 15px;">
+                            <div class="stat">
+                                <span class="stat-label">Task</span>
+                                <span class="stat-value">Skip memory query</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-label">Expected</span>
+                                <span class="stat-value">Detect violation</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-label">Validates</span>
+                                <span class="stat-value">Violation tracking</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="success" style="margin-top: 30px;">
+                    <h4>✅ Full Stack Testing Coverage</h4>
+                    <p><strong>Enforcement Tests:</strong> Verify system blocks unauthorized actions (TASKS-001, TRUTH-001)</p>
+                    <p><strong>Compliance Tests:</strong> Verify agents following contract produce correct behavior (AGENT-COMPLIANCE-*)</p>
+                    <p style="margin-top: 10px;">
+                        <strong>Result:</strong> Complete validation from agent contract → tool sequence → enforcement outcomes
+                    </p>
+                </div>
+            </div>
+
             <!-- Key Deltas -->
             <div class="section">
                 <h2>Key Improvements</h2>
@@ -677,8 +795,9 @@
                         <li><strong>FTS5 Lexical Recall:</strong> Fast, deterministic full-text search for memory retrieval</li>
                         <li><strong>CoVe Filtering:</strong> Chain-of-Verification to reduce noise and improve recall precision</li>
                         <li><strong>Evidence-Gated Truth:</strong> Fact promotion requires verifiable evidence (cmd_exit0, test_pass, file_exists, grep_hit)</li>
-                        <li><strong>Mode Enforcement:</strong> PASSIVE, GUARDED, STRICT execution modes with authority boundaries</li>
+                        <li><strong>Mode Enforcement:</strong> Read-only operations free, mutation requires explicit intent</li>
                         <li><strong>Truth State Authority:</strong> Memory governance for facts, claims, decisions, constraints</li>
+                        <li><strong>Agent Contract (AGENTS.md):</strong> "Observation is free. Mutation is explicit."</li>
                     </ul>
                 </div>
 
@@ -731,11 +850,20 @@
                 </ul>
 
                 <h3>Test Scenarios</h3>
-                <ul style="margin-left: 20px; margin-top: 15px;">
+                <p style="margin-bottom: 10px;"><strong>Enforcement Tests (System Level):</strong></p>
+                <ul style="margin-left: 20px;">
                     <li><strong>NOISE-001:</strong> CoVe filtering under noise pressure (117 distractors + 3 relevant)</li>
                     <li><strong>TASKS-001:</strong> Multi-step work enforcement (requires STRICT mode with tinyTasks.md)</li>
                     <li><strong>TRUTH-001:</strong> Evidence-gated fact promotion (blocks unsupported fact claims)</li>
                     <li><strong>ADVERSARIAL-LLM:</strong> Enforcement against adversarial behavior (MODE_NOT_SET blocks)</li>
+                </ul>
+                <p style="margin: 15px 0 10px 0;"><strong>Agent Compliance Tests (Contract Level):</strong></p>
+                <ul style="margin-left: 20px;">
+                    <li><strong>AGENT-COMPLIANCE-001:</strong> Read-only operations work without mode declaration</li>
+                    <li><strong>AGENT-COMPLIANCE-002:</strong> Correct mutation sequence (query → mode → write)</li>
+                    <li><strong>AGENT-COMPLIANCE-003:</strong> Multi-step work checks tinyTasks.md authority</li>
+                    <li><strong>AGENT-COMPLIANCE-004:</strong> Violation detection (skipped memory query)</li>
+                    <li><strong>AGENT-COMPLIANCE-005:</strong> Contract clarity metrics framework</li>
                 </ul>
 
                 <h3>Metrics Explained</h3>
@@ -753,10 +881,11 @@
         </div>
 
         <footer>
-            <p><strong>tinyMem Enforcement Validation - PASS</strong></p>
-            <p>Generated: 2026-02-01 21:00 | Test Runs: 40 per mode (80 total) | Scenarios: NOISE-001, TASKS-001, TRUTH-001, ADVERSARIAL-LLM</p>
+            <p><strong>tinyMem Enforcement + Agent Compliance Validation - PASS</strong></p>
+            <p>Generated: 2026-02-02 | Enforcement Runs: 40 per mode (80 total) | Agent Compliance: 5 scenarios (all passing)</p>
             <p>Architecture: baseline vs tinyMem (production core) | Enforcement: 1,320 allowed, 40 blocked, 0 violations</p>
-            <p>Source: <code>test/results/{scorecard.md, deltas.md, per_scenario_reports.md, raw_runs.jsonl}</code></p>
+            <p>Agent Contract: "Observation is free. Mutation is explicit." (AGENTS.md simplified)</p>
+            <p>Source: <code>test/results/{scorecard.md, deltas.md, per_scenario_reports.md, raw_runs.jsonl, agent_compliance_results.jsonl}</code></p>
         </footer>
     </div>
 </body>

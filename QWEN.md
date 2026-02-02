@@ -1,3 +1,4 @@
+**Start of tinyMem Protocol**
 # TINYMEM AGENT CONTRACT
 
 ## Memory Governance & Task Authority Specification
@@ -190,4 +191,4 @@ When performing multi-step work, validate:
 4. **Write memories** — capture decisions, constraints, facts as you learn
 5. **Fail closed** — if unsure, ask; if blocked, stop
 
-**End of Protocol**
+**End of tinyMem Protocol**
