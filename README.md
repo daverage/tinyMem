@@ -24,7 +24,6 @@ tinyMem gives small and medium language models (7B–13B) reliable long-term mem
 
 - [What tinyMem Is (and Isn't)](#-what-tinymem-is-and-isnt)
 - [Purpose](#-purpose)
-- [Benchmarks](#-benchmarks)
 - [Key Features](#-key-features)
 - [Quick Start](#-quick-start)
 - [Installation](#-installation)
@@ -41,6 +40,7 @@ tinyMem gives small and medium language models (7B–13B) reliable long-term mem
 - [Token Economics](#-token-efficiency--economics)
 - [Configuration](#-configuration)
 - [Development](#-development)
+- [Benchmarks](#-benchmarks)
 - [Contributing](#-contributing)
 - [License](#-license)
 
@@ -95,124 +95,6 @@ As the project grew, we realized that memory alone wasn't enough. Reliability re
 *   **No more repeating yourself**: "Remember, we use Go for the backend."
 *   **No more AI hallucinations**: If the AI isn't sure, it checks its memory.
 *   **Total Privacy**: Your project data never leaves your machine to "train" a model.
-
----
-
-## 🧪 Evidence: What tinyMem Actually Changes
-
-tinyMem is designed to be provable, not aspirational. Its core claims are backed by automated, adversarial benchmarks that measure enforcement, memory stability, and token usage under identical conditions.
-
-### Benchmark Setup (Summary)
-
-* **Runs**: 40 identical scenarios per mode
-* **Models**: Local LLMs (7B–13B class)
-* **Temperature**: 0 (deterministic)
-* **Scenarios**:
-    * Forbidden task mutation
-    * Fact promotion without evidence
-    * Noisy / ambiguous memory extraction
-* **Comparison**:
-    * Baseline (no memory governance)
-    * tinyMem (full enforcement enabled)
-
-All measurements are derived from enforced outcomes, not model claims.
-
-### 🔒 Enforcement & Reliability
-
-tinyMem treats blocking forbidden actions as success.
-
-Across 40 runs:
-* **Violations**: 0
-* **Forbidden actions blocked**: 100%
-* **False success claims detected**: reduced by ~66%
-
-This means:
-* The model may attempt unsafe or incorrect actions
-* tinyMem consistently detects and prevents them
-* No forbidden task edits or fact promotions slipped through
-
-**Enforcement failures are the only failure condition. None were observed.**
-
-This directly addresses:
-* hallucinated facts
-* silent task corruption
-* "looks right but is wrong" behavior
-
-### 🧠 Memory Drift Prevention
-
-Without governance, models routinely:
-* re-assert previously rejected decisions
-* contradict earlier facts
-* invent new "truths" under pressure
-
-tinyMem prevents this structurally by:
-* Requiring evidence for fact promotion
-* Persisting verified facts across runs
-* Refusing contradictory durable writes
-
-In benchmarks:
-* Baseline runs produced frequent unverified success claims
-* tinyMem downgraded or blocked these automatically
-* Verified facts remained stable across all runs
-
-This is not prompt discipline. **It is enforced state.**
-
-### 📉 Token Usage & Context Efficiency
-
-tinyMem reduces token usage per completed task, even though it performs additional checks.
-
-Across identical workloads:
-* **Total tokens (baseline)**: ~32k
-* **Total tokens (tinyMem)**: ~18k
-* **Reduction**: ~44%
-
-Why this happens:
-* Targeted recall replaces "read everything"
-* CoVe filtering removes irrelevant context
-* Enforcement stops hallucination-driven retries
-* Context resets prevent runaway conversations
-
-The result is fewer tokens wasted on:
-* re-reading files
-* debugging imaginary bugs
-* correcting false assumptions
-
-### What This Evidence Does Not Claim
-
-tinyMem does not claim to:
-* make models smarter
-* increase raw success rates
-* eliminate hallucinations at generation time
-
-It does guarantee:
-* hallucinations cannot become durable truth
-* unsafe actions are blocked, not trusted
-* memory remains consistent across time
-
----
-
-## 🎯 Benchmarks
-
-tinyMem is benchmarked on enforcement, not persuasion.
-
-Tests measure whether forbidden actions are reliably blocked, whether hallucinated facts are prevented from becoming durable, and whether task and memory boundaries hold under repeated runs. Agent compliance is measured separately and never treated as authority.
-
-Full methodology and results:
-[BENCHMARK.md](BENCHMARK.md)
-
----
-
-## ✨ Key Features
-
-*   **Evidence-Based Truth**: Typed memories (`fact`, `claim`, `decision`, etc.). Only verified claims become facts.
-*   **Chain-of-Verification (CoVe)**: LLM-based quality filter to reduce hallucinations before storage and improve recall relevance (enabled by default). See [docs/COVE.md](docs/COVE.md) for details.
-*   **FTS5 Lexical Recall**: Fast, deterministic full-text search across memory summaries and details using SQLite's FTS5 extension.
-*   **Automatic Database Maintenance**: Self-healing database with automatic compaction (PRAGMA optimize + incremental vacuum) and optional retention policies to prevent unbounded growth.
-*   **Local & Private**: Runs as a single binary. Data lives in `.tinyMem/`.
-*   **Zero Configuration**: Works out of the box.
-*   **Dual Mode**: Works as an HTTP Proxy or Model Context Protocol (MCP) server.
-*   **Mode Enforcement**: PASSIVE, GUARDED, STRICT execution modes with authority boundaries.
-*   **Recall Tiers**: Prioritizes `Always` (facts) > `Contextual` (decisions) > `Opportunistic` (notes).
 
 ---
 
@@ -543,6 +425,123 @@ go test ./...
 ./build/build.sh
 ```
 See [Task Management](docs/TINY_TASKS.md) for how we track work.
+
+---
+## 🧪 Evidence: What tinyMem Actually Changes
+
+tinyMem is designed to be provable, not aspirational. Its core claims are backed by automated, adversarial benchmarks that measure enforcement, memory stability, and token usage under identical conditions.
+
+### Benchmark Setup (Summary)
+
+* **Runs**: 40 identical scenarios per mode
+* **Models**: Local LLMs (7B–13B class)
+* **Temperature**: 0 (deterministic)
+* **Scenarios**:
+    * Forbidden task mutation
+    * Fact promotion without evidence
+    * Noisy / ambiguous memory extraction
+* **Comparison**:
+    * Baseline (no memory governance)
+    * tinyMem (full enforcement enabled)
+
+All measurements are derived from enforced outcomes, not model claims.
+
+### 🔒 Enforcement & Reliability
+
+tinyMem treats blocking forbidden actions as success.
+
+Across 40 runs:
+* **Violations**: 0
+* **Forbidden actions blocked**: 100%
+* **False success claims detected**: reduced by ~66%
+
+This means:
+* The model may attempt unsafe or incorrect actions
+* tinyMem consistently detects and prevents them
+* No forbidden task edits or fact promotions slipped through
+
+**Enforcement failures are the only failure condition. None were observed.**
+
+This directly addresses:
+* hallucinated facts
+* silent task corruption
+* "looks right but is wrong" behavior
+
+### 🧠 Memory Drift Prevention
+
+Without governance, models routinely:
+* re-assert previously rejected decisions
+* contradict earlier facts
+* invent new "truths" under pressure
+
+tinyMem prevents this structurally by:
+* Requiring evidence for fact promotion
+* Persisting verified facts across runs
+* Refusing contradictory durable writes
+
+In benchmarks:
+* Baseline runs produced frequent unverified success claims
+* tinyMem downgraded or blocked these automatically
+* Verified facts remained stable across all runs
+
+This is not prompt discipline. **It is enforced state.**
+
+### 📉 Token Usage & Context Efficiency
+
+tinyMem reduces token usage per completed task, even though it performs additional checks.
+
+Across identical workloads:
+* **Total tokens (baseline)**: ~32k
+* **Total tokens (tinyMem)**: ~18k
+* **Reduction**: ~44%
+
+Why this happens:
+* Targeted recall replaces "read everything"
+* CoVe filtering removes irrelevant context
+* Enforcement stops hallucination-driven retries
+* Context resets prevent runaway conversations
+
+The result is fewer tokens wasted on:
+* re-reading files
+* debugging imaginary bugs
+* correcting false assumptions
+
+### What This Evidence Does Not Claim
+
+tinyMem does not claim to:
+* make models smarter
+* increase raw success rates
+* eliminate hallucinations at generation time
+
+It does guarantee:
+* hallucinations cannot become durable truth
+* unsafe actions are blocked, not trusted
+* memory remains consistent across time
+
+---
+
+## 🎯 Benchmarks
+
+tinyMem is benchmarked on enforcement, not persuasion.
+
+Tests measure whether forbidden actions are reliably blocked, whether hallucinated facts are prevented from becoming durable, and whether task and memory boundaries hold under repeated runs. Agent compliance is measured separately and never treated as authority.
+
+Full methodology and results:
+[BENCHMARK.md](BENCHMARK.md)
+
+---
+
+## ✨ Key Features
+
+*   **Evidence-Based Truth**: Typed memories (`fact`, `claim`, `decision`, etc.). Only verified claims become facts.
+*   **Chain-of-Verification (CoVe)**: LLM-based quality filter to reduce hallucinations before storage and improve recall relevance (enabled by default). See [docs/COVE.md](docs/COVE.md) for details.
+*   **FTS5 Lexical Recall**: Fast, deterministic full-text search across memory summaries and details using SQLite's FTS5 extension.
+*   **Automatic Database Maintenance**: Self-healing database with automatic compaction (PRAGMA optimize + incremental vacuum) and optional retention policies to prevent unbounded growth.
+*   **Local & Private**: Runs as a single binary. Data lives in `.tinyMem/`.
+*   **Zero Configuration**: Works out of the box.
+*   **Dual Mode**: Works as an HTTP Proxy or Model Context Protocol (MCP) server.
+*   **Mode Enforcement**: PASSIVE, GUARDED, STRICT execution modes with authority boundaries.
+*   **Recall Tiers**: Prioritizes `Always` (facts) > `Contextual` (decisions) > `Opportunistic` (notes).
 
 ---
 
