@@ -49,6 +49,9 @@ func EnsureProjectContracts(projectRoot string, contractType ContractType) error
 	if err := os.MkdirAll(agentsDir, 0755); err != nil {
 		return fmt.Errorf("error creating directory %s: %w", agentsDir, err)
 	}
+	if err := ensureAgentContractFiles(projectRoot); err != nil {
+		return fmt.Errorf("error ensuring agent contract files: %w", err)
+	}
 
 	files := []string{"AGENTS.md", "QWEN.md", "GEMINI.md", "CLAUDE.md", "CODEX.md"}
 	locations := []string{projectRoot, agentsDir}
@@ -78,10 +81,6 @@ func EnsureProjectContracts(projectRoot string, contractType ContractType) error
 				fmt.Printf("Warning: failed to update JSON file %s: %v\n", targetPath, err)
 			}
 		}
-	}
-
-	if err := updateReadme(projectRoot, contractType); err != nil {
-		return fmt.Errorf("error updating README.md: %w", err)
 	}
 
 	fmt.Println("Agent contracts synchronized.")
@@ -188,6 +187,31 @@ func createFileWithContract(filename, contractContent string) error {
 		return err
 	}
 	fmt.Printf("Created %s with contract\n", filename)
+	return nil
+}
+
+func ensureAgentContractFiles(projectRoot string) error {
+	agentsDir := filepath.Join(projectRoot, "docs", "agents")
+	contractTypes := []ContractType{ContractTypeLarge, ContractTypeSmall}
+	for _, cType := range contractTypes {
+		contractPath := filepath.Join(agentsDir, cType.fileName())
+		if _, err := os.Stat(contractPath); err == nil {
+			continue
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("error checking %s: %w", contractPath, err)
+		}
+
+		fmt.Printf("Downloading missing %s contract to %s...\n", cType, contractPath)
+		content, err := getContractContent(projectRoot, cType)
+		if err != nil {
+			return fmt.Errorf("error fetching %s contract: %w", cType, err)
+		}
+
+		if err := createFileWithContract(contractPath, content); err != nil {
+			return fmt.Errorf("error creating %s: %w", contractPath, err)
+		}
+	}
+
 	return nil
 }
 
