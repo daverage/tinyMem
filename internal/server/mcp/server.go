@@ -659,7 +659,8 @@ func (s *Server) handleMemoryQuery(req *MCPRequest, args json.RawMessage) {
 		return
 	}
 
-	// Memory query allowed in PASSIVE mode (lexical-only recall)
+	// Memory query allowed in PASSIVE mode (observation is free)
+	// This ensures memory_query can be called in any mode (PASSIVE, GUARDED, STRICT)
 	if !s.requireMode(req.ID, "memory_query", execution.ActionMemoryQuery, execution.ModePassive) {
 		return
 	}
@@ -765,6 +766,8 @@ func (s *Server) handleMemoryRecent(req *MCPRequest, args json.RawMessage) {
 		recentReq.Count = 10
 	}
 
+	// Memory recent allowed in PASSIVE mode (observation is free)
+	// This ensures memory_recent can be called in any mode (PASSIVE, GUARDED, STRICT)
 	if !s.requireMode(req.ID, "memory_recent", execution.ActionMemoryQuery, execution.ModePassive) {
 		return
 	}
@@ -866,6 +869,8 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 	_ = s.checkAndAutoCreateTaskFile(workContext) // Best-effort, don't fail on error
 
 	// ENFORCEMENT: Recall required before mutation (GUARDED+ modes)
+	// This ensures that observation (memory_query/memory_recent) happens before mutation (memory_write)
+	// Memory recall tools are allowed in all modes (PASSIVE level), but must be called before mutations
 	currentMode := s.modeCtrl.Mode()
 	if !s.hasRecalled {
 		if currentMode >= execution.ModeGuarded {
@@ -997,6 +1002,7 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 
 // handleMemoryStats handles memory statistics requests
 func (s *Server) handleMemoryStats(req *MCPRequest) {
+	// Memory stats is an observation tool, allowed in PASSIVE mode (observation is free)
 	if !s.requireMode(req.ID, "memory_stats", execution.ActionMemoryQuery, execution.ModePassive) {
 		return
 	}
@@ -1057,6 +1063,7 @@ func (s *Server) handleMemoryStats(req *MCPRequest) {
 
 // handleMemoryHealth handles memory health check requests
 func (s *Server) handleMemoryHealth(req *MCPRequest) {
+	// Memory health is an observation tool, allowed in PASSIVE mode (observation is free)
 	if !s.requireMode(req.ID, "memory_health", execution.ActionMemoryQuery, execution.ModePassive) {
 		return
 	}
@@ -1095,6 +1102,7 @@ func (s *Server) handleMemoryHealth(req *MCPRequest) {
 
 // handleMemoryDoctor handles memory doctor diagnostic requests
 func (s *Server) handleMemoryDoctor(req *MCPRequest) {
+	// Memory doctor is an observation tool, allowed in PASSIVE mode (observation is free)
 	if !s.requireMode(req.ID, "memory_doctor", execution.ActionMemoryQuery, execution.ModePassive) {
 		return
 	}

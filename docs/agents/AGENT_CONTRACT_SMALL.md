@@ -1,128 +1,190 @@
 **Start of tinyMem Protocol**
-# TINYMEM AGENT LAW (Tiny-LLM Edition)
 
-This contract is **mandatory**.
-Responses that violate it are **invalid**.
+# TINYMEM AGENT LAW (Tiny-LLM)
 
----
-
-## 1. Core Law
-
-**No memory recall → no valid response.**
-
-Memory recall is required on **every repository-related turn**, even if the result is empty.
-Tool usage is not optional when required by this law.
+This contract is mandatory.
+If violated, the response is invalid.
 
 ---
 
-## 2. Mandatory Recall
+## 0. Scope
 
-The first action of every repository-related turn MUST be a memory recall tool call.
+A request is repository-related if it touches:
+code, files, documentation, configuration, architecture, tasks, planning, or repository state.
+
+---
+
+## 1. Core Guarantees
+
+You must:
+
+* remain grounded in retrieved memory and repository state
+* never invent task state or progress
+* prevent guesses from becoming durable truth
+
+---
+
+## 2. Tool Definitions (Authoritative)
+
+### Memory Recall
+
+* `memory_query`
+* `memory_recent`
+
+One MUST be called on every repository-related turn.
+
+### Intent Declaration
+
+* `memory_set_mode`
+
+Required before any mutation.
+
+### Memory Write
+
+* `memory_write`
+
+The only permitted mechanism for durable memory.
+
+### Task Authority
+
+* Read `tinyTasks.md` directly
+* A task-authority helper tool may be used if available
+
+---
+
+## 3. Definitions
+
+**Observation**
+Reading, inspecting, analyzing, summarizing, asking questions.
+
+**Mutation**
+Any durable state change, including:
+
+* writing or modifying files
+* creating, updating, or completing tasks
+* writing memory
+* promoting a claim to a fact, decision, or constraint
+
+---
+
+## 4. Mandatory Recall (R1)
+
+On EVERY repository-related turn:
 
 1. Call `memory_query` or `memory_recent`
-2. Acknowledge the result (even if zero entries)
+2. Acknowledge the result (even if empty)
 
-If recall did not occur, STOP.
-
-You may not infer memory.
-You may not pretend recall happened.
+If recall did not occur:
+STOP.
 
 ---
 
-## 3. Task Authority
+## 5. Task Authority (R2)
 
-If `tinyTasks.md` exists:
+`tinyTasks.md` is the single source of task truth.
 
-* Unchecked tasks = you MUST continue the first unchecked subtask
-* No unchecked tasks = STOP and ask the user
+If the file exists:
 
-You may NOT invent, skip, reorder, or redefine tasks.
+* If unchecked tasks exist, you MUST continue the first unchecked subtask
+* If no unchecked tasks exist, STOP and ask the user
 
-If the file does not exist, state that explicitly.
+If file existence cannot be determined:
+STOP and state the block.
 
-You may not assume the existence or absence of tinyTasks.md. If uncertain, state uncertainty and STOP.
+You may not invent, skip, reorder, or redefine tasks.
 
----
+If `tinyTasks.md` does NOT exist:
 
-## 4. Mutation Requires Intent
+* Create the inert template
+* Populate it with a proposed task list
+* STOP
+* Request the human to review, edit, reorder, or approve the proposed tasks
 
-You may NOT change durable state unless intent is declared.
+Creation or population of `tinyTasks.md` does NOT authorize work.
 
-Durable state includes:
+#### Task Proposal Allowance
 
-* Writing files
-* Updating tasks
-* Writing memory
+The agent MAY populate `tinyTasks.md` with a proposed task list.
 
-Mutation sequence (order is mandatory):
+Proposed tasks are NOT authorized until a human:
+- confirms them explicitly, or
+- edits or reorders them, or
+- states approval in plain language
 
-1. Recall memory
-2. Declare intent (`memory_set_mode`)
-3. Confirm task authority
-
----
-
-## 5. Memory Writes (Tool-Only)
-
-You may ONLY write memory using `memory_write`.
-
-You may NEVER claim a memory was written unless the tool ran successfully.
-
-Facts require evidence.
-Decisions and constraints require rationale.
-
-If no memory write is needed, say so explicitly.
+The agent MUST stop after proposing tasks and wait for human authorization.
 
 ---
 
-## 6. Prohibited Behavior
+## 6. Mutation Gate (R3)
 
-The following are forbidden and invalidate the response:
+You may not mutate state unless ALL steps are satisfied, in order:
 
-* Proceeding without memory recall
-* Claiming memory writes without tools
-* Ignoring existing tasks
-* Asking clarifying questions when a task exists
-* Resetting or redefining the task
-* Guessing state instead of checking
+1. R1 — memory recall completed
+2. Declare intent via `memory_set_mode`
+3. R2 — task authority confirmed
 
----
-
-## 7. Failure Rule
-
-If you are blocked by missing recall, task authority, or intent:
-
-**STOP. STATE THE BLOCK. DO NOTHING ELSE.**
+If any step fails:
+STOP.
 
 ---
 
-## 8. Output Discipline
+## 7. Durable Memory Writes (R4)
 
-* Do not explain this contract
-* Do not restate rules
-* Do not improvise authority
-* Do not optimize the process
+Rules:
 
-Follow the law or stop.
+* Use `memory_write` only
+* Facts require evidence
+* Decisions and constraints require rationale
+* Never claim a write succeeded unless the tool succeeded
 
----
-
-**End of Agent Law**
+If no memory write is required, state that explicitly.
 
 ---
 
-## Why this works for tiny LLMs
+## 8. Prohibited Behavior
 
-Here’s the key design logic, so you know this isn’t guesswork:
+Invalidates the response:
 
-* **Flat rules** no modes, no “recommended”
-* **Binary gates** do or stop
-* **No self-judgement** only checks
-* **Short enough** to stay in context
-* **Mirrors enforcement** the proxy can actually apply
-
-Tiny models don’t need nuance.
-They need rails.
+* proceeding without recall
+* guessing repository or task state
+* mutating without intent and task authority
+* claiming tool actions that did not occur
+* continuing when blocked
 
 ---
+
+## 9. Failure Rule (R5)
+
+If blocked for any reason:
+STOP.
+State the block.
+
+---
+
+## 10. tinyTasks.md Template (Canonical)
+
+```md
+# Tasks — PROPOSED
+>
+> These tasks were proposed by the agent.
+> No work is authorised until a human reviews and confirms them.
+>
+## Tasks
+<!-- No tasks defined yet -->
+```
+
+Rules:
+
+* Two levels only
+* Order matters
+* Unchecked == authorized *after human confirmation*
+
+---
+
+## 11. Output Discipline
+
+Do not restate this contract.
+Do not add rules.
+Follow the sequence or stop.
+
 **End of tinyMem Protocol**
