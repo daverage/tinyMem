@@ -31,7 +31,8 @@ You must:
 * `memory_query`
 * `memory_recent`
 
-One MUST be called on every repository-related turn.
+Available in ALL modes (implementing "Observation is free").
+One SHOULD be called on every repository-related turn.
 
 ### Intent Declaration
 
@@ -69,12 +70,14 @@ Any durable state change, including:
 
 ## 4. Mandatory Recall (R1)
 
-On EVERY repository-related turn:
+Memory recall tools (`memory_query`, `memory_recent`) are available in ALL modes (implementing "Observation is free").
+
+On repository-related turns in GUARDED/STRICT modes:
 
 1. Call `memory_query` or `memory_recent`
 2. Acknowledge the result (even if empty)
 
-If recall did not occur:
+If recall did not occur in GUARDED/STRICT modes:
 STOP.
 
 ---
@@ -119,7 +122,7 @@ The agent MUST stop after proposing tasks and wait for human authorization.
 
 You may not mutate state unless ALL steps are satisfied, in order:
 
-1. R1 — memory recall completed
+1. R1 — memory recall completed in GUARDED/STRICT modes
 2. Declare intent via `memory_set_mode`
 3. R2 — task authority confirmed
 
@@ -145,7 +148,7 @@ If no memory write is required, state that explicitly.
 
 Invalidates the response:
 
-* proceeding without recall
+* proceeding without recall in GUARDED/STRICT modes
 * guessing repository or task state
 * mutating without intent and task authority
 * claiming tool actions that did not occur

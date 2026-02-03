@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -63,6 +65,11 @@ type Server struct {
 	shutdownOnce    sync.Once
 	server          *http.Server
 	modeCtrl        *execution.Controller
+
+	// Agent contracts
+	agentContractLarge string
+	agentContractSmall string
+	contractLoadErr    error
 }
 
 // NewServer creates a new proxy server
@@ -97,6 +104,9 @@ func NewServer(a *app.App) *Server {
 		processorDone:   make(chan struct{}),
 		modeCtrl:        a.Execution,
 	}
+
+	// Load agent contracts
+	server.loadContracts()
 
 	// Start a goroutine to process response captures
 	go server.processResponseCaptures()
@@ -179,6 +189,77 @@ func (s *Server) Stop() error {
 	return nil
 }
 
+// loadContracts loads the agent contracts from disk
+func (s *Server) loadContracts() {
+	root := s.app.Core.Config.ProjectRoot
+
+	// Load large contract
+	largePath := filepath.Join(root, "docs", "agents", "AGENT_CONTRACT.md")
+	largeContent, err := os.ReadFile(largePath)
+	if err != nil {
+		s.contractLoadErr = fmt.Errorf("failed to load large contract from %s: %w", largePath, err)
+		return
+	}
+	s.agentContractLarge = string(largeContent)
+
+	// Load small contract
+	smallPath := filepath.Join(root, "docs", "agents", "AGENT_CONTRACT_SMALL.md")
+	smallContent, err := os.ReadFile(smallPath)
+	if err != nil {
+		s.contractLoadErr = fmt.Errorf("failed to load small contract from %s: %w", smallPath, err)
+		return
+	}
+	s.agentContractSmall = string(smallContent)
+}
+
+// injectAgentContract ensures the appropriate agent contract is present in the request.
+// This is a proxy-layer authority binding mechanism.
+//
+// Marker-based detection ("**Start of tinyMem Protocol**") is used to prevent duplicate
+// injection if the client or another layer has already included the contract, while ignoring
+// superficial filename or partial content matches.
+//
+// Injection is performed at the system level to ensure the contract functions as the
+// authoritative "law" for the agent, overriding or framing subsequent user context.
+func (s *Server) injectAgentContract(req *llm.ChatCompletionRequest) error {
+	marker := "**Start of tinyMem Protocol**"
+
+	// Check if marker is already present in any message
+	for _, msg := range req.Messages {
+		if strings.Contains(msg.Content, marker) {
+			return nil // Already present, do nothing
+		}
+	}
+
+	// If we had an error loading contracts, fail closed now
+	if s.contractLoadErr != nil {
+		return s.contractLoadErr
+	}
+
+	var contract string
+	// Check config for contract type (default is "large")
+	if s.config.AgentContract == "small" {
+		contract = s.agentContractSmall
+	} else {
+		contract = s.agentContractLarge
+	}
+
+	if contract == "" {
+		return fmt.Errorf("agent contract content is empty")
+	}
+
+	// Inject as a system-level message, prepended before all other messages
+	// This ensures it is the first thing the model sees (or close to it)
+	systemMsg := llm.Message{
+		Role:    "system",
+		Content: contract,
+	}
+
+	req.Messages = append([]llm.Message{systemMsg}, req.Messages...)
+
+	return nil
+}
+
 // handleChatCompletions handles chat completion requests
 func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
@@ -252,6 +333,13 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 			// Add memory to the messages as a system message
 			req.Messages = append([]llm.Message{{Role: "system", Content: memoryText}}, req.Messages...)
 		}
+	}
+
+	// Enforce Agent Contract (Proxy-Layer Authority Binding)
+	if err := s.injectAgentContract(&req); err != nil {
+		s.app.Core.Logger.Error("Failed to inject agent contract", zap.Error(err))
+		http.Error(w, fmt.Sprintf("Agent Contract Enforcement Failed: %v", err), http.StatusInternalServerError)
+		return
 	}
 
 	// Forward the request to the LLM backend
