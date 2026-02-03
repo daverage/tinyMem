@@ -672,7 +672,9 @@
                     "
                 >
                     tinyMem makes agents recall context, verify facts against
-                    code, and act only when evidence exists.
+                    code, inject the right `docs/agents/AGENT_CONTRACT*.md`, and
+                    stream recall metadata (`tinymem.memory_status` SSE events
+                    or `X-TinyMem-Recall-*` headers) before any action.
                 </p>
 
                 <div
@@ -761,15 +763,17 @@
                             /usr/local/bin/</span
                         ><br /><br />
 
-                        <span class="comment"># Initialize</span><br />
-                        <span class="command">tinymem health</span><br /><br />
+                        <span class="comment"
+                            ># Initialize (downloads docs/agents/AGENT_CONTRACT*.md)</span
+                        ><br />
+                        <span class="command">tinymem init</span><br /><br />
 
-                        <span class="comment"># Run in MCP mode for IDEs</span
+                        <span class="comment"># Run the HTTP proxy</span><br />
+                        <span class="command">tinymem proxy</span><br /><br />
+
+                        <span class="comment"># Run the MCP server for IDEs</span
                         ><br />
                         <span class="command">tinymem mcp</span><br />
-                        <span class="comment"
-                            >> MCP server listening on stdio</span
-                        >
                     </div>
                 </div>
 
@@ -783,20 +787,20 @@
 
             <div class="stats-container">
                 <div class="stat-card">
-                    <span class="stat-number">Local-first</span>
-                    <span class="stat-label">No cloud, no data leakage</span>
+                    <span class="stat-number">Contracts Ready</span>
+                    <span class="stat-label"><code>docs/agents/AGENT_CONTRACT*.md</code> seeded</span>
                 </div>
                 <div class="stat-card">
-                    <span class="stat-number">Deterministic</span>
-                    <span class="stat-label">Same inputs, same recall</span>
+                    <span class="stat-number">Recall Status</span>
+                    <span class="stat-label">SSE + headers signal memory injection</span>
                 </div>
                 <div class="stat-card">
-                    <span class="stat-number">Zero</span>
-                    <span class="stat-label">Model retraining required</span>
+                    <span class="stat-number">tinyTasks</span>
+                    <span class="stat-label">File-authoritative tasks guard the work</span>
                 </div>
                 <div class="stat-card">
-                    <span class="stat-number">MCP</span>
-                    <span class="stat-label">IDE-native integration</span>
+                    <span class="stat-number">Evidence First</span>
+                    <span class="stat-label">Proof is required before action</span>
                 </div>
             </div>
 
@@ -826,6 +830,16 @@
                         <strong>File-authoritative task ledger enforced by tinyMem.</strong>
                         Agents must update <code>tinyTasks.md</code> so progress
                         is explicit, reviewable, and persistent across sessions.
+                        </p>
+                </div>
+
+                <div class="feature-card">
+                    <h3>Agent Contract Injection</h3>
+                    <p>
+                        tinyMem loads the configured `AGENT_CONTRACT.md` or
+                        `AGENT_CONTRACT_SMALL.md` from `docs/agents` and injects it
+                        as the first system message, protecting the protocol even
+                        if the client forgets to send the policy.
                     </p>
                 </div>
             </div>
@@ -902,6 +916,31 @@
             </div>
 
             <section class="intro">
+                <h2>Proxy signals you can trust</h2>
+                <p>
+                    The HTTP proxy watches recall and emits structured signals. Streaming
+                    responses surface a `tinymem.memory_status` SSE event while non-streaming
+                    requests carry `X-TinyMem-Recall-*` headers, letting dashboards or agents
+                    know exactly when memory was injected.
+                </p>
+
+                <div class="stats-container">
+                    <div class="stat-card">
+                        <span class="stat-number">tinymem.memory_status</span>
+                        <span class="stat-label">Streaming recall events with count + status</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number">X-TinyMem-Recall-*</span>
+                        <span class="stat-label">Headers for non-streaming requests</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number">AGENT_CONTRACT</span>
+                        <span class="stat-label">Loaded once at startup, injected once per request</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="intro">
                 <h2>Built for Reliability</h2>
                 <p>
                     tinyMem is designed for production workflows where
@@ -909,6 +948,18 @@
                 </p>
 
                 <ul class="advanced-list">
+                    <li>
+                        <strong>Recall Signals</strong>
+                        Streaming `tinymem.memory_status` events and
+                        `X-TinyMem-Recall-*` headers tell you when tinyMem
+                        injected memory so your dashboards and agents stay honest.
+                    </li>
+                    <li>
+                        <strong>Contract Guarantee</strong>
+                        The proxy loads the configured `docs/agents/AGENT_CONTRACT*.md`
+                        files and injects them as the first system message,
+                        keeping the protocol aligned every time.
+                    </li>
                     <li>
                         <strong>Chain-of-Verification</strong>
                         Memory writes and recalls can be filtered through

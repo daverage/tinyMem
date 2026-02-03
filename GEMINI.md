@@ -220,6 +220,7 @@ Never guess. Never proceed optimistically.
 
 - [ ] Top-level task
   - [ ] Atomic subtask
+    - [ ] Task definition and details
 ```
 
 Rules:

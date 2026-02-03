@@ -37,7 +37,8 @@ Mutation is explicit.
 * `memory_query`
 * `memory_recent`
 
-Required before any mutation.
+Available in ALL modes (implementing "Observation is free").
+Required before any mutation in GUARDED/STRICT modes.
 
 ### Intent Declaration
 
@@ -109,7 +110,9 @@ Mode MUST be declared via `memory_set_mode` before mutation.
 
 ### R1 — Recall Before Mutation
 
-Before any mutation, you MUST:
+Memory recall tools (`memory_query`, `memory_recent`) are available in ALL modes (implementing "Observation is free").
+
+Before any mutation in GUARDED/STRICT modes, you MUST:
 
 * call `memory_query` or `memory_recent`
 * acknowledge the result (even if empty)
@@ -169,7 +172,7 @@ The agent may NOT:
 
 Before any mutation, ALL of the following MUST be true, in order:
 
-1. R1 satisfied (memory recall)
+1. R1 satisfied (memory recall in GUARDED/STRICT modes)
 2. Intent declared via `memory_set_mode`
 3. R2 satisfied (task externalised if required)
 4. R3 satisfied (task authority confirmed)
@@ -217,6 +220,7 @@ Never guess. Never proceed optimistically.
 
 - [ ] Top-level task
   - [ ] Atomic subtask
+    - [ ] Task definition and details
 ```
 
 Rules:
@@ -255,7 +259,7 @@ If a required tool fails:
 
 Confirm explicitly:
 
-* recall completed (R1)
+* recall completed in GUARDED/STRICT modes (R1)
 * mode declared (R4)
 * task authority resolved (R2, R3)
 * memory writes completed or not required (R5)

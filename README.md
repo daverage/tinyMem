@@ -103,11 +103,12 @@ As the project grew, we realized that memory alone wasn't enough. Reliability re
 Get up and running in seconds.
 
 ### 1. Initialize
-Go to your project root and initialize the memory database:
+Go to your project root and bootstrap the memory system (this also downloads `docs/agents/AGENT_CONTRACT*.md` so your proxy/MCP layers have the exact system prompt they inject):
 ```bash
 cd /path/to/your/project
-tinymem health
+tinymem init
 ```
+If you just want to verify the installation afterward, run `tinymem health`.
 
 ### 2. Run
 Start the server (choose one mode):
@@ -197,8 +198,8 @@ The tinyMem CLI is your primary way to interact with the system from your termin
 | `run` | **Command Wrapper**| To run a script or tool (like `make` or `npm test`) while "reminding" it of project context. | `tinymem run make build` |
 | `proxy` / `mcp` | **Server Modes** | To start the "brain" that connects tinyMem to your IDE or AI client. | `tinymem mcp` |
 | `doctor` | **Diagnostics** | To fix the system if it stops working or has configuration issues. | `tinymem doctor` |
-| `init` | **Project Bootstrap** | Creates `.tinyMem`, writes the config, and installs the correct agent contracts for your model size. | `tinymem init` |
-| `update` | **Refresh** | Re-runs migrations and downloads whichever agent contract matches your configuration. | `tinymem update` |
+| `init` | **Project Bootstrap** | Creates `.tinyMem`, writes the config, and downloads the AGENT_CONTRACT/AGENT_CONTRACT_SMALL files into `docs/agents` so proxy and MCP modes can inject them without touching your README. | `tinymem init` |
+| `update` | **Refresh** | Re-runs migrations and refreshes the configured agent contract files under `docs/agents` (large or small) to keep proxy/MCP injections in sync. | `tinymem update` |
 
 ### Writing Memories
 Think of writing memories as "tagging" reality for the AI.
@@ -266,6 +267,8 @@ export OPENAI_API_BASE_URL=http://localhost:8080/v1
 # Your existing scripts now use tinyMem automatically
 ```
 
+`tinymem init` seeds `docs/agents/AGENT_CONTRACT.md` and `AGENT_CONTRACT_SMALL.md` and the proxy loads the configured file at startup, injecting it as the first system message unless the client already shipped the `**Start of tinyMem Protocol**` marker. This means your SDKs never need to resend the contract; tinyMem enforces it once per request.
+
 While proxying, tinyMem now reports recall activity back to the client so that downstream UIs or agents can show “memory checked” indicators:
 * **Streaming responses** append an SSE event of type `tinymem.memory_status` once the upstream LLM finishes. The payload includes `recall_count`, `recall_status` (`none`/`injected`/`failed`), and a timestamp.
 * **Non-streaming responses** carry the same data via new headers: `X-TinyMem-Recall-Status` and `X-TinyMem-Recall-Count`.
@@ -287,19 +290,23 @@ Compatible with Claude Desktop, Cursor, and other MCP clients.
 ```
 
 #### Available MCP Tools:
-When tinyMem is running in MCP mode, your AI agent (like Claude or Gemini) gains these "superpowers":
+When tinyMem is running in MCP mode, your AI agent gains a fixed set of tools for recall, enforcement, and diagnostics:
 
-*   **`memory_query`**: **Search the past.** The AI uses this to find facts, decisions, or notes related to its current task.
-*   **`memory_recent`**: **Get up to speed.** The AI uses this when it first starts to see what has happened recently in the project.
-*   **`memory_write`**: **Learn something new.** The AI uses this to save a new fact or decision it just discovered or made. *Facts require "Evidence" (like checking if a file exists).*
-*   **`memory_ralph`**: **Self-Repair.** This is the "Nuclear Option." The AI uses this to try and fix a bug autonomously by running tests, reading errors, and retrying until it works.
-*   **`memory_stats` & `memory_health`**: **System Check.** The AI uses these to check if its memory is working correctly or how much it has learned.
-*   **`memory_doctor`**: **Self-Diagnosis.** If the AI feels "confused" or senses memory issues, it can run this to identify problems.
+*   **`memory_query`**: Search project memories with lexical recall (PASSIVE). Always run this before writing anything in GUARDED/STRICT modes.
+*   **`memory_recent`**: Fetch the latest memories to understand the current context before acting.
+*   **`memory_run_metadata`**: Inspect the enforcement run metadata (execution mode, events, proven counts) to prove the protocol was followed.
+*   **`memory_claim_success`**: Report whether a claimed success was observed and enforced; adversarial claims without enforcement get flagged.
+*   **`memory_set_mode`**: Declare PASSIVE, GUARDED, or STRICT before mutations; this is the intent gatekeeper for all memory writes.
+*   **`memory_check_task_authority`**: Ask tinyMem to read `tinyTasks.md` and confirm which task (if any) has authority so the agent knows what work is authorized.
+*   **`memory_write`**: Create or update memories with evidence (facts require verified evidence, and recall must happen first in GUARDED/STRICT modes).
+*   **`memory_stats`** & **`memory_health`**: Surface memory counts, evidence coverage, and database health for monitoring.
+*   **`memory_doctor`**: Run a self-diagnostic that checks configuration, database connectivity, and enforcement hooks.
+*   **`memory_eval_stats`**: Retrieve evaluation metrics that measure how well memories, tasks, and enforcement performed during a session.
 
 ### AI Agent Directives
 **CRITICAL**: If you are building an AI agent, you MUST include the appropriate directive in its system prompt to ensure it uses tinyMem correctly.
 
-**Quick Setup:** Run `tinymem init` once to bootstrap `.tinyMem`, create config, and install the correct agent contract for your model size. Use `tinymem update` later to rerun migrations and refresh the contract (it will download the small or large version that your configuration points to).
+**Quick Setup:** Run `tinymem init` once to bootstrap `.tinyMem`, create config, and download the AGENT_CONTRACT/AGENT_CONTRACT_SMALL files that the proxy and MCP layers inject. `tinymem update` reruns migrations and refreshes the same contract files (large or small) without mutating your README.
 
 *   **Claude**: [`docs/agents/CLAUDE.md`](docs/agents/CLAUDE.md)
 *   **Gemini**: [`docs/agents/GEMINI.md`](docs/agents/GEMINI.md)

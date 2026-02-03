@@ -172,10 +172,15 @@ State the block.
 > These tasks were proposed by the agent.
 > No work is authorised until a human reviews and confirms them.
 >
-## Tasks
-<!-- No tasks defined yet -->
+### Active Task Structure
 ```
+```md
+# Tasks – <Goal>
 
+- [ ] Top-level task
+  - [ ] Atomic subtask
+    - [ ] Task definition and details
+```
 Rules:
 
 * Two levels only

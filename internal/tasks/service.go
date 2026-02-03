@@ -372,6 +372,12 @@ func (s *Service) GetTaskStatus(projectPath string) (map[string]interface{}, err
 		"has_task_file":    hasTaskFile,
 	}
 
+	if metrics, err := collectTaskShapeMetrics(projectPath + "/tinyTasks.md"); err == nil {
+		status["tasks_with_subtasks"] = metrics.TasksWithSubtasks
+		status["flat_tasks"] = metrics.FlatTasks
+		status["average_steps_per_task"] = metrics.AverageStepsPerTask
+	}
+
 	return status, nil
 }
 
@@ -422,6 +428,44 @@ func readFileBytes(filePath string) ([]byte, error) {
 func computeHash(data []byte) string {
 	hash := sha256.Sum256(data)
 	return fmt.Sprintf("%x", hash[:])
+}
+
+type taskShapeMetrics struct {
+	TasksWithSubtasks   int
+	FlatTasks           int
+	AverageStepsPerTask float64
+}
+
+func collectTaskShapeMetrics(filePath string) (taskShapeMetrics, error) {
+	var metrics taskShapeMetrics
+
+	fileBytes, err := readFileBytes(filePath)
+	if err != nil {
+		return metrics, err
+	}
+
+	reader := &ByteReader{Data: fileBytes}
+	parsedTasks, err := ParseTasks(reader)
+	if err != nil {
+		return metrics, err
+	}
+
+	if len(parsedTasks) == 0 {
+		return metrics, nil
+	}
+
+	totalSteps := 0
+	for _, task := range parsedTasks {
+		if task.StepsTotal > 0 {
+			metrics.TasksWithSubtasks++
+		} else {
+			metrics.FlatTasks++
+		}
+		totalSteps += task.StepsTotal
+	}
+
+	metrics.AverageStepsPerTask = float64(totalSteps) / float64(len(parsedTasks))
+	return metrics, nil
 }
 
 // CreateInertTaskFile creates the canonical inert tinyTasks.md template

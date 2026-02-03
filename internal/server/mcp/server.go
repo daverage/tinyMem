@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -516,6 +517,7 @@ func (s *Server) handleMemoryCheckTaskAuthority(req *MCPRequest) {
 	exists := false
 	uncheckedTasks := []string{}
 	authorization := "create_allowed"
+	var fileBytes []byte
 
 	// Check if file exists
 	if _, err := os.Stat(tasksPath); err == nil {
@@ -524,6 +526,7 @@ func (s *Server) handleMemoryCheckTaskAuthority(req *MCPRequest) {
 		// Read file and parse for unchecked tasks
 		content, err := os.ReadFile(tasksPath)
 		if err == nil {
+			fileBytes = content
 			lines := strings.Split(string(content), "\n")
 			for _, line := range lines {
 				trimmed := strings.TrimSpace(line)
@@ -544,6 +547,14 @@ func (s *Server) handleMemoryCheckTaskAuthority(req *MCPRequest) {
 		}
 	}
 
+	var taskSignals map[string]interface{}
+	if len(uncheckedTasks) > 0 && len(fileBytes) > 0 {
+		if signals, err := buildNextTaskSignals(fileBytes); err == nil && len(signals) > 0 {
+			taskSignals = signals
+		}
+	}
+
+	// task_signals are purely observational metadata for agent guidance, dashboards, and logging and must not influence gating or enforcement.
 	// Build response
 	result := map[string]interface{}{
 		"exists":          exists,
@@ -554,6 +565,10 @@ func (s *Server) handleMemoryCheckTaskAuthority(req *MCPRequest) {
 
 	if exists && authorization == "authorized" {
 		result["next_task"] = uncheckedTasks[0]
+	}
+
+	if taskSignals != nil {
+		result["task_signals"] = taskSignals
 	}
 
 	payload, err := json.Marshal(result)
@@ -576,6 +591,33 @@ func (s *Server) handleMemoryCheckTaskAuthority(req *MCPRequest) {
 	}
 
 	s.sendResponse(response)
+}
+
+func buildNextTaskSignals(content []byte) (map[string]interface{}, error) {
+	reader := bytes.NewReader(content)
+	parsedTasks, err := tasks.ParseTasks(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, task := range parsedTasks {
+		if task.Completed {
+			continue
+		}
+
+		signals := map[string]interface{}{
+			"steps_total":      task.StepsTotal,
+			"steps_done":       task.StepsDone,
+			"has_subtasks":     task.StepsTotal > 0,
+			"title_word_count": len(strings.Fields(task.Title)),
+			"section_title":    task.Section,
+			"is_flat_task":     task.StepsTotal == 0,
+		}
+
+		return signals, nil
+	}
+
+	return nil, nil
 }
 
 // checkAndAutoCreateTaskFile detects multi-step work and creates inert tinyTasks.md if needed

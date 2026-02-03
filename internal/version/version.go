@@ -2,4 +2,4 @@ package version
 
 // Version is the current version of tinyMem
 // This can be overridden at build time using -ldflags "-X github.com/daverage/tinymem/internal/version.Version=vX.Y.Z"
-var Version = "v0.6.1"
+var Version = "v0.7.0"
