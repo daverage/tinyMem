@@ -130,25 +130,18 @@ If **Task Identification** occurs:
 
 If `tinyTasks.md` does NOT exist:
 
-* Create the inert template
-* Populate it with a proposed task list
-* STOP
-* Request the human to review, edit, reorder, or approve the proposed tasks
-
-Creation or population of `tinyTasks.md` does NOT authorize work.
+* Create it and populate it with a proposed task list via `task_add` (or standard file tools if MCP is unavailable)
+* Optionally ask the user to verify the proposed tasks before proceeding
+* If the user requests verification, wait for review
+* If the user declines or does not respond, proceed immediately
 
 Planning in the response body is prohibited once this rule triggers.
 
 #### Task Proposal Allowance
 
-The agent MAY populate `tinyTasks.md` with a proposed task list.
-
-Proposed tasks are NOT authorized until a human:
-- confirms them explicitly, or
-- edits or reorders them, or
-- states approval in plain language
-
-The agent MUST stop after proposing tasks and wait for human authorization.
+The agent MAY populate `tinyTasks.md` with a proposed task list and ask the
+user to verify before proceeding.  Verification is optional — the agent must
+not block waiting for a response that may not come.
 
 ---
 
@@ -201,16 +194,17 @@ Never guess. Never proceed optimistically.
 
 ## 6. tinyTasks.md Templates
 
-### Inert Auto-Creation Template
+### Auto-Creation Template
+
+The agent creates and populates this file in one step.  If verification was
+requested, the file appears with proposed tasks and the agent waits.  Otherwise
+the agent proceeds immediately.
 
 ```md
-# Tasks — PROPOSED
->
-> These tasks were proposed by the agent.
-> No work is authorised until a human reviews and confirms them.
->
-## Tasks
-<!-- No tasks defined yet -->
+# Tasks — <Goal>
+
+- [ ] First task
+- [ ] Second task
 ```
 
 ### Active Task Structure

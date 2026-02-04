@@ -182,9 +182,13 @@ func (a *App) Close() {
 			// Zap's Sync can return an error if the underlying writer fails
 			// For os.Stderr or regular files, it's usually safe to ignore certain errors.
 			// However, it's good practice to log unexpected errors.
-			if !strings.Contains(err.Error(), "sync /dev/stderr: invalid argument") &&
-				!strings.Contains(err.Error(), "sync <file descriptor>: bad file descriptor") &&
-				!strings.Contains(err.Error(), "sync /dev/stderr: inappropriate ioctl for device") {
+			errStr := err.Error()
+			if !strings.Contains(errStr, "sync /dev/stderr: invalid argument") &&
+				!strings.Contains(errStr, "sync /dev/stderr: bad file descriptor") &&
+				!strings.Contains(errStr, "sync /dev/stderr: inappropriate ioctl for device") &&
+				!strings.Contains(errStr, "sync /dev/stdout: invalid argument") &&
+				!strings.Contains(errStr, "sync /dev/stdout: bad file descriptor") &&
+				!strings.Contains(errStr, "sync /dev/stdout: inappropriate ioctl for device") {
 				fmt.Fprintf(os.Stderr, "Error syncing logger: %v\n", err)
 			}
 		}

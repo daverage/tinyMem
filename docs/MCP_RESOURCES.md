@@ -1,48 +1,60 @@
-# Ensuring `list_mcp_resources` finds tinyMem
+# Exposing tinyMem MCP tools to Codex
 
-The `list_mcp_resources` lookup that the Codex agent runs before mutating a repository pulls from the shared automation registry (`$CODEX_HOME/automations/*`). In this workspace we only ship the tinyMem code itself, so the registry is empty and the agent cannot find the MCP tool that knows how to validate mutations.
+Codex discovers MCP servers from config files — there is no separate automation
+registry or resource-listing step.  Two scopes are supported:
 
-To keep agents honest when they act in this repo, add a tinyMem automation definition that registers the `tinymem mcp` server (and any helper commands) so `list_mcp_resources` returns a non-empty list.
+| File | Scope |
+|---|---|
+| `~/.codex/config.toml` | global (all projects) |
+| `.codex/config.toml` | project-scoped (can be checked into the repo) |
 
-## How to register tinyMem in the automation registry
+## Adding tinymem to the config
 
-1. Locate your Codex automation directory. By default it’s `$CODEX_HOME/automations/`; if that directory does not exist yet, create it.
-2. Inside `automations/`, add a folder for this repo (for example, `tinymem`). Place a `automation.toml` file there.
-3. Populate `automation.toml` with metadata that exposes the MCP entry point. A minimal example:
+Add the following block to whichever config file applies:
 
-   ```toml
-   title = "tinyMem MCP"
-   description = "Exposes the tinyMem MCP server and diagnostics helpers for repository work."
+```toml
+[mcp_servers.tinymem]
+command = "tinymem"
+args = ["mcp"]
+enabled = true
+startup_timeout_sec = 15
+```
 
-   [server]
-   command = "tinymem"
-   args = ["mcp"]
-   timeout = 60000
-   trust = false
+That is the complete entry.  Codex starts the server on session launch and
+exposes every tool the server advertises (`memory_query`, `memory_recent`,
+`memory_write`, `task_add`, `artifact_create`, etc.) alongside its built-in
+tools.
 
-   [[tools]]
-   name = "tinyMem health"
-   description = "Verify the database before editing."
-   command = "tinymem"
-   args = ["health"]
-   timeout = 15000
+## Project-scoped setup (recommended for this repo)
 
-   [[tools]]
-   name = "tinyMem doctor"
-   description = "Run the doctor diagnostic from MCP context."
-   command = "tinymem"
-   args = ["doctor"]
-   timeout = 30000
-   ```
+Check a `.codex/config.toml` into the repo root with the block above.  Any
+Codex session opened inside the repo will pick it up automatically — no
+per-machine global config needed.
 
-   Adjust the snippet as needed for your environment; the registry that backs `list_mcp_resources` may support additional fields such as `env`, `cwd`, or `trust`.
+## CLI alternative
 
-4. After the automation file is saved, restart the Codex agent (if necessary) so it notices the new resource. Running `list_mcp_resources` again should now show your tinyMem MCP server and any helper tools.
+If you prefer not to hand-edit the file:
 
-## Why this matters
+```bash
+codex mcp add tinymem -- tinymem mcp
+```
 
-- The root `docs/agents/AGENTS.md` contract mandates that repository mutations happen via the MCP tools; registering `tinymem` here keeps codex obeying that contract.
-- Once `list_mcp_resources` returns our entry, we can use the MCP server to call `memory_query`, `memory_recent`, `memory_write`, etc., without manually editing `tinyTasks.md`.
-- The automation can bundle other useful wrappers (`health`, `doctor`, `query`) so agents have quick diagnostics at hand before mutating files.
+This appends the equivalent entry to `~/.codex/config.toml`.
 
-If you need a hand generating the TOML for your automation tool, look for other Codex automation directories on this machine (e.g., `~/.codex/automations/`) for examples, or copy the snippet above and adjust the tool metadata to match.
+## Filtering tools (optional)
+
+If you only want a subset of the tools exposed, use `enabled_tools`:
+
+```toml
+[mcp_servers.tinymem]
+command = "tinymem"
+args = ["mcp"]
+enabled = true
+enabled_tools = ["memory_query", "memory_recent", "memory_write", "task_add"]
+```
+
+## Why the tools weren't showing up
+
+The server was already running, but no config entry existed — Codex had no
+way to know about it.  Once the config block above is in place, the tools
+appear in the next session without any restart.

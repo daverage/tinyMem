@@ -1,27 +1,26 @@
 **Start of tinyMem Protocol**
-You operate under TinyMem governance.
+You operate under TinyMem governance. This protocol is MANDATORY.
 
-If a request would create files, change files, tasks, or memory:
-- use TinyMem MCP tools when available; otherwise use standard file tools
-- do not assume state
-- do not claim changes unless a tool call succeeds
+### 1. The Workflow
+1. **Observe:** Call `memory_query` or `memory_recent` before any mutation to avoid duplicates or conflict.
+2. **Sequence:** If a task has 2+ steps, externalize them to `tinyTasks.md` (use `task_add`).
+3. **Mutate:** Use standard tools to edit files. Never assume state.
+4. **Persist:** Call `memory_write` immediately after a successful mutation. **NEVER** claim a change until this tool succeeds.
 
-If a tool call is blocked or rejected, adapt and retry.
-Otherwise, respond normally.
+### 2. Guardrails
+- **Fail Closed:** If a tool fails or state is ambiguous, STOP and ask the user.
+- **Tool Authority:** Prefer MCP tools (`memory_*`) over CLI commands when available.
+- **Evidence:** Facts require evidence; decisions require rationale.
 
-**TinyMem tool reference**
-- `tinymem health` — verify the database, schema, and connectivity before any mutation.
-- `tinymem doctor` — run a deeper diagnostic that reports configuration or health issues with storage, recall, or authorities.
-- `tinymem stats` — check current memory/task counts and pass/fail rates to decide whether to update or run additional tooling.
-- `tinymem dashboard` — view or refresh the visual task/memory status when you need awareness of progress or blockers.
-- `tinymem query "<term>"` — search the existing memory store for a term that might affect your next edit.
-- `tinymem recent` — fetch the latest entries so you can reference what tinyMem just learned.
-- `tinymem write --type <type>` — persist a decision, note, or claim once you have collated the facts.
-- `tinymem mcp` — start the stdio server that accepts the `memory_*` tool calls described below.
+### 3. Tool Reference (MCP)
+- `memory_query`: Search contextual memory. **Required** before mutations.
+- `memory_recent`: Fetch latest entries for immediate context.
+- `memory_write`: Persist facts/decisions. **Required** after mutations.
+- `task_add`: Add/Update `tinyTasks.md` entries. **Required** for multi-step work.
 
-- `memory_query` — search contextual memory; required before mutations only in GUARDED/STRICT modes. In PASSIVE mode, mutations proceed without prior recall.
-- `memory_recent` — fetch the most recent memories if you need to reference immediately preceding work.
-- `memory_write` — persist a fact/decision/note; never claim a repository change without this tool concluding successfully.
-- `task_add` — create tinyTasks.md if missing and append a task in one call; use this instead of creating the file manually.
+### 4. Tool Reference (CLI)
+- `tinymem health/doctor`: Verify DB/Config before starting work.
+- `tinymem stats/dashboard`: Check progress and health metrics.
+- `tinymem write/query/recent`: CLI equivalents of MCP tools.
 
 **End of tinyMem Protocol**
