@@ -6,7 +6,7 @@ tinyTasks is a built-in task management system for tinyMem that lives alongside 
 
 Unlike standard project memory, which can be fuzzy, tinyTasks is **authoritative**. If it's not in `tinyTasks.md`, it's not a prioritized task for the agent.
 
-1.  **Human-Led Intent**: tinyMem may automatically create the `tinyTasks.md` file when it detects multi-step work, but it will **refuse to act** until a human edits the file and adds unchecked tasks (`- [ ]`).
+1.  **Agent-Led Creation**: Agents create and populate `tinyTasks.md` via `task_add` when they detect multi-step work. Human verification is optional — agents may ask the user to review the file, but they must not block on it.
 2.  **Explicit Sync**: Every time an agent starts a task or finishes a subtask, it MUST update the file. This ensures the "Project Memory" is always grounded in reality.
 3.  **Automatic Visualization**: The `tinymem dashboard` reads `tinyTasks.md` and provides a visual progress report.
 
@@ -15,18 +15,12 @@ Unlike standard project memory, which can be fuzzy, tinyTasks is **authoritative
 ## 🚀 How it Works
 
 ### 1. Initial Creation
-If you ask an agent to perform a complex task and `tinyTasks.md` is missing, the agent will create a template:
+If you ask an agent to perform a complex task and `tinyTasks.md` is missing, the agent calls `task_add` to create and populate it in one step. The server creates the file automatically.
 
-```markdown
-# Tasks — NOT STARTED
-> No work is authorised until a human edits this file and defines tasks.
+If you want to review before the agent proceeds, it may ask: *"Created tinyTasks.md — verify before continuing?"* Respond with **yes** to review, **no / skip** to let the agent proceed, or **always** / **never** to set a persistent preference.
 
-## Tasks
-<!-- No tasks defined yet -->
-```
-
-### 2. Activating the Agent
-To authorize the agent to work, you edit the file:
+### 2. Agent Populates and Proceeds
+After creation, the file looks like this:
 
 ```markdown
 # Tasks — Implement User Authentication
@@ -34,6 +28,8 @@ To authorize the agent to work, you edit the file:
 - [ ] Implement JWT login endpoint
 - [ ] Add unit tests for auth service
 ```
+
+The agent begins executing immediately unless you requested verification in step 1.
 
 ### 3. Execution & Tracking
 As the agent works, it updates the checkboxes:
