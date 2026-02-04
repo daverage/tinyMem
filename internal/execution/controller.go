@@ -41,11 +41,22 @@ var ErrStrictRequired = errors.New("STRICT mode required")
 type Action string
 
 const (
-	ActionMemoryQuery    Action = "memory_query"
-	ActionMemoryWrite    Action = "memory_write"
-	ActionTaskMutation   Action = "task_mutation"
-	ActionFactPromotion  Action = "fact_promotion"
-	ActionTinyTasksWrite Action = "tinyTasks_edit"
+	ActionMemoryQuery       Action = "memory_query"
+	ActionMemoryWrite       Action = "memory_write"
+	ActionTaskMutation      Action = "task_mutation"
+	ActionFactPromotion     Action = "fact_promotion"
+	ActionMemoryStats       Action = "memory_stats"
+	ActionMemoryHealth      Action = "memory_health"
+	ActionMemoryDoctor      Action = "memory_doctor"
+	ActionMemoryEvalStats   Action = "memory_eval_stats"
+	ActionMemoryRunMetadata Action = "memory_run_metadata"
+	ActionClaimSuccess      Action = "memory_claim_success"
+	ActionTaskAuthority     Action = "memory_check_task_authority"
+	ActionTaskList          Action = "task_list"
+	ActionTaskAdd           Action = "task_add"
+	ActionTaskUpdate        Action = "task_update"
+	ActionTaskComplete      Action = "task_complete"
+	ActionModeDeclaration   Action = "memory_set_mode"
 )
 
 // Controller tracks the current execution mode, escalation state, and tinyTasks mutations.

@@ -9,7 +9,7 @@ import (
 
 // handleMemoryEvalStats handles the memory_eval_stats tool call
 func (s *Server) handleMemoryEvalStats(req *MCPRequest) {
-	if !s.requireMode(req.ID, "memory_eval_stats", execution.ActionMemoryQuery, execution.ModePassive) {
+	if _, ok := s.ensureIntent(req, "memory_eval_stats", execution.ActionMemoryEvalStats); !ok {
 		return
 	}
 

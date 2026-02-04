@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -20,9 +19,12 @@ import (
 	"github.com/daverage/tinymem/internal/evidence"
 	"github.com/daverage/tinymem/internal/execution"
 	"github.com/daverage/tinymem/internal/extract"
+	"github.com/daverage/tinymem/internal/intent"
 	"github.com/daverage/tinymem/internal/llm"
 	"github.com/daverage/tinymem/internal/memory"
 	"github.com/daverage/tinymem/internal/recall"
+	"github.com/daverage/tinymem/internal/server"
+	"github.com/daverage/tinymem/internal/server/taskops"
 	"github.com/daverage/tinymem/internal/storage"
 	"github.com/daverage/tinymem/internal/tasks"
 	"go.uber.org/zap" // Add zap import
@@ -40,23 +42,14 @@ type Server struct {
 	coveVerifier    *cove.Verifier
 	llmProvider     llm.Provider // LLM provider for CoVe
 	taskService     *tasks.Service
+	taskManager     *tasks.TaskManager
+	taskOperator    *taskops.Operator
+	intentGate      *server.IntentGate
 	modeCtrl        *execution.Controller
 	enforcer        *enforcement.Recorder
-	hasRecalled     bool // Track if memory_query/memory_recent was called
 	ctx             context.Context
 	cancel          context.CancelFunc
 }
-
-const (
-	enforcementCodeModeCompliance = "MODE_COMPLIANCE"
-	enforcementCodeModeTooLow     = "MODE_TOO_LOW"
-	enforcementCodeModeNotSet     = "MODE_NOT_SET"
-	enforcementCodeStrictRequired = "STRICT_REQUIRED"
-	enforcementCodeFactEvidence   = "FACT_EVIDENCE_REQUIRED"
-	enforcementCodeClaimViolation = "CLAIM_WITHOUT_ENFORCEMENT"
-	enforcementCodeModeUpdated    = "MODE_UPDATED"
-	enforcementCodeRecallRequired = "RECALL_REQUIRED"
-)
 
 // MCPRequest represents a request from the MCP client
 type MCPRequest struct {
@@ -86,7 +79,10 @@ func NewServer(a *app.App) *Server {
 	recallServices := a.InitializeRecallServices()
 
 	// Create MCP-specific services
-	taskService := tasks.NewService(a.Core.DB, a.Memory, a.Project.ID)
+	taskManager := tasks.NewTaskManager(filepath.Join(a.Project.Path, "tinyTasks.md"))
+	taskService := tasks.NewService(a.Core.DB, a.Memory, a.Project.ID, taskManager)
+	taskOperator := taskops.New(taskManager, taskService)
+	intentGate := server.NewIntentGate(a.Execution, a.Enforcement, a.Core.Logger)
 
 	return &Server{
 		app:             a, // Store the app instance
@@ -98,8 +94,11 @@ func NewServer(a *app.App) *Server {
 		extractor:       recallServices.Extractor,
 		coveVerifier:    recallServices.CoVeVerifier,
 		llmProvider:     recallServices.LLMProvider,
+		taskOperator:    taskOperator,
+		intentGate:      intentGate,
 		taskService:     taskService,
 		modeCtrl:        a.Execution,
+		taskManager:     taskManager,
 		enforcer:        a.Enforcement,
 		ctx:             ctx,
 		cancel:          cancel,
@@ -362,6 +361,108 @@ func (s *Server) handleToolsList(req *MCPRequest) {
 				"properties": map[string]interface{}{},
 			},
 		},
+		{
+			"name":        "task_list",
+			"description": "List tasks tracked in tinyTasks.md.",
+			"inputSchema": map[string]interface{}{
+				"type":       "object",
+				"properties": map[string]interface{}{},
+			},
+		},
+		{
+			"name":        "task_add",
+			"description": "Add a new task to tinyTasks.md via the server-managed TaskManager.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"title": map[string]interface{}{
+						"type":        "string",
+						"description": "Top-level task title",
+					},
+					"section": map[string]interface{}{
+						"type":        "string",
+						"description": "Optional section heading",
+					},
+					"subtasks": map[string]interface{}{
+						"type": "array",
+						"items": map[string]interface{}{
+							"type": "object",
+							"properties": map[string]interface{}{
+								"title": map[string]interface{}{
+									"type":        "string",
+									"description": "Subtask title",
+								},
+								"completed": map[string]interface{}{
+									"type":        "boolean",
+									"description": "Whether the subtask is already done",
+								},
+							},
+							"required": []string{"title"},
+						},
+					},
+				},
+				"required": []string{"title"},
+			},
+		},
+		{
+			"name":        "task_update",
+			"description": "Update the title or subtasks of an existing task via TaskManager.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"task_id": map[string]interface{}{
+						"type":        "string",
+						"description": "Identifier of the task to update",
+					},
+					"title": map[string]interface{}{
+						"type":        "string",
+						"description": "New title for the task",
+					},
+					"subtasks": map[string]interface{}{
+						"type": "array",
+						"items": map[string]interface{}{
+							"type": "object",
+							"properties": map[string]interface{}{
+								"title": map[string]interface{}{
+									"type":        "string",
+									"description": "Subtask title",
+								},
+								"completed": map[string]interface{}{
+									"type":        "boolean",
+									"description": "Whether the subtask is done",
+								},
+							},
+							"required": []string{"title"},
+						},
+					},
+				},
+				"required": []string{"task_id"},
+			},
+		},
+		{
+			"name":        "task_complete",
+			"description": "Mark every checkbox within a task as completed through TaskManager.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"task_id": map[string]interface{}{
+						"type":        "string",
+						"description": "Identifier of the task to complete",
+					},
+				},
+				"required": []string{"task_id"},
+			},
+		},
+	}
+
+	for _, tool := range tools {
+		if name, ok := tool["name"].(string); ok {
+			if def, exists := intent.Lookup(name); exists {
+				for k, v := range def.Metadata() {
+					tool[k] = v
+				}
+			}
+		}
 	}
 
 	response := map[string]interface{}{
@@ -425,6 +526,14 @@ func (s *Server) handleToolCall(req *MCPRequest) {
 		s.handleMemorySetMode(req, argsBytes)
 	case "memory_check_task_authority":
 		s.handleMemoryCheckTaskAuthority(req)
+	case "task_list":
+		s.handleTaskList(req)
+	case "task_add":
+		s.handleTaskAdd(req, argsBytes)
+	case "task_update":
+		s.handleTaskUpdate(req, argsBytes)
+	case "task_complete":
+		s.handleTaskComplete(req, argsBytes)
 	default:
 		s.sendError(req.ID, -32601, fmt.Sprintf("Tool not found: %s", params.Name))
 	}
@@ -433,6 +542,10 @@ func (s *Server) handleToolCall(req *MCPRequest) {
 func (s *Server) handleMemorySetMode(req *MCPRequest, args json.RawMessage) {
 	if args == nil {
 		s.sendToolError(req.ID, -32602, "Missing arguments for memory_set_mode", "memory_set_mode")
+		return
+	}
+
+	if _, ok := s.ensureIntent(req, "memory_set_mode", execution.ActionModeDeclaration); !ok {
 		return
 	}
 
@@ -458,7 +571,7 @@ func (s *Server) handleMemorySetMode(req *MCPRequest, args json.RawMessage) {
 	if s.enforcer != nil {
 		s.enforcer.SetMode(string(mode))
 		s.recordEnforcementEvent(enforcement.Event{
-			Code:     enforcementCodeModeUpdated,
+			Code:     server.EnforcementCodeModeUpdated,
 			Boundary: "execution_mode",
 			Mode:     string(mode),
 			Outcome:  enforcement.OutcomeAllow,
@@ -482,6 +595,10 @@ func (s *Server) handleMemorySetMode(req *MCPRequest, args json.RawMessage) {
 }
 
 func (s *Server) handleMemoryRunMetadata(req *MCPRequest) {
+	if _, ok := s.ensureIntent(req, "memory_run_metadata", execution.ActionMemoryRunMetadata); !ok {
+		return
+	}
+
 	if s.enforcer == nil {
 		s.sendToolError(req.ID, -32603, "Enforcement metadata unavailable", "memory_run_metadata")
 		return
@@ -511,64 +628,23 @@ func (s *Server) handleMemoryRunMetadata(req *MCPRequest) {
 }
 
 func (s *Server) handleMemoryCheckTaskAuthority(req *MCPRequest) {
-	// Read tinyTasks.md from project root
-	tasksPath := filepath.Join(s.app.Project.Path, "tinyTasks.md")
+	if _, ok := s.ensureIntent(req, "memory_check_task_authority", execution.ActionTaskAuthority); !ok {
+		return
+	}
 
-	exists := false
-	uncheckedTasks := []string{}
-	authorization := "create_allowed"
-	var fileBytes []byte
-
-	// Check if file exists
-	if _, err := os.Stat(tasksPath); err == nil {
-		exists = true
-
-		// Read file and parse for unchecked tasks
-		content, err := os.ReadFile(tasksPath)
-		if err == nil {
-			fileBytes = content
-			lines := strings.Split(string(content), "\n")
-			for _, line := range lines {
-				trimmed := strings.TrimSpace(line)
-				// Look for unchecked task markers: "- [ ]" or "* [ ]"
-				if strings.HasPrefix(trimmed, "- [ ]") || strings.HasPrefix(trimmed, "* [ ]") {
-					// Extract task text after the marker
-					task := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(trimmed, "- [ ]"), "* [ ]"))
-					uncheckedTasks = append(uncheckedTasks, task)
-				}
+	result, err := server.BuildTaskAuthorityPayload(s.taskManager)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			result = map[string]interface{}{
+				"exists":          false,
+				"unchecked_tasks": []string{},
+				"authorization":   "create_allowed",
+				"task_count":      0,
 			}
-
-			// Determine authorization status
-			if len(uncheckedTasks) > 0 {
-				authorization = "authorized"
-			} else {
-				authorization = "unauthorized"
-			}
+		} else {
+			s.sendToolError(req.ID, -32603, fmt.Sprintf("Failed to describe task authority: %v", err), "memory_check_task_authority")
+			return
 		}
-	}
-
-	var taskSignals map[string]interface{}
-	if len(uncheckedTasks) > 0 && len(fileBytes) > 0 {
-		if signals, err := buildNextTaskSignals(fileBytes); err == nil && len(signals) > 0 {
-			taskSignals = signals
-		}
-	}
-
-	// task_signals are purely observational metadata for agent guidance, dashboards, and logging and must not influence gating or enforcement.
-	// Build response
-	result := map[string]interface{}{
-		"exists":          exists,
-		"unchecked_tasks": uncheckedTasks,
-		"authorization":   authorization,
-		"task_count":      len(uncheckedTasks),
-	}
-
-	if exists && authorization == "authorized" {
-		result["next_task"] = uncheckedTasks[0]
-	}
-
-	if taskSignals != nil {
-		result["task_signals"] = taskSignals
 	}
 
 	payload, err := json.Marshal(result)
@@ -593,19 +669,13 @@ func (s *Server) handleMemoryCheckTaskAuthority(req *MCPRequest) {
 	s.sendResponse(response)
 }
 
-func buildNextTaskSignals(content []byte) (map[string]interface{}, error) {
-	reader := bytes.NewReader(content)
-	parsedTasks, err := tasks.ParseTasks(reader)
-	if err != nil {
-		return nil, err
-	}
-
+func buildNextTaskSignalsFromList(parsedTasks []*tasks.Task) map[string]interface{} {
 	for _, task := range parsedTasks {
 		if task.Completed {
 			continue
 		}
 
-		signals := map[string]interface{}{
+		return map[string]interface{}{
 			"steps_total":      task.StepsTotal,
 			"steps_done":       task.StepsDone,
 			"has_subtasks":     task.StepsTotal > 0,
@@ -613,35 +683,202 @@ func buildNextTaskSignals(content []byte) (map[string]interface{}, error) {
 			"section_title":    task.Section,
 			"is_flat_task":     task.StepsTotal == 0,
 		}
-
-		return signals, nil
 	}
 
-	return nil, nil
+	return nil
+}
+
+func (s *Server) handleTaskList(req *MCPRequest) {
+	if _, ok := s.ensureIntent(req, "task_list", execution.ActionTaskList); !ok {
+		return
+	}
+	if s.taskOperator == nil {
+		s.sendToolError(req.ID, -32603, "Task operator unavailable", "task_list")
+		return
+	}
+
+	tasks, err := s.taskOperator.List()
+	if err != nil {
+		s.sendToolError(req.ID, -32603, fmt.Sprintf("Failed to list tasks: %v", err), "task_list")
+		return
+	}
+
+	s.sendJSONResult(req.ID, tasks, "task_list")
+}
+
+func (s *Server) handleTaskAdd(req *MCPRequest, args json.RawMessage) {
+	if args == nil {
+		s.sendToolError(req.ID, -32602, "Missing arguments for task_add", "task_add")
+		return
+	}
+	if _, ok := s.ensureIntent(req, "task_add", execution.ActionTaskAdd); !ok {
+		return
+	}
+	if s.taskOperator == nil {
+		s.sendToolError(req.ID, -32603, "Task operator unavailable", "task_add")
+		return
+	}
+
+	var payload struct {
+		Title    string                    `json:"title"`
+		Section  string                    `json:"section"`
+		Subtasks []server.TaskSubtaskInput `json:"subtasks"`
+	}
+	if err := json.Unmarshal(args, &payload); err != nil {
+		s.sendToolError(req.ID, -32602, "Invalid arguments for task_add", "task_add")
+		return
+	}
+
+	title := strings.TrimSpace(payload.Title)
+	if title == "" {
+		s.sendToolError(req.ID, -32602, "Task title is required", "task_add")
+		return
+	}
+
+	def := tasks.TaskDefinition{
+		Title:    title,
+		Section:  strings.TrimSpace(payload.Section),
+		Subtasks: server.BuildSubtaskSpecs(payload.Subtasks),
+	}
+
+	task, err := s.taskOperator.Add(def)
+	if err != nil {
+		s.sendToolError(req.ID, -32603, fmt.Sprintf("Failed to add task: %v", err), "task_add")
+		return
+	}
+
+	s.sendJSONResult(req.ID, task, "task_add")
+}
+
+func (s *Server) handleTaskUpdate(req *MCPRequest, args json.RawMessage) {
+	if args == nil {
+		s.sendToolError(req.ID, -32602, "Missing arguments for task_update", "task_update")
+		return
+	}
+	if _, ok := s.ensureIntent(req, "task_update", execution.ActionTaskUpdate); !ok {
+		return
+	}
+	if s.taskOperator == nil {
+		s.sendToolError(req.ID, -32603, "Task operator unavailable", "task_update")
+		return
+	}
+
+	var payload struct {
+		TaskID   string                     `json:"task_id"`
+		Title    *string                    `json:"title"`
+		Subtasks *[]server.TaskSubtaskInput `json:"subtasks"`
+	}
+	if err := json.Unmarshal(args, &payload); err != nil {
+		s.sendToolError(req.ID, -32602, "Invalid arguments for task_update", "task_update")
+		return
+	}
+
+	taskID := strings.TrimSpace(payload.TaskID)
+	if taskID == "" {
+		s.sendToolError(req.ID, -32602, "task_id is required", "task_update")
+		return
+	}
+
+	update := tasks.TaskUpdate{}
+	if payload.Title != nil {
+		trimmed := strings.TrimSpace(*payload.Title)
+		update.Title = &trimmed
+	}
+	if payload.Subtasks != nil {
+		specs := server.BuildSubtaskSpecs(*payload.Subtasks)
+		update.Subtasks = &specs
+	}
+
+	task, err := s.taskOperator.Update(taskID, update)
+	if err != nil {
+		s.sendToolError(req.ID, -32603, fmt.Sprintf("Failed to update task: %v", err), "task_update")
+		return
+	}
+
+	s.sendJSONResult(req.ID, task, "task_update")
+}
+
+func (s *Server) handleTaskComplete(req *MCPRequest, args json.RawMessage) {
+	if args == nil {
+		s.sendToolError(req.ID, -32602, "Missing arguments for task_complete", "task_complete")
+		return
+	}
+	if _, ok := s.ensureIntent(req, "task_complete", execution.ActionTaskComplete); !ok {
+		return
+	}
+	if s.taskOperator == nil {
+		s.sendToolError(req.ID, -32603, "Task operator unavailable", "task_complete")
+		return
+	}
+
+	var payload struct {
+		TaskID string `json:"task_id"`
+	}
+	if err := json.Unmarshal(args, &payload); err != nil {
+		s.sendToolError(req.ID, -32602, "Invalid arguments for task_complete", "task_complete")
+		return
+	}
+
+	taskID := strings.TrimSpace(payload.TaskID)
+	if taskID == "" {
+		s.sendToolError(req.ID, -32602, "task_id is required", "task_complete")
+		return
+	}
+
+	task, err := s.taskOperator.Complete(taskID)
+	if err != nil {
+		s.sendToolError(req.ID, -32603, fmt.Sprintf("Failed to complete task: %v", err), "task_complete")
+		return
+	}
+
+	s.sendJSONResult(req.ID, task, "task_complete")
+}
+
+func (s *Server) sendJSONResult(id *int, payload interface{}, tool string) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		s.sendToolError(id, -32603, fmt.Sprintf("Failed to marshal %s result: %v", tool, err), tool)
+		return
+	}
+	response := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"result": map[string]interface{}{
+			"content": []map[string]interface{}{
+				{
+					"type": "text",
+					"text": string(data),
+				},
+			},
+		},
+		"id": id,
+	}
+	s.sendResponse(response)
 }
 
 // checkAndAutoCreateTaskFile detects multi-step work and creates inert tinyTasks.md if needed
 func (s *Server) checkAndAutoCreateTaskFile(context string) error {
-	// Check if tinyTasks.md already exists
-	tasksPath := filepath.Join(s.app.Project.Path, "tinyTasks.md")
-	if _, err := os.Stat(tasksPath); err == nil {
-		// File exists, no need to create
+	exists, err := s.taskManager.Exists()
+	if err != nil {
+		return err
+	}
+	if exists {
 		return nil
 	}
 
-	// Check if this looks like multi-step work
 	if !tasks.ShouldAutoCreateTaskFile(context) {
-		// Not multi-step, don't create
 		return nil
 	}
 
-	// Create the inert task file
-	return tasks.CreateInertTaskFile(s.app.Project.Path)
+	return s.taskManager.CreateInertFile()
 }
 
 func (s *Server) handleMemoryClaimSuccess(req *MCPRequest, args json.RawMessage) {
 	if args == nil {
 		s.sendToolError(req.ID, -32602, "Missing arguments for memory_claim_success", "memory_claim_success")
+		return
+	}
+
+	if _, ok := s.ensureIntent(req, "memory_claim_success", execution.ActionClaimSuccess); !ok {
 		return
 	}
 
@@ -664,7 +901,7 @@ func (s *Server) handleMemoryClaimSuccess(req *MCPRequest, args json.RawMessage)
 		s.enforcer.RecordClaimedSuccess()
 		if !payload.Enforced {
 			s.recordEnforcementEvent(enforcement.Event{
-				Code:     enforcementCodeClaimViolation,
+				Code:     server.EnforcementCodeClaimViolation,
 				Boundary: payload.Boundary,
 				Mode:     string(s.modeCtrl.Mode()),
 				Outcome:  enforcement.OutcomeViolation,
@@ -701,9 +938,7 @@ func (s *Server) handleMemoryQuery(req *MCPRequest, args json.RawMessage) {
 		return
 	}
 
-	// Memory query allowed in PASSIVE mode (observation is free)
-	// This ensures memory_query can be called in any mode (PASSIVE, GUARDED, STRICT)
-	if !s.requireMode(req.ID, "memory_query", execution.ActionMemoryQuery, execution.ModePassive) {
+	if _, ok := s.ensureIntent(req, "memory_query", execution.ActionMemoryQuery); !ok {
 		return
 	}
 
@@ -722,7 +957,9 @@ func (s *Server) handleMemoryQuery(req *MCPRequest, args json.RawMessage) {
 	}
 
 	// Mark that memory recall was performed (required before mutations)
-	s.hasRecalled = true
+	if s.intentGate != nil {
+		s.intentGate.RecordRecall()
+	}
 
 	// Apply CoVe recall filtering if enabled
 	if s.coveVerifier != nil && len(results) > 0 {
@@ -808,9 +1045,7 @@ func (s *Server) handleMemoryRecent(req *MCPRequest, args json.RawMessage) {
 		recentReq.Count = 10
 	}
 
-	// Memory recent allowed in PASSIVE mode (observation is free)
-	// This ensures memory_recent can be called in any mode (PASSIVE, GUARDED, STRICT)
-	if !s.requireMode(req.ID, "memory_recent", execution.ActionMemoryQuery, execution.ModePassive) {
+	if _, ok := s.ensureIntent(req, "memory_recent", execution.ActionMemoryQuery); !ok {
 		return
 	}
 
@@ -821,7 +1056,9 @@ func (s *Server) handleMemoryRecent(req *MCPRequest, args json.RawMessage) {
 	}
 
 	// Mark that memory recall was performed (required before mutations)
-	s.hasRecalled = true
+	if s.intentGate != nil {
+		s.intentGate.RecordRecall()
+	}
 
 	// Take only the most recent ones
 	limit := recentReq.Count
@@ -877,6 +1114,10 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 		} `json:"evidence"`
 	}
 
+	if _, ok := s.ensureIntent(req, "memory_write", execution.ActionMemoryWrite); !ok {
+		return
+	}
+
 	if err := json.Unmarshal(args, &writeReq); err != nil {
 		s.sendToolError(req.ID, -32602, "Invalid arguments for memory.write", "memory_write")
 		return
@@ -890,18 +1131,21 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 	}
 
 	if isTinyTasksPath(writeReq.Source) {
-		if !s.requireMode(req.ID, "memory_write", execution.ActionTinyTasksWrite, execution.ModeStrict) {
-			return
-		}
+		s.sendToolError(req.ID, -32603, "Direct tinyTasks.md mutations are not allowed; use the task_* tools", "memory_write")
+		return
 	}
 
-	if memType == memory.Task {
-		if !s.requireMode(req.ID, "memory_write", execution.ActionTaskMutation, execution.ModeStrict) {
-			return
-		}
-	} else {
-		if !s.requireMode(req.ID, "memory_write", execution.ActionMemoryWrite, execution.ModeGuarded) {
-			return
+	if s.intentGate != nil {
+		if memType == memory.Task {
+			if err := s.intentGate.EnforceMode(execution.ActionTaskMutation, execution.ModeStrict); err != nil {
+				s.sendToolError(req.ID, -32603, err.Error(), "memory_write")
+				return
+			}
+		} else {
+			if err := s.intentGate.EnforceMode(execution.ActionMemoryWrite, execution.ModeGuarded); err != nil {
+				s.sendToolError(req.ID, -32603, err.Error(), "memory_write")
+				return
+			}
 		}
 	}
 
@@ -909,34 +1153,6 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 	// Use the memory summary and detail to detect multi-step patterns
 	workContext := fmt.Sprintf("%s %s", writeReq.Summary, writeReq.Detail)
 	_ = s.checkAndAutoCreateTaskFile(workContext) // Best-effort, don't fail on error
-
-	// ENFORCEMENT: Recall required before mutation (GUARDED+ modes)
-	// This ensures that observation (memory_query/memory_recent) happens before mutation (memory_write)
-	// Memory recall tools are allowed in all modes (PASSIVE level), but must be called before mutations
-	currentMode := s.modeCtrl.Mode()
-	if !s.hasRecalled {
-		if currentMode >= execution.ModeGuarded {
-			// BLOCK in GUARDED/STRICT modes
-			s.recordEnforcementEvent(enforcement.Event{
-				Code:     enforcementCodeRecallRequired,
-				Boundary: "memory_write",
-				Mode:     string(currentMode),
-				Outcome:  enforcement.OutcomeBlock,
-				Details:  "Memory recall (memory_query or memory_recent) required before mutations in GUARDED/STRICT modes",
-			})
-			s.sendToolError(req.ID, -32603, "Memory recall required: Call memory_query or memory_recent before memory_write in GUARDED/STRICT modes", "memory_write")
-			return
-		} else {
-			// LOG VIOLATION in PASSIVE mode (don't block)
-			s.recordEnforcementEvent(enforcement.Event{
-				Code:     enforcementCodeRecallRequired,
-				Boundary: "memory_write",
-				Mode:     string(currentMode),
-				Outcome:  enforcement.OutcomeViolation,
-				Details:  "Contract violation: Memory recall should precede mutations (logged in PASSIVE mode, not enforced)",
-			})
-		}
-	}
 
 	// Optional CoVe filtering for non-fact writes (fail-safe on error)
 	if s.coveVerifier != nil && memType != memory.Fact {
@@ -990,7 +1206,7 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 	if memType == memory.Fact {
 		if len(writeReq.Evidence) == 0 {
 			s.recordEnforcementEvent(enforcement.Event{
-				Code:     enforcementCodeFactEvidence,
+				Code:     server.EnforcementCodeFactEvidence,
 				Boundary: string(execution.ActionFactPromotion),
 				Mode:     string(s.modeCtrl.Mode()),
 				Outcome:  enforcement.OutcomeBlock,
@@ -1044,8 +1260,7 @@ func (s *Server) handleMemoryWrite(req *MCPRequest, args json.RawMessage) {
 
 // handleMemoryStats handles memory statistics requests
 func (s *Server) handleMemoryStats(req *MCPRequest) {
-	// Memory stats is an observation tool, allowed in PASSIVE mode (observation is free)
-	if !s.requireMode(req.ID, "memory_stats", execution.ActionMemoryQuery, execution.ModePassive) {
+	if _, ok := s.ensureIntent(req, "memory_stats", execution.ActionMemoryStats); !ok {
 		return
 	}
 	// Get all memories to calculate stats
@@ -1105,8 +1320,7 @@ func (s *Server) handleMemoryStats(req *MCPRequest) {
 
 // handleMemoryHealth handles memory health check requests
 func (s *Server) handleMemoryHealth(req *MCPRequest) {
-	// Memory health is an observation tool, allowed in PASSIVE mode (observation is free)
-	if !s.requireMode(req.ID, "memory_health", execution.ActionMemoryQuery, execution.ModePassive) {
+	if _, ok := s.ensureIntent(req, "memory_health", execution.ActionMemoryHealth); !ok {
 		return
 	}
 	// Check database connectivity
@@ -1144,8 +1358,7 @@ func (s *Server) handleMemoryHealth(req *MCPRequest) {
 
 // handleMemoryDoctor handles memory doctor diagnostic requests
 func (s *Server) handleMemoryDoctor(req *MCPRequest) {
-	// Memory doctor is an observation tool, allowed in PASSIVE mode (observation is free)
-	if !s.requireMode(req.ID, "memory_doctor", execution.ActionMemoryQuery, execution.ModePassive) {
+	if _, ok := s.ensureIntent(req, "memory_doctor", execution.ActionMemoryDoctor); !ok {
 		return
 	}
 	doctorRunner := doctor.NewRunnerWithMode(s.app.Core.Config, s.app.Core.DB, s.app.Project.ID, s.app.Memory, doctor.MCPMode)
@@ -1294,49 +1507,19 @@ func (s *Server) recordEnforcementEvent(evt enforcement.Event) {
 	}
 }
 
-func (s *Server) requireMode(reqID *int, tool string, action execution.Action, minimum execution.Mode) bool {
-	if s.modeCtrl == nil {
-		return true
+func (s *Server) ensureIntent(req *MCPRequest, tool string, action execution.Action) (intent.Definition, bool) {
+	if s.intentGate == nil {
+		s.sendToolError(req.ID, -32603, "Intent gate unavailable", tool)
+		return intent.Definition{}, false
 	}
 
-	if err := s.modeCtrl.RefreshTinyTasksState(); err != nil {
-		s.app.Core.Logger.Warn("Failed to inspect tinyTasks.md", zap.Error(err))
+	def, err := s.intentGate.EnsureIntent(tool, action)
+	if err != nil {
+		s.sendToolError(req.ID, -32603, err.Error(), tool)
+		return def, false
 	}
 
-	mode := s.modeCtrl.Mode()
-	modeSet := s.modeCtrl.ModeSet()
-
-	if err := s.modeCtrl.Enforce(action, minimum); err != nil {
-		message := err.Error()
-		code := enforcementCodeModeTooLow
-		if !modeSet {
-			code = enforcementCodeModeNotSet
-		}
-		if errors.Is(err, execution.ErrStrictRequired) {
-			message = "STRICT mode required"
-			code = enforcementCodeStrictRequired
-		}
-
-		s.recordEnforcementEvent(enforcement.Event{
-			Code:     code,
-			Boundary: string(action),
-			Mode:     string(mode),
-			Outcome:  enforcement.OutcomeBlock,
-			Details:  message,
-		})
-
-		s.sendToolError(reqID, -32603, message, tool)
-		return false
-	}
-
-	s.recordEnforcementEvent(enforcement.Event{
-		Code:     enforcementCodeModeCompliance,
-		Boundary: string(action),
-		Mode:     string(mode),
-		Outcome:  enforcement.OutcomeAllow,
-	})
-
-	return true
+	return def, true
 }
 
 func isTinyTasksPath(path string) bool {

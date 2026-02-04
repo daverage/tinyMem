@@ -49,11 +49,11 @@ func runDashboardCmd(a *app.App, cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	// Synchronize tasks from tinyTasks.md if it exists
-	taskService := tasks.NewService(a.Core.DB, a.Memory, a.Project.ID)
 	taskFilePath := filepath.Join(projectRoot, "tinyTasks.md")
-	if _, err := os.Stat(taskFilePath); err == nil {
-		if err := taskService.SyncTasksFromFile(taskFilePath); err != nil {
+	taskManager := tasks.NewTaskManager(taskFilePath)
+	taskService := tasks.NewService(a.Core.DB, a.Memory, a.Project.ID, taskManager)
+	if exists, err := taskManager.Exists(); err == nil && exists {
+		if err := taskService.SyncTasksFromFile(""); err != nil {
 			fmt.Printf("Warning: failed to synchronize tasks from tinyTasks.md: %v\n", err)
 		}
 	}

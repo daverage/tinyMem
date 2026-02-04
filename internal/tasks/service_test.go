@@ -2,6 +2,8 @@ package tasks
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,7 +29,7 @@ func TestParseTasks(t *testing.T) {
     - [x] Add usage examples
     - [ ] Update API reference`
 
-	reader := &ByteReader{Data: []byte(sampleContent)}
+	reader := strings.NewReader(sampleContent)
 	tasks, err := ParseTasks(reader)
 	require.NoError(t, err)
 	assert.Len(t, tasks, 2)
@@ -82,7 +84,8 @@ func TestTaskService(t *testing.T) {
 	memoryService := memory.NewService(db)
 
 	// Initialize task service
-	service := NewService(db, memoryService, "test-project")
+	taskManager := NewTaskManager(filepath.Join(cfg.ProjectRoot, "tinyTasks.md"))
+	service := NewService(db, memoryService, "test-project", taskManager)
 
 	// Test creating and retrieving a task
 	task := &Task{
@@ -127,12 +130,13 @@ func TestTaskSync(t *testing.T) {
 	// Initialize memory service
 	memoryService := memory.NewService(db)
 
-	// Initialize task service
-	service := NewService(db, memoryService, "test-project")
-
 	// Create a temporary tinyTasks.md file
 	tempDir := t.TempDir()
-	taskFilePath := tempDir + "/tinyTasks.md"
+	taskFilePath := filepath.Join(tempDir, "tinyTasks.md")
+	taskManager := NewTaskManager(taskFilePath)
+
+	// Initialize task service
+	service := NewService(db, memoryService, "test-project", taskManager)
 
 	sampleContent := `# Test Tasks
 
@@ -168,38 +172,4 @@ func TestTaskSync(t *testing.T) {
 	assert.Equal(t, 2, totalTasks)
 	assert.Equal(t, 1, completedTasks)
 	assert.Equal(t, 1, incompleteTasks)
-}
-
-func TestHasTaskFile(t *testing.T) {
-	// Create a temporary directory
-	tempDir := t.TempDir()
-
-	// Test when file doesn't exist
-	exists, err := HasTaskFile(tempDir)
-	assert.NoError(t, err)
-	assert.False(t, exists)
-
-	// Create the task file
-	taskFilePath := tempDir + "/tinyTasks.md"
-	err = os.WriteFile(taskFilePath, []byte("# Test Tasks\n\n- [ ] Test task"), 0644)
-	require.NoError(t, err)
-
-	// Test when file exists
-	exists, err = HasTaskFile(tempDir)
-	assert.NoError(t, err)
-	assert.True(t, exists)
-}
-
-func TestComputeHash(t *testing.T) {
-	// Test that the same content produces the same hash
-	content1 := []byte("test content")
-	content2 := []byte("test content")
-	content3 := []byte("different content")
-
-	hash1 := computeHash(content1)
-	hash2 := computeHash(content2)
-	hash3 := computeHash(content3)
-
-	assert.Equal(t, hash1, hash2)
-	assert.NotEqual(t, hash1, hash3)
 }

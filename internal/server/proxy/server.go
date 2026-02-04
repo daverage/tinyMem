@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,6 +24,8 @@ import (
 	"github.com/daverage/tinymem/internal/llm"
 	"github.com/daverage/tinymem/internal/memory"
 	"github.com/daverage/tinymem/internal/recall"
+	"github.com/daverage/tinymem/internal/server"
+	"github.com/daverage/tinymem/internal/server/taskops"
 	"github.com/daverage/tinymem/internal/tasks"
 	"go.uber.org/zap"
 )
@@ -59,6 +62,9 @@ type Server struct {
 	recallEngine    recall.Recaller
 	extractor       *extract.Extractor
 	taskService     *tasks.Service
+	taskManager     *tasks.TaskManager
+	taskOperator    *taskops.Operator
+	intentGate      *server.IntentGate
 	responseBuffer  chan ResponseCapture // Channel for capturing responses for extraction
 	shutdownCh      chan struct{}
 	processorDone   chan struct{} // Signals when processResponseCaptures has finished
@@ -77,9 +83,13 @@ func NewServer(a *app.App) *Server {
 	// Initialize shared recall services
 	recallServices := a.InitializeRecallServices()
 
+	taskManager := tasks.NewTaskManager(filepath.Join(a.Project.Path, "tinyTasks.md"))
+	taskService := tasks.NewService(a.Core.DB, a.Memory, a.Project.ID, taskManager)
+	taskOperator := taskops.New(taskManager, taskService)
+	intentGate := server.NewIntentGate(a.Execution, a.Enforcement, a.Core.Logger)
+
 	// Create proxy-specific services
 	injector := inject.NewMemoryInjector(recallServices.RecallEngine, a.Core.Logger, a.Core.Config.AlwaysIncludeUserPrompt)
-	taskService := tasks.NewService(a.Core.DB, a.Memory, a.Project.ID)
 
 	// Set CoVe verifier on injector for recall filtering if CoVe is enabled
 	if recallServices.CoVeVerifier != nil {
@@ -99,6 +109,9 @@ func NewServer(a *app.App) *Server {
 		recallEngine:    recallServices.RecallEngine,
 		extractor:       recallServices.Extractor,
 		taskService:     taskService,
+		taskManager:     taskManager,
+		taskOperator:    taskOperator,
+		intentGate:      intentGate,
 		responseBuffer:  make(chan ResponseCapture, 10), // Buffered channel to prevent blocking
 		shutdownCh:      make(chan struct{}),
 		processorDone:   make(chan struct{}),
@@ -152,6 +165,10 @@ func (s *Server) processResponseCaptures() {
 // Start starts the proxy server
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
+
+	// Proxy tool endpoints mirror MCP's authority path
+	mux.HandleFunc("/tools/list", s.handleProxyToolsList)
+	mux.HandleFunc("/tools/call", s.handleProxyToolCall)
 
 	// Proxy endpoint for chat completions
 	mux.HandleFunc("/v1/chat/completions", s.handleChatCompletions)
@@ -520,6 +537,248 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"status": "healthy",
 		"time":   time.Now().Format(time.RFC3339),
 	})
+}
+
+func (s *Server) handleProxyToolsList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var payload struct {
+		ID *int `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil && !errors.Is(err, io.EOF) {
+		s.proxySendToolError(w, nil, fmt.Sprintf("invalid request payload: %v", err))
+		return
+	}
+
+	response := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"result": map[string]interface{}{
+			"tools": server.BuildToolList(),
+		},
+		"id": payload.ID,
+	}
+	s.proxyWriteJSON(w, response, http.StatusOK)
+}
+
+func (s *Server) handleProxyToolCall(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var payload struct {
+		ID        *int                   `json:"id"`
+		Name      string                 `json:"name"`
+		Arguments map[string]interface{} `json:"arguments"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		s.proxySendToolError(w, nil, fmt.Sprintf("invalid request payload: %v", err))
+		return
+	}
+
+	if payload.Name == "" {
+		s.proxySendToolError(w, payload.ID, "tool name is required")
+		return
+	}
+
+	switch payload.Name {
+	case "task_list":
+		if _, err := s.intentGate.EnsureIntent("task_list", execution.ActionTaskList); err != nil {
+			s.proxySendToolError(w, payload.ID, err.Error())
+			return
+		}
+		if s.taskOperator == nil {
+			s.proxySendToolError(w, payload.ID, "task operator not configured")
+			return
+		}
+		tasks, err := s.taskOperator.List()
+		if err != nil {
+			s.proxySendToolError(w, payload.ID, fmt.Sprintf("failed to list tasks: %v", err))
+			return
+		}
+		s.proxySendJSONResult(w, payload.ID, tasks, "task_list")
+	case "task_add":
+		if _, err := s.intentGate.EnsureIntent("task_add", execution.ActionTaskAdd); err != nil {
+			s.proxySendToolError(w, payload.ID, err.Error())
+			return
+		}
+		if s.taskOperator == nil {
+			s.proxySendToolError(w, payload.ID, "task operator not configured")
+			return
+		}
+
+		var args struct {
+			Title    string                    `json:"title"`
+			Section  string                    `json:"section"`
+			Subtasks []server.TaskSubtaskInput `json:"subtasks"`
+		}
+		if err := decodeMapToStruct(payload.Arguments, &args); err != nil {
+			s.proxySendToolError(w, payload.ID, fmt.Sprintf("invalid arguments: %v", err))
+			return
+		}
+
+		title := strings.TrimSpace(args.Title)
+		if title == "" {
+			s.proxySendToolError(w, payload.ID, "task title is required")
+			return
+		}
+
+		def := tasks.TaskDefinition{
+			Title:    title,
+			Section:  strings.TrimSpace(args.Section),
+			Subtasks: server.BuildSubtaskSpecs(args.Subtasks),
+		}
+
+		task, err := s.taskOperator.Add(def)
+		if err != nil {
+			s.proxySendToolError(w, payload.ID, fmt.Sprintf("failed to add task: %v", err))
+			return
+		}
+
+		s.proxySendJSONResult(w, payload.ID, task, "task_add")
+	case "task_update":
+		if _, err := s.intentGate.EnsureIntent("task_update", execution.ActionTaskUpdate); err != nil {
+			s.proxySendToolError(w, payload.ID, err.Error())
+			return
+		}
+		if s.taskOperator == nil {
+			s.proxySendToolError(w, payload.ID, "task operator not configured")
+			return
+		}
+
+		var args struct {
+			TaskID   string                     `json:"task_id"`
+			Title    *string                    `json:"title"`
+			Subtasks *[]server.TaskSubtaskInput `json:"subtasks"`
+		}
+		if err := decodeMapToStruct(payload.Arguments, &args); err != nil {
+			s.proxySendToolError(w, payload.ID, fmt.Sprintf("invalid arguments: %v", err))
+			return
+		}
+
+		taskID := strings.TrimSpace(args.TaskID)
+		if taskID == "" {
+			s.proxySendToolError(w, payload.ID, "task_id is required")
+			return
+		}
+
+		update := tasks.TaskUpdate{}
+		if args.Title != nil {
+			trimmed := strings.TrimSpace(*args.Title)
+			update.Title = &trimmed
+		}
+		if args.Subtasks != nil {
+			specs := server.BuildSubtaskSpecs(*args.Subtasks)
+			update.Subtasks = &specs
+		}
+
+		task, err := s.taskOperator.Update(taskID, update)
+		if err != nil {
+			s.proxySendToolError(w, payload.ID, fmt.Sprintf("failed to update task: %v", err))
+			return
+		}
+
+		s.proxySendJSONResult(w, payload.ID, task, "task_update")
+	case "task_complete":
+		if _, err := s.intentGate.EnsureIntent("task_complete", execution.ActionTaskComplete); err != nil {
+			s.proxySendToolError(w, payload.ID, err.Error())
+			return
+		}
+		if s.taskOperator == nil {
+			s.proxySendToolError(w, payload.ID, "task operator not configured")
+			return
+		}
+
+		var args struct {
+			TaskID string `json:"task_id"`
+		}
+		if err := decodeMapToStruct(payload.Arguments, &args); err != nil {
+			s.proxySendToolError(w, payload.ID, fmt.Sprintf("invalid arguments: %v", err))
+			return
+		}
+
+		taskID := strings.TrimSpace(args.TaskID)
+		if taskID == "" {
+			s.proxySendToolError(w, payload.ID, "task_id is required")
+			return
+		}
+
+		task, err := s.taskOperator.Complete(taskID)
+		if err != nil {
+			s.proxySendToolError(w, payload.ID, fmt.Sprintf("failed to complete task: %v", err))
+			return
+		}
+
+		s.proxySendJSONResult(w, payload.ID, task, "task_complete")
+	case "memory_check_task_authority":
+		if _, err := s.intentGate.EnsureIntent("memory_check_task_authority", execution.ActionTaskAuthority); err != nil {
+			s.proxySendToolError(w, payload.ID, err.Error())
+			return
+		}
+		result, err := server.BuildTaskAuthorityPayload(s.taskManager)
+		if err != nil {
+			s.proxySendToolError(w, payload.ID, fmt.Sprintf("failed to inspect task authority: %v", err))
+			return
+		}
+		s.proxySendJSONResult(w, payload.ID, result, "memory_check_task_authority")
+	default:
+		s.proxySendToolError(w, payload.ID, fmt.Sprintf("tool not supported: %s", payload.Name))
+	}
+}
+
+func (s *Server) proxySendJSONResult(w http.ResponseWriter, id *int, payload interface{}, tool string) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		s.proxySendToolError(w, id, fmt.Sprintf("Failed to marshal %s result: %v", tool, err))
+		return
+	}
+
+	response := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"result": map[string]interface{}{
+			"content": []map[string]interface{}{
+				{
+					"type": "text",
+					"text": string(data),
+				},
+			},
+		},
+		"id": id,
+	}
+
+	s.proxyWriteJSON(w, response, http.StatusOK)
+}
+
+func (s *Server) proxySendToolError(w http.ResponseWriter, id *int, message string) {
+	errorResp := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"error": map[string]interface{}{
+			"code":    -32603,
+			"message": message,
+		},
+		"id": id,
+	}
+	s.proxyWriteJSON(w, errorResp, http.StatusBadRequest)
+}
+
+func (s *Server) proxyWriteJSON(w http.ResponseWriter, payload interface{}, status int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func decodeMapToStruct(src map[string]interface{}, dest interface{}) error {
+	if src == nil {
+		return nil
+	}
+	data, err := json.Marshal(src)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, dest)
 }
 
 func (s *Server) writeModeHeader(w http.ResponseWriter) {

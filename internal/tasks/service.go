@@ -1,10 +1,9 @@
 package tasks
 
 import (
-	"crypto/sha256"
 	"fmt"
-	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -26,15 +25,17 @@ type Service struct {
 	memory    *memory.Service
 	projectID string
 	enforcer  *TaskSafetyEnforcer
+	manager   *TaskManager
 }
 
 // NewService creates a new task service
-func NewService(db *storage.DB, memoryService *memory.Service, projectID string) *Service {
+func NewService(db *storage.DB, memoryService *memory.Service, projectID string, manager *TaskManager) *Service {
 	return &Service{
 		db:        db,
 		memory:    memoryService,
 		projectID: projectID,
 		enforcer:  NewTaskSafetyEnforcer(),
+		manager:   manager,
 	}
 }
 
@@ -181,36 +182,27 @@ func (s *Service) DeleteTask(key string) error {
 
 // SyncTasksFromFile synchronizes tasks from the tinyTasks.md file to memory
 func (s *Service) SyncTasksFromFile(filePath string) error {
-	// Read and parse the file
-	fileBytes, err := readFileBytes(filePath)
+	tasks, err := s.manager.List()
 	if err != nil {
-		return fmt.Errorf("failed to read file: %w", err)
+		return fmt.Errorf("failed to list tasks: %w", err)
 	}
 
-	// Compute the file hash for comparison
-	fileHash := computeHash(fileBytes)
-
-	// Parse the tasks from the file
-	reader := &ByteReader{Data: fileBytes}
-	tasks, err := ParseTasks(reader)
+	fileHash, err := s.manager.Hash()
 	if err != nil {
-		return fmt.Errorf("failed to parse tasks: %w", err)
+		return fmt.Errorf("failed to hash tasks: %w", err)
 	}
 
-	// Update each task's metadata
 	currentTime := time.Now().Format(time.RFC3339)
 	for _, task := range tasks {
 		task.LastUpdated = currentTime
 		task.LastSeenHash = fileHash
 	}
 
-	// Get current tasks in memory
 	currentTasks, err := s.GetAllTasks()
 	if err != nil {
 		return fmt.Errorf("failed to get current tasks: %w", err)
 	}
 
-	// Create a map of current tasks by key for quick lookup
 	currentTaskKeys := make(map[string]*memory.Memory)
 	for _, task := range currentTasks {
 		if task.Key != nil {
@@ -218,53 +210,34 @@ func (s *Service) SyncTasksFromFile(filePath string) error {
 		}
 	}
 
-	// Process each parsed task
 	for _, task := range tasks {
-		// Create or update the task in memory
-		err := s.CreateOrUpdateTask(task)
-		if err != nil {
+		if err := s.CreateOrUpdateTask(task); err != nil {
 			return fmt.Errorf("failed to create/update task %s: %w", task.ID, err)
 		}
-
-		// Remove from the map since it's processed
 		delete(currentTaskKeys, task.ID)
 	}
 
-	// Any remaining tasks in the map should be removed (they're no longer in the file)
 	for key := range currentTaskKeys {
-		err := s.DeleteTask(key)
-		if err != nil {
-			// Log the error but continue processing other tasks
+		if err := s.DeleteTask(key); err != nil {
 			fmt.Printf("Warning: failed to delete obsolete task %s: %v\n", key, err)
 		}
 	}
 
-	// Check for drift between file and memory
 	return s.DetectAndRecoverDrift(filePath)
 }
 
 // DetectAndRecoverDrift checks for differences between file and memory and recovers if needed
 func (s *Service) DetectAndRecoverDrift(filePath string) error {
-	// Read and parse the file
-	fileBytes, err := readFileBytes(filePath)
+	parsedTasks, err := s.manager.List()
 	if err != nil {
-		return fmt.Errorf("failed to read file: %w", err)
+		return fmt.Errorf("failed to list tasks for drift detection: %w", err)
 	}
 
-	// Parse the tasks from the file
-	reader := &ByteReader{Data: fileBytes}
-	parsedTasks, err := ParseTasks(reader)
-	if err != nil {
-		return fmt.Errorf("failed to parse tasks: %w", err)
-	}
-
-	// Get current tasks in memory
 	memoryTasks, err := s.GetAllTasks()
 	if err != nil {
 		return fmt.Errorf("failed to get tasks from memory: %w", err)
 	}
 
-	// Create maps for comparison
 	fileTaskMap := make(map[string]*Task)
 	for _, task := range parsedTasks {
 		fileTaskMap[task.ID] = task
@@ -277,50 +250,41 @@ func (s *Service) DetectAndRecoverDrift(filePath string) error {
 		}
 	}
 
-	// Check for tasks that exist in memory but not in file
 	for key := range memoryTaskMap {
-		if _, existsInFile := fileTaskMap[key]; !existsInFile {
-			// Task exists in memory but not in file - remove it
-			err := s.DeleteTask(key)
-			if err != nil {
+		if _, exists := fileTaskMap[key]; !exists {
+			if err := s.DeleteTask(key); err != nil {
 				fmt.Printf("Warning: failed to delete obsolete task %s: %v\n", key, err)
 			}
 		}
 	}
 
-	// Check for differences in completion status and hash
-	fileHash := computeHash(fileBytes)
+	fileHash, err := s.manager.Hash()
+	if err != nil {
+		return fmt.Errorf("failed to hash tasks for drift detection: %w", err)
+	}
+
 	for _, fileTask := range fileTaskMap {
-		if memTask, existsInMemory := memoryTaskMap[fileTask.ID]; existsInMemory {
-			// Check if completion status differs or hash mismatch
+		if memTask, exists := memoryTaskMap[fileTask.ID]; exists {
 			completionMismatch := false
 			hashMismatch := false
 
-			// Extract completion status from memory detail
 			if memTask.Detail != "" {
 				if containsString(memTask.Detail, fmt.Sprintf("Completed: %t", !fileTask.Completed)) {
-					// The completion status in memory is opposite to file
 					completionMismatch = true
 				}
-
-				// Check if there's a hash stored in memory and compare
 				if fileTask.LastSeenHash != "" && !containsString(memTask.Detail, "Hash: "+fileTask.LastSeenHash) {
 					hashMismatch = true
 				}
 			}
 
 			if completionMismatch || hashMismatch {
-				// Discard and rebuild from file
-				err := s.DeleteTask(fileTask.ID)
-				if err != nil {
+				if err := s.DeleteTask(fileTask.ID); err != nil {
 					fmt.Printf("Warning: failed to delete drifted task %s: %v\n", fileTask.ID, err)
 				}
 
-				// Re-create from file data
 				fileTask.LastSeenHash = fileHash
 				fileTask.LastUpdated = time.Now().Format(time.RFC3339)
-				err = s.CreateOrUpdateTask(fileTask)
-				if err != nil {
+				if err := s.CreateOrUpdateTask(fileTask); err != nil {
 					return fmt.Errorf("failed to recreate task %s: %w", fileTask.ID, err)
 				}
 			}
@@ -359,11 +323,17 @@ func (s *Service) GetTaskStatus(projectPath string) (map[string]interface{}, err
 		}
 	}
 
-	hasTaskFile, err := HasTaskFile(projectPath)
+	hasTaskFile, err := s.manager.Exists()
 	if err != nil {
-		// If there's an error checking for the file, we'll just set it to false
-		hasTaskFile = false
+		return nil, err
 	}
+
+	fileTasks, err := s.manager.List()
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+
+	metrics := collectTaskShapeMetrics(fileTasks)
 
 	status := map[string]interface{}{
 		"total_tasks":      totalTasks,
@@ -372,62 +342,11 @@ func (s *Service) GetTaskStatus(projectPath string) (map[string]interface{}, err
 		"has_task_file":    hasTaskFile,
 	}
 
-	if metrics, err := collectTaskShapeMetrics(projectPath + "/tinyTasks.md"); err == nil {
-		status["tasks_with_subtasks"] = metrics.TasksWithSubtasks
-		status["flat_tasks"] = metrics.FlatTasks
-		status["average_steps_per_task"] = metrics.AverageStepsPerTask
-	}
+	status["tasks_with_subtasks"] = metrics.TasksWithSubtasks
+	status["flat_tasks"] = metrics.FlatTasks
+	status["average_steps_per_task"] = metrics.AverageStepsPerTask
 
 	return status, nil
-}
-
-// HasTaskFile checks if tinyTasks.md exists in the given directory
-func HasTaskFile(dirPath string) (bool, error) {
-	filePath := dirPath + "/tinyTasks.md"
-	_, err := os.Stat(filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
-}
-
-// GetTaskFileHash returns the hash of the tinyTasks.md file
-func GetTaskFileHash(dirPath string) (string, error) {
-	filePath := dirPath + "/tinyTasks.md"
-	fileBytes, err := readFileBytes(filePath)
-	if err != nil {
-		return "", err
-	}
-	return computeHash(fileBytes), nil
-}
-
-// ByteReader is a simple wrapper to implement io.Reader interface
-type ByteReader struct {
-	Data []byte
-	Pos  int
-}
-
-func (br *ByteReader) Read(p []byte) (n int, err error) {
-	if br.Pos >= len(br.Data) {
-		return 0, io.EOF
-	}
-	n = copy(p, br.Data[br.Pos:])
-	br.Pos += n
-	return n, nil
-}
-
-// Helper function to read file bytes
-func readFileBytes(filePath string) ([]byte, error) {
-	return os.ReadFile(filePath)
-}
-
-// Helper function to compute hash
-func computeHash(data []byte) string {
-	hash := sha256.Sum256(data)
-	return fmt.Sprintf("%x", hash[:])
 }
 
 type taskShapeMetrics struct {
@@ -436,26 +355,14 @@ type taskShapeMetrics struct {
 	AverageStepsPerTask float64
 }
 
-func collectTaskShapeMetrics(filePath string) (taskShapeMetrics, error) {
+func collectTaskShapeMetrics(tasks []*Task) taskShapeMetrics {
 	var metrics taskShapeMetrics
-
-	fileBytes, err := readFileBytes(filePath)
-	if err != nil {
-		return metrics, err
-	}
-
-	reader := &ByteReader{Data: fileBytes}
-	parsedTasks, err := ParseTasks(reader)
-	if err != nil {
-		return metrics, err
-	}
-
-	if len(parsedTasks) == 0 {
-		return metrics, nil
+	if len(tasks) == 0 {
+		return metrics
 	}
 
 	totalSteps := 0
-	for _, task := range parsedTasks {
+	for _, task := range tasks {
 		if task.StepsTotal > 0 {
 			metrics.TasksWithSubtasks++
 		} else {
@@ -464,40 +371,15 @@ func collectTaskShapeMetrics(filePath string) (taskShapeMetrics, error) {
 		totalSteps += task.StepsTotal
 	}
 
-	metrics.AverageStepsPerTask = float64(totalSteps) / float64(len(parsedTasks))
-	return metrics, nil
+	metrics.AverageStepsPerTask = float64(totalSteps) / float64(len(tasks))
+	return metrics
 }
 
 // CreateInertTaskFile creates the canonical inert tinyTasks.md template
 // This file is intentionally non-authorizing - humans must edit it to add tasks
 func CreateInertTaskFile(projectPath string) error {
-	tasksPath := projectPath + "/tinyTasks.md"
-
-	// Check if file already exists
-	if _, err := os.Stat(tasksPath); err == nil {
-		// File exists, don't overwrite
-		return fmt.Errorf("tinyTasks.md already exists")
-	}
-
-	// Canonical inert template from the agent contract
-	template := `# Tasks — NOT STARTED
->
-> This file was created automatically because a multi-step workflow
-> may be required.
->
-> No work is authorised until a human edits this file and defines tasks.
-
-## Tasks
-<!-- No tasks defined yet -->
-`
-
-	// Write the template to the file
-	err := os.WriteFile(tasksPath, []byte(template), 0644)
-	if err != nil {
-		return fmt.Errorf("failed to create tinyTasks.md: %w", err)
-	}
-
-	return nil
+	manager := NewTaskManager(filepath.Join(projectPath, "tinyTasks.md"))
+	return manager.CreateInertFile()
 }
 
 // ShouldAutoCreateTaskFile detects if a request implies multi-step work

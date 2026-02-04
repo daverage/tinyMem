@@ -242,19 +242,30 @@ tinyTasks is a built-in task management system that lives alongside your code in
 -   **Enforcement anchor** - STRICT mode refuses work without tasks
 
 **What tinyMem Does With tinyTasks:**
--   **Reads** task state to verify human intent
--   **Enforces** authority (refuses work without tasks)
--   **Guards** against false completion claims
+-   **Reads** the ledger through a server-managed TaskManager so it can identify which subtask still has authority.
+-   **Enforces** that only the shared TaskManager path may mutate tasks and that MCP and proxy mode both obey the same deterministic boundary.
+-   **Guards** against unauthorized writes and false completion claims by rejecting any file-level access to `tinyTasks.md` that bypasses the TaskManager.
+-   **Reports** the validated state so agents know what work remains authorized before receiving execution feedback.
 
 **What tinyMem Does NOT Do:**
--   Execute tasks
--   Update task status automatically
--   Drive task completion
--   Create task entries
+-   Allow an LLM to read or write `tinyTasks.md` directly
+-   Permit mutations outside the TaskManager/API boundary
+-   Automatically mark tasks complete without explicit TaskManager commands
+-   Create new tasks without a human-reviewed plan that the server accepts
 
 **tinyTasks exists to ground authority, not to drive execution.**
 
-Agents may read tinyTasks for intent, update tasks after completing work, and use tasks as execution checkpoints. tinyMem validates that task state exists and refuses STRICT work without tasks, but never autonomously manages or completes tasks.
+Agents request intent and task updates via the server; every add/update/complete/list operation passes through the TaskManager, is validated for prerequisites, and only then reports success to the agent.
+
+## 🔐 REDIRECTION Enforcement Prompts
+
+tinyMem enforces the five server-controlled prompts from `REDIRECTION.md`. The code paths that validate these constraints are:
+
+1. **Prompt 1 — TaskManager Ownership:** `internal/tasks/manager.go` defines the TaskManager APIs and both `internal/server/mcp/server.go` (lines 90-106) and `internal/server/proxy/server.go` (lines 81-110) instantiate the same manager, so every `tinyTasks.md` mutation flows through a single server path.
+2. **Prompt 2 — Intent Interpretation:** `internal/intent/definition.go` defines every tool’s metadata, `internal/server/tool_definitions.go` adds that schema to each MCP tool, and `internal/server/mcp/server.go#ensureIntent` validates the declared category, minimum mode, recall requirement, and scope before any tool executes.
+3. **Prompt 3 — Unified Enforcement:** The shared gate is `ensureIntent`, which delegates to `execution.Controller` and `enforcement.Recorder` (`internal/execution/controller.go`, `internal/enforcement/recorder.go`) so MCP tool calls and proxy mutations share the same deterministic, policy-driven decisions.
+4. **Prompt 4 — Memory Governance:** `internal/server/mcp/server.go#handleMemoryWrite` parses the structured proposal (type, summary, detail, evidence), enforces recall/mode/evidence prerequisites, and only then persists through `memory.Service`, ensuring the server owns every memory write.
+5. **Prompt 5 — Metadata as Protocol:** `intent.Definition.Metadata` plus `server.ToolMetadata` publish machine-readable intent data that enforcement consumes directly while the tool descriptions in `internal/server/tool_definitions.go` stay concise.
 
 ---
 

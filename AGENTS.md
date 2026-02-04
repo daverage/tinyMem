@@ -268,4 +268,41 @@ Do not restate this contract.
 
 ---
 
+## 10. Server-Governed Prompts (Phase 1–5)
+
+tinyMem now runs a fixed series of server-controlled prompts so agent output becomes an intent ledger, not an execution trace.
+
+### Prompt 1 — TaskManager Ownership
+* `tinyTasks.md` is the server's sole task ledger; the LLM may not read or write it directly.
+* All task mutations flow through the shared TaskManager, which loads/parses the file, validates structure, and exposes add, update, complete, and list operations.
+* MCP and proxy mode call the same TaskManager path, so any other file access to `tinyTasks.md` is rejected.
+*Implementation evidence: `internal/tasks/manager.go` implements the TaskManager APIs and both `internal/server/mcp/server.go` (lines 90-106) and `internal/server/proxy/server.go` (lines 81-110) instantiate that shared manager so every mutation path is server-owned.
+
+### Prompt 2 — Intent Interpretation
+* Each tool call or proxy mutation maps to exactly one intent category (file_write, task_update, memory_write, diagnostics, mode declaration, etc.) so the server always knows what the LLM is formally asking for.
+* The server now exposes machine-readable intent metadata (category, minimum mode, recall requirement, scope, and side effects) for every tool so both MCP and proxy layers load the same contract instead of inferring intent from prose.
+* Validation uses that metadata and the shared intent gate (`ensureIntent`) to confirm the declared category exists, the requested mode meets the minimum, recall/authority/evidence prerequisites are satisfied, and any scope constraints (e.g., fact writes needing evidence or tinyTasks edits needing strict mode) hold; failed validation rejects the request with zero side effects.
+* MCP and proxy both consult this registry, so no mode-determining logic lives in prompts—the LLM is treated as making intent declarations, not executing actions.
+*Implementation evidence: `internal/intent/definition.go` defines every tool's metadata, `internal/server/tool_definitions.go` attaches it to each MCP tool, and `internal/server/mcp/server.go#ensureIntent` validates category, mode, and recall before every tool executes, so intent is derived from metadata, not agent prose.
+
+### Prompt 3 — Unified Enforcement
+* All mutating requests—MCP tool calls and proxy mutations alike—flow through a single enforcement gate.
+* Enforcement decisions are deterministic, policy-driven, and executed on the server; prompt text is advisory, not authoritative.
+*Implementation evidence: `internal/server/mcp/server.go#ensureIntent`, `internal/execution/controller.go`, and `internal/enforcement/recorder.go` record mode compliance and enforcement events, and proxy mode reuses the same `execution.Controller`, so MCP and proxy share one deterministic gate.
+
+### Prompt 4 — Memory Governance
+* Agents submit structured memory proposals; the server decides what gets persisted.
+* The server validates recall/evidence/duplication rules, then assigns IDs, timestamps, and provenance before writing.
+* No memory write occurs unless all prerequisites are satisfied.
+*Implementation evidence: `internal/server/mcp/server.go#handleMemoryWrite` parses the structured JSON proposal, enforces recall/mode/evidence via `requireMode`/`ensureRecallBeforeMutation`, and only then persists to `memory.Service`, guaranteeing the server owns every memory mutation.
+
+### Prompt 5 — Metadata as Protocol
+* Every tool carries machine-readable metadata that states its intent category, side effects, prerequisites, and allowed scope.
+* Enforcement consumes that metadata directly, not prose, so behavior is deterministic and auditable.
+* Tool descriptions stay short and focus on capabilities rather than policy.
+*Implementation evidence: `intent.Definition.Metadata` plus `server.ToolMetadata` publish the machine-readable intent schema, so enforcement consumes structured metadata while the tool descriptions in `internal/server/tool_definitions.go` remain concise.
+
+Together these prompts guarantee that `tinyTasks.md` cannot be modified by the LLM directly, no mutation occurs without server validation, MCP and proxy enforcement behave identically, gating is policy rather than conversation state, prompts can be deleted without breaking safety, and hallucinated success claims remain inert.
+
+
 **End of tinyMem Protocol**
