@@ -57,6 +57,9 @@ const (
 	ActionTaskUpdate        Action = "task_update"
 	ActionTaskComplete      Action = "task_complete"
 	ActionModeDeclaration   Action = "memory_set_mode"
+	ActionArtifactCreate    Action = "artifact_create"
+	ActionArtifactRead      Action = "artifact_read"
+	ActionArtifactList      Action = "artifact_list"
 )
 
 // Controller tracks the current execution mode, escalation state, and tinyTasks mutations.

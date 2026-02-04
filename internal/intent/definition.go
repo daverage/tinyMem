@@ -10,6 +10,7 @@ const (
 	CategoryTask        Category = "task"
 	CategoryDiagnostics Category = "diagnostics"
 	CategoryMode        Category = "mode_declaration"
+	CategoryArtifact    Category = "artifact_write"
 )
 
 // Definition describes the declarative intent metadata attached to a tool.
@@ -158,5 +159,28 @@ var ToolDefinitions = map[string]Definition{
 		Scope:          "tasks",
 		SideEffects:    []string{"mutates tinyTasks.md"},
 		RequiresRecall: true,
+	},
+	"artifact_create": {
+		Name:           "artifact_create",
+		Category:       CategoryArtifact,
+		RequiredMode:   execution.ModeGuarded,
+		RequiresRecall: false,
+		Description:    "Create or update a project artifact (file). The server validates the path and performs the write; agents never touch the filesystem directly.",
+		Scope:          "workspace",
+		SideEffects:    []string{"creates or updates files in workspace"},
+	},
+	"artifact_read": {
+		Name:         "artifact_read",
+		Category:     CategoryArtifact,
+		RequiredMode: execution.ModePassive,
+		Description:  "Read the contents of a workspace artifact. Observation only; no state is mutated.",
+		Scope:        "workspace",
+	},
+	"artifact_list": {
+		Name:         "artifact_list",
+		Category:     CategoryArtifact,
+		RequiredMode: execution.ModePassive,
+		Description:  "List files in the workspace with optional glob filtering. Observation only; internal directories and TaskManager-owned files are always excluded.",
+		Scope:        "workspace",
 	},
 }

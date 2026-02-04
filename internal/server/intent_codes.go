@@ -8,15 +8,17 @@ const (
 	enforcementCodeFactEvidence   = "FACT_EVIDENCE_REQUIRED"
 	enforcementCodeClaimViolation = "CLAIM_WITHOUT_ENFORCEMENT"
 	enforcementCodeModeUpdated    = "MODE_UPDATED"
-	enforcementCodeRecallRequired = "RECALL_REQUIRED"
+	enforcementCodeRecallRequired      = "RECALL_REQUIRED"
+	enforcementCodeArtifactPathEscape  = "ARTIFACT_PATH_ESCAPE"
 
 	// Exposed aliases for enforcement reporting.
-	EnforcementCodeModeCompliance = enforcementCodeModeCompliance
-	EnforcementCodeModeTooLow     = enforcementCodeModeTooLow
-	EnforcementCodeModeNotSet     = enforcementCodeModeNotSet
-	EnforcementCodeStrictRequired = enforcementCodeStrictRequired
-	EnforcementCodeFactEvidence   = enforcementCodeFactEvidence
-	EnforcementCodeClaimViolation = enforcementCodeClaimViolation
-	EnforcementCodeModeUpdated    = enforcementCodeModeUpdated
-	EnforcementCodeRecallRequired = enforcementCodeRecallRequired
+	EnforcementCodeModeCompliance      = enforcementCodeModeCompliance
+	EnforcementCodeModeTooLow          = enforcementCodeModeTooLow
+	EnforcementCodeModeNotSet          = enforcementCodeModeNotSet
+	EnforcementCodeStrictRequired      = enforcementCodeStrictRequired
+	EnforcementCodeFactEvidence        = enforcementCodeFactEvidence
+	EnforcementCodeClaimViolation      = enforcementCodeClaimViolation
+	EnforcementCodeModeUpdated         = enforcementCodeModeUpdated
+	EnforcementCodeRecallRequired      = enforcementCodeRecallRequired
+	EnforcementCodeArtifactPathEscape  = enforcementCodeArtifactPathEscape
 )

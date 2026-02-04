@@ -14,6 +14,181 @@
     "output_count": 0
   },
   {
+    "test_name": "Artifact_CreateWritesFile",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "Artifact_PathTraversalRejected",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "Artifact_AbsolutePathRejected",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "Artifact_OverwriteFalseProtectsExisting",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "Artifact_OverwriteTrueUpdatesFile",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "Artifact_SubdirectoryCreation",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "Artifact_LinkTaskIDEchoed",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "Artifact_EmptyPathRejected",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "Artifact_DotPathRejected",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "Artifact_ValidatePathParity",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "ArtifactRead_ReturnsContent",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "ArtifactRead_NonExistentFails",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "ArtifactRead_TinyTasksMdBlocked",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "ArtifactRead_PathTraversalBlocked",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "ArtifactRead_DirectoryRejected",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "ArtifactRead_OversizedFileRejected",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "ArtifactRead_NestedTinyTasksAllowed",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "ArtifactList_ReturnsFiles",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "ArtifactList_EmptyWorkspace",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "ArtifactList_GlobBaseNameFilter",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "ArtifactList_GlobPathFilter",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "ArtifactList_TinyTasksMdExcluded",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "ArtifactList_ExcludesInternalDirs",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "ArtifactList_NestedTinyTasksVisible",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
+    "test_name": "ArtifactList_SizeField",
+    "llm_calls_made": 0,
+    "passed": true,
+    "input_count": 0,
+    "output_count": 0
+  },
+  {
     "test_name": "Authority_SemanticCannotOverrideLexical",
     "llm_calls_made": 0,
     "passed": true,

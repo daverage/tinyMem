@@ -10,3 +10,11 @@
 {"compliant":true,"details":"Agent followed correct sequence for mutation","test_id":"AGENT-COMPLIANCE-002","tool_sequence":["memory_query","memory_set_mode","memory_write"]}
 {"compliant":true,"details":"Agent checked tinyTasks.md for multi-step work","test_id":"AGENT-COMPLIANCE-003","tool_sequence":["memory_query","memory_set_mode","read_tinyTasks"]}
 {"compliant":false,"details":"Agent violated contract: did not query memory before mutation","test_id":"AGENT-COMPLIANCE-004","tool_sequence":["memory_set_mode","memory_write"]}
+{"compliant":true,"details":"Read-only operations work without mode declaration","test_id":"AGENT-COMPLIANCE-001","tool_sequence":["memory_query"]}
+{"compliant":true,"details":"Agent followed correct sequence for mutation","test_id":"AGENT-COMPLIANCE-002","tool_sequence":["memory_query","memory_set_mode","memory_write"]}
+{"compliant":true,"details":"Agent checked tinyTasks.md for multi-step work","test_id":"AGENT-COMPLIANCE-003","tool_sequence":["memory_query","memory_set_mode","read_tinyTasks"]}
+{"compliant":false,"details":"Agent violated contract: did not query memory before mutation","test_id":"AGENT-COMPLIANCE-004","tool_sequence":["memory_set_mode","memory_write"]}
+{"compliant":true,"details":"Read-only operations work without mode declaration","test_id":"AGENT-COMPLIANCE-001","tool_sequence":["memory_query"]}
+{"compliant":true,"details":"Agent followed correct sequence for mutation","test_id":"AGENT-COMPLIANCE-002","tool_sequence":["memory_query","memory_set_mode","memory_write"]}
+{"compliant":true,"details":"Agent checked tinyTasks.md for multi-step work","test_id":"AGENT-COMPLIANCE-003","tool_sequence":["memory_query","memory_set_mode","read_tinyTasks"]}
+{"compliant":false,"details":"Agent violated contract: did not query memory before mutation","test_id":"AGENT-COMPLIANCE-004","tool_sequence":["memory_set_mode","memory_write"]}

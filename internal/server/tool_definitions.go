@@ -275,6 +275,59 @@ var toolSpecs = []ToolSpec{
 			"required": []string{"task_id"},
 		},
 	},
+	{
+		Name:        "artifact_create",
+		Description: "Create or update a project artifact (file) under TinyMem governance. The server validates the path and performs the write.",
+		InputSchema: ToolInputSchema{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"path": map[string]interface{}{
+					"type":        "string",
+					"description": "Relative file path within the workspace (e.g. index.html).",
+				},
+				"content": map[string]interface{}{
+					"type":        "string",
+					"description": "Full file contents to write.",
+				},
+				"overwrite": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Whether an existing file may be overwritten (default: true).",
+				},
+				"link_task_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional task ID this artifact is associated with.",
+				},
+			},
+			"required": []string{"path", "content"},
+		},
+	},
+	{
+		Name:        "artifact_read",
+		Description: "Read the contents of a workspace artifact. Path is validated and constrained to the workspace. TaskManager-owned files are excluded.",
+		InputSchema: ToolInputSchema{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"path": map[string]interface{}{
+					"type":        "string",
+					"description": "Relative file path within the workspace.",
+				},
+			},
+			"required": []string{"path"},
+		},
+	},
+	{
+		Name:        "artifact_list",
+		Description: "List files in the workspace. Internal directories and TaskManager-owned files are always excluded.",
+		InputSchema: ToolInputSchema{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"pattern": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional glob pattern. Patterns without '/' match the base filename in any subdirectory (e.g. '*.html').",
+				},
+			},
+		},
+	},
 }
 
 // ToolSpecs exposes a copy of the tool specifications for tests.

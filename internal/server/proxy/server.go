@@ -724,6 +724,88 @@ func (s *Server) handleProxyToolCall(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.proxySendJSONResult(w, payload.ID, result, "memory_check_task_authority")
+	case "artifact_create":
+		if _, err := s.intentGate.EnsureIntent("artifact_create", execution.ActionArtifactCreate); err != nil {
+			s.proxySendToolError(w, payload.ID, err.Error())
+			return
+		}
+
+		var args struct {
+			Path       string `json:"path"`
+			Content    string `json:"content"`
+			Overwrite  *bool  `json:"overwrite"`
+			LinkTaskID string `json:"link_task_id"`
+		}
+		if err := decodeMapToStruct(payload.Arguments, &args); err != nil {
+			s.proxySendToolError(w, payload.ID, fmt.Sprintf("invalid arguments: %v", err))
+			return
+		}
+
+		if strings.TrimSpace(args.Path) == "" {
+			s.proxySendToolError(w, payload.ID, "path is required")
+			return
+		}
+
+		overwrite := true
+		if args.Overwrite != nil {
+			overwrite = *args.Overwrite
+		}
+
+		artifactResult, err := server.WriteArtifact(s.app.Project.Path, args.Path, args.Content, overwrite, args.LinkTaskID)
+		if err != nil {
+			s.proxySendToolError(w, payload.ID, fmt.Sprintf("artifact_create failed: %v", err))
+			return
+		}
+
+		if s.modeCtrl != nil {
+			s.modeCtrl.RecordFileEdit(args.Path)
+		}
+		s.proxySendJSONResult(w, payload.ID, artifactResult, "artifact_create")
+	case "artifact_read":
+		if _, err := s.intentGate.EnsureIntent("artifact_read", execution.ActionArtifactRead); err != nil {
+			s.proxySendToolError(w, payload.ID, err.Error())
+			return
+		}
+
+		var readArgs struct {
+			Path string `json:"path"`
+		}
+		if err := decodeMapToStruct(payload.Arguments, &readArgs); err != nil {
+			s.proxySendToolError(w, payload.ID, fmt.Sprintf("invalid arguments: %v", err))
+			return
+		}
+
+		if strings.TrimSpace(readArgs.Path) == "" {
+			s.proxySendToolError(w, payload.ID, "path is required")
+			return
+		}
+
+		readResult, err := server.ReadArtifact(s.app.Project.Path, readArgs.Path)
+		if err != nil {
+			s.proxySendToolError(w, payload.ID, fmt.Sprintf("artifact_read failed: %v", err))
+			return
+		}
+		s.proxySendJSONResult(w, payload.ID, readResult, "artifact_read")
+	case "artifact_list":
+		if _, err := s.intentGate.EnsureIntent("artifact_list", execution.ActionArtifactList); err != nil {
+			s.proxySendToolError(w, payload.ID, err.Error())
+			return
+		}
+
+		var listArgs struct {
+			Pattern string `json:"pattern"`
+		}
+		if err := decodeMapToStruct(payload.Arguments, &listArgs); err != nil {
+			s.proxySendToolError(w, payload.ID, fmt.Sprintf("invalid arguments: %v", err))
+			return
+		}
+
+		listResult, err := server.ListArtifacts(s.app.Project.Path, listArgs.Pattern)
+		if err != nil {
+			s.proxySendToolError(w, payload.ID, fmt.Sprintf("artifact_list failed: %v", err))
+			return
+		}
+		s.proxySendJSONResult(w, payload.ID, listResult, "artifact_list")
 	default:
 		s.proxySendToolError(w, payload.ID, fmt.Sprintf("tool not supported: %s", payload.Name))
 	}

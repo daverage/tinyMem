@@ -453,6 +453,59 @@ func (s *Server) handleToolsList(req *MCPRequest) {
 				"required": []string{"task_id"},
 			},
 		},
+		{
+			"name":        "artifact_create",
+			"description": "Create or update a project artifact (file) under TinyMem governance. The server validates path and performs the write.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"path": map[string]interface{}{
+						"type":        "string",
+						"description": "Relative file path within the workspace (e.g. index.html).",
+					},
+					"content": map[string]interface{}{
+						"type":        "string",
+						"description": "Full file contents to write.",
+					},
+					"overwrite": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Whether an existing file may be overwritten (default: true).",
+					},
+					"link_task_id": map[string]interface{}{
+						"type":        "string",
+						"description": "Optional task ID this artifact is associated with.",
+					},
+				},
+				"required": []string{"path", "content"},
+			},
+		},
+		{
+			"name":        "artifact_read",
+			"description": "Read the contents of a workspace artifact. Path is validated and constrained to the workspace. TaskManager-owned files are excluded.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"path": map[string]interface{}{
+						"type":        "string",
+						"description": "Relative file path within the workspace.",
+					},
+				},
+				"required": []string{"path"},
+			},
+		},
+		{
+			"name":        "artifact_list",
+			"description": "List files in the workspace. Internal directories and TaskManager-owned files are always excluded.",
+			"inputSchema": map[string]interface{}{
+				"type":       "object",
+				"properties": map[string]interface{}{
+					"pattern": map[string]interface{}{
+						"type":        "string",
+						"description": "Optional glob pattern. Patterns without '/' match the base filename in any subdirectory.",
+					},
+				},
+			},
+		},
 	}
 
 	for _, tool := range tools {
@@ -534,6 +587,12 @@ func (s *Server) handleToolCall(req *MCPRequest) {
 		s.handleTaskUpdate(req, argsBytes)
 	case "task_complete":
 		s.handleTaskComplete(req, argsBytes)
+	case "artifact_create":
+		s.handleArtifactCreate(req, argsBytes)
+	case "artifact_read":
+		s.handleArtifactRead(req, argsBytes)
+	case "artifact_list":
+		s.handleArtifactList(req, argsBytes)
 	default:
 		s.sendError(req.ID, -32601, fmt.Sprintf("Tool not found: %s", params.Name))
 	}
@@ -832,6 +891,110 @@ func (s *Server) handleTaskComplete(req *MCPRequest, args json.RawMessage) {
 	}
 
 	s.sendJSONResult(req.ID, task, "task_complete")
+}
+
+func (s *Server) handleArtifactCreate(req *MCPRequest, args json.RawMessage) {
+	if args == nil {
+		s.sendToolError(req.ID, -32602, "Missing arguments for artifact_create", "artifact_create")
+		return
+	}
+	if _, ok := s.ensureIntent(req, "artifact_create", execution.ActionArtifactCreate); !ok {
+		return
+	}
+
+	var payload struct {
+		Path       string `json:"path"`
+		Content    string `json:"content"`
+		Overwrite  *bool  `json:"overwrite"`
+		LinkTaskID string `json:"link_task_id"`
+	}
+	if err := json.Unmarshal(args, &payload); err != nil {
+		s.sendToolError(req.ID, -32602, "Invalid arguments for artifact_create", "artifact_create")
+		return
+	}
+
+	if strings.TrimSpace(payload.Path) == "" {
+		s.sendToolError(req.ID, -32602, "path is required", "artifact_create")
+		return
+	}
+
+	overwrite := true
+	if payload.Overwrite != nil {
+		overwrite = *payload.Overwrite
+	}
+
+	result, err := server.WriteArtifact(s.app.Project.Path, payload.Path, payload.Content, overwrite, payload.LinkTaskID)
+	if err != nil {
+		if strings.Contains(err.Error(), "escapes workspace") || strings.Contains(err.Error(), "must be relative") {
+			s.recordEnforcementEvent(enforcement.Event{
+				Code:     server.EnforcementCodeArtifactPathEscape,
+				Boundary: string(execution.ActionArtifactCreate),
+				Mode:     string(s.modeCtrl.Mode()),
+				Outcome:  enforcement.OutcomeBlock,
+				Details:  err.Error(),
+			})
+		}
+		s.sendToolError(req.ID, -32603, fmt.Sprintf("artifact_create failed: %v", err), "artifact_create")
+		return
+	}
+
+	s.modeCtrl.RecordFileEdit(payload.Path)
+	s.sendJSONResult(req.ID, result, "artifact_create")
+}
+
+func (s *Server) handleArtifactRead(req *MCPRequest, args json.RawMessage) {
+	if args == nil {
+		s.sendToolError(req.ID, -32602, "Missing arguments for artifact_read", "artifact_read")
+		return
+	}
+	if _, ok := s.ensureIntent(req, "artifact_read", execution.ActionArtifactRead); !ok {
+		return
+	}
+
+	var payload struct {
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal(args, &payload); err != nil {
+		s.sendToolError(req.ID, -32602, "Invalid arguments for artifact_read", "artifact_read")
+		return
+	}
+
+	if strings.TrimSpace(payload.Path) == "" {
+		s.sendToolError(req.ID, -32602, "path is required", "artifact_read")
+		return
+	}
+
+	result, err := server.ReadArtifact(s.app.Project.Path, payload.Path)
+	if err != nil {
+		s.sendToolError(req.ID, -32603, fmt.Sprintf("artifact_read failed: %v", err), "artifact_read")
+		return
+	}
+
+	s.sendJSONResult(req.ID, result, "artifact_read")
+}
+
+func (s *Server) handleArtifactList(req *MCPRequest, args json.RawMessage) {
+	if _, ok := s.ensureIntent(req, "artifact_list", execution.ActionArtifactList); !ok {
+		return
+	}
+
+	var payload struct {
+		Pattern string `json:"pattern"`
+	}
+	if args != nil {
+		if err := json.Unmarshal(args, &payload); err != nil {
+			s.sendToolError(req.ID, -32602, "Invalid arguments for artifact_list", "artifact_list")
+			return
+		}
+	}
+
+	entries, err := server.ListArtifacts(s.app.Project.Path, payload.Pattern)
+	if err != nil {
+		s.sendToolError(req.ID, -32603, fmt.Sprintf("artifact_list failed: %v", err), "artifact_list")
+		return
+	}
+
+	s.sendJSONResult(req.ID, entries, "artifact_list")
 }
 
 func (s *Server) sendJSONResult(id *int, payload interface{}, tool string) {

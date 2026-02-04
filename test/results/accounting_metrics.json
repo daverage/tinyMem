@@ -11,7 +11,7 @@
     "TotalTokens": 100,
     "PromptTokens": 0,
     "CompletionTokens": 0,
-    "Uptime": 125
+    "Uptime": 83
   },
   "tinyMem_Core": {
     "ProviderName": "test-provider",
@@ -25,6 +25,6 @@
     "TotalTokens": 75,
     "PromptTokens": 0,
     "CompletionTokens": 0,
-    "Uptime": 500
+    "Uptime": 333
   }
 }
