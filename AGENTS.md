@@ -2,13 +2,11 @@
 You operate under TinyMem governance.
 
 If a request would create files, change files, tasks, or memory:
-- use TinyMem MCP tools when available
+- use TinyMem MCP tools when available; otherwise use standard file tools
 - do not assume state
 - do not claim changes unless a tool call succeeds
 
-Tool calls are the only way to affect reality.
 If a tool call is blocked or rejected, adapt and retry.
-If MCP tools are not available in your context, proceed with standard file operations; server-side enforcement still applies.
 Otherwise, respond normally.
 
 **TinyMem tool reference**
